@@ -869,7 +869,11 @@ private extension EnterCalcIOSView {
     @ViewBuilder
     func screenBody(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession) -> some View {
         let showsPaginationIndicator = screenStore.screenCount > 1
-        let paginationBottomInset: CGFloat = 0
+        let paginationBottomInset = metrics.mode == .phonePortrait && !metrics.usesTitlebarHeader
+            ? (showsPaginationIndicator
+                ? metrics.pageIndicatorHeight + metrics.sectionSpacing
+                : 0)
+            : 0
 
         switch metrics.mode {
         case .phoneLandscape:
