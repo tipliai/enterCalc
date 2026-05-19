@@ -1,0 +1,79 @@
+# macOS metadata
+**/.DS_Store
+
+# Xcode build artifacts and user data
+build/
+DerivedData/
+*.xcodeproj/
+*.xcworkspace/
+*.xcuserstate
+xcuserdata/
+*.hmap
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+timeline.xctimeline
+playground.xcworkspace
+
+# Commit the generated host project for Xcode Cloud, but keep local user data out.
+!apple/xcode/EnterCalc.xcodeproj/
+!apple/xcode/EnterCalc.xcodeproj/project.pbxproj
+!apple/xcode/EnterCalc.xcodeproj/project.xcworkspace/
+!apple/xcode/EnterCalc.xcodeproj/project.xcworkspace/contents.xcworkspacedata
+!apple/xcode/EnterCalc.xcodeproj/xcshareddata/
+!apple/xcode/EnterCalc.xcodeproj/xcshareddata/xcschemes/
+!apple/xcode/EnterCalc.xcodeproj/xcshareddata/xcschemes/*.xcscheme
+!apple/EnterCalc.xcworkspace/
+!apple/EnterCalc.xcworkspace/contents.xcworkspacedata
+apple/xcode/EnterCalc.xcodeproj/project.xcworkspace/xcuserdata/
+apple/xcode/EnterCalc.xcodeproj/xcuserdata/
+
+# Application packages and archives
+*.ipa
+*.xcarchive
+*.dSYM
+*.dSYM.zip
+
+# Distribution artifacts
+dist/*
+!dist/.gitkeep
+
+# Generated host assets
+apple/xcode/Resources/Assets.xcassets/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+apple/.build/
+apple/.swiftpm/
+apple/Package.resolved
+
+# Android / Gradle / Android Studio
+.gradle/
+**/build/
+*.iml
+local.properties
+captures/
+.idea/
+!.idea/.gitignore
+!.idea/codeStyles/
+!.idea/codeStyles/Project.xml
+!.idea/inspectionProfiles/
+!.idea/inspectionProfiles/Project_Default.xml
+
+# Temporary and editor files
+*.moved-aside
+*.swp
+*.log
+
+# Test log captures
+apple/tests/logs/*.log
+
+# Secrets and configs
+.env
+.env.*
+credentials.json
+
+# Generated assets
+*.generated.*

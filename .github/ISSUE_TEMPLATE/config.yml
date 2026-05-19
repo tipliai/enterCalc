@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: EnterCalc Support
+    url: https://tipliai.github.io/enterCalc/support/
+    about: Use the public support page for general help and support information.
+  - name: EnterCalc Privacy Policy
+    url: https://tipliai.github.io/enterCalc/privacy-policy/
+    about: Read the public privacy policy for data handling details.

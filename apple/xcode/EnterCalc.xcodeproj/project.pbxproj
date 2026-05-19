@@ -1,0 +1,969 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1ED893C8781849B2F034A90B /* EnterCalcIOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB495AF3949718FD71195A6C /* EnterCalcIOSApp.swift */; };
+		23F9AF3D7A27C257ADDCF262 /* EnterCalc.icon in Resources */ = {isa = PBXBuildFile; fileRef = AD6BE06469541BC663A60C53 /* EnterCalc.icon */; };
+		3297115E09D9D955F1069163 /* KeyCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9023608F78AF3A5DB7AAD75B /* KeyCaptureView.swift */; };
+		45377293F3B5022ECA4B3A80 /* EnterCalcMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 848A9FCE7D477720690F79A7 /* EnterCalcMacApp.swift */; };
+		51BDDF31AD7C4601782E0FA9 /* EnterCalcCore in Frameworks */ = {isa = PBXBuildFile; productRef = D3235B7702F871A906C4F2B6 /* EnterCalcCore */; };
+		9D9787D645B382039CAFFF03 /* EnterCalcCore in Frameworks */ = {isa = PBXBuildFile; productRef = AAE26BF88ACDBE417D9C6F99 /* EnterCalcCore */; };
+		9FC66B20E0C2D74BFD20D77D /* CalculatorViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E065957E28B3CCF7A5CF940 /* CalculatorViewModelTests.swift */; };
+		A32A5B96C0BE4CDA60A31169 /* EnterCalcCore in Frameworks */ = {isa = PBXBuildFile; productRef = F2A430F44110670D2831D9A8 /* EnterCalcCore */; };
+		A9AE37CED30C5C943F2DFB9D /* EnterCalcCore in Frameworks */ = {isa = PBXBuildFile; productRef = BCB8259171A285E118C1ADA1 /* EnterCalcCore */; };
+		B8F9B687E7972D0F224675B5 /* MacLocalization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 238EE0EEE4F567719B32897A /* MacLocalization.swift */; };
+		BC5D6A0E18912CC4B70F1AF2 /* Settings.bundle in Resources */ = {isa = PBXBuildFile; fileRef = 0F4D979034A94F4439CDBDAC /* Settings.bundle */; };
+		C423B2D9907634F5A6CC1F6A /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = C024FCEE61269929862097E5 /* LICENSE */; };
+		CA734AB7431B5773A7ECB9B8 /* CalculatorViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E065957E28B3CCF7A5CF940 /* CalculatorViewModelTests.swift */; };
+		F1972E266D6660D9DE97B6A2 /* EnterCalc.icon in Resources */ = {isa = PBXBuildFile; fileRef = AD6BE06469541BC663A60C53 /* EnterCalc.icon */; };
+		F8D88845082D9A2DF9FF47EA /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = C024FCEE61269929862097E5 /* LICENSE */; };
+		FD50C9803C0CF7A629D459C8 /* CalculatorWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC1605B6AF4F0A247313C498 /* CalculatorWindowView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		0D88BD600E672B0DB0325562 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E2538D84F7EC1C7AFBFE0512 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4F41FA0793ACF9BC937D4A30;
+			remoteInfo = "EnterCalc-macOS";
+		};
+		A923616C48521112D630CAC2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E2538D84F7EC1C7AFBFE0512 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 60A140ECE8B07BB9D2EE088A;
+			remoteInfo = "EnterCalc-iOS";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0E065957E28B3CCF7A5CF940 /* CalculatorViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalculatorViewModelTests.swift; sourceTree = "<group>"; };
+		0F4D979034A94F4439CDBDAC /* Settings.bundle */ = {isa = PBXFileReference; lastKnownFileType = wrapper.cfbundle; path = Settings.bundle; sourceTree = "<group>"; };
+		109F533D71D21C9DBB994020 /* EnterCalc.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EnterCalc.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2018351E5E3FCFB25D7ED984 /* apple */ = {isa = PBXFileReference; lastKnownFileType = folder; name = apple; path = ..; sourceTree = SOURCE_ROOT; };
+		238EE0EEE4F567719B32897A /* MacLocalization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacLocalization.swift; sourceTree = "<group>"; };
+		2803F32D1028C77670D2ED2D /* Base.lproj */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Base.lproj; sourceTree = "<group>"; };
+		496691B1743EB1BD216312C0 /* EnterCalc.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EnterCalc.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		502A91084F0FD79DE6744298 /* es.lproj */ = {isa = PBXFileReference; lastKnownFileType = folder; path = es.lproj; sourceTree = "<group>"; };
+		640943B8E867224E2F0B68F2 /* ja.lproj */ = {isa = PBXFileReference; lastKnownFileType = folder; path = ja.lproj; sourceTree = "<group>"; };
+		66631A671BBEDA7A5F27FA5C /* EnterCalc-iOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "EnterCalc-iOSTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		848A9FCE7D477720690F79A7 /* EnterCalcMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnterCalcMacApp.swift; sourceTree = "<group>"; };
+		9023608F78AF3A5DB7AAD75B /* KeyCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyCaptureView.swift; sourceTree = "<group>"; };
+		9F86CB7DBDB0BF7EEDD4C2CC /* de.lproj */ = {isa = PBXFileReference; lastKnownFileType = folder; path = de.lproj; sourceTree = "<group>"; };
+		AD6BE06469541BC663A60C53 /* EnterCalc.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; name = EnterCalc.icon; path = ../src/shared/Resources/EnterCalc.icon; sourceTree = "<group>"; };
+		B7C0467F1278D86CA5F3B60B /* en.lproj */ = {isa = PBXFileReference; lastKnownFileType = folder; path = en.lproj; sourceTree = "<group>"; };
+		BB495AF3949718FD71195A6C /* EnterCalcIOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnterCalcIOSApp.swift; sourceTree = "<group>"; };
+		BC5FD7E70350F7936A39DDE0 /* fr.lproj */ = {isa = PBXFileReference; lastKnownFileType = folder; path = fr.lproj; sourceTree = "<group>"; };
+		C024FCEE61269929862097E5 /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; name = LICENSE; path = ../../LICENSE; sourceTree = "<group>"; };
+		EC1605B6AF4F0A247313C498 /* CalculatorWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalculatorWindowView.swift; sourceTree = "<group>"; };
+		EF3FAB0686DACBD7EA2B303B /* zh-Hans.lproj */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "zh-Hans.lproj"; sourceTree = "<group>"; };
+		F328066E909C5F92BBDFD95B /* EnterCalc-macOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "EnterCalc-macOSTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		07A7D5B8D2E26CD42CCC2032 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A9AE37CED30C5C943F2DFB9D /* EnterCalcCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2929F41FAB3BFEE5ADE967F5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A32A5B96C0BE4CDA60A31169 /* EnterCalcCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA789A3835C6BAAEF7475A7F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				51BDDF31AD7C4601782E0FA9 /* EnterCalcCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FC3A0FA33180891977AE6501 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9D9787D645B382039CAFFF03 /* EnterCalcCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		062D831F4F2B2EE39738676D /* src */ = {
+			isa = PBXGroup;
+			children = (
+				E929FE0118FA7A1A4E116D35 /* iOS */,
+				C0C5F1B0308656D3D434F259 /* macOS */,
+				483799DF3A3F047AFCD5FC0F /* shared */,
+			);
+			path = src;
+			sourceTree = "<group>";
+		};
+		19093C03F05693990EF5CFC7 /* tests */ = {
+			isa = PBXGroup;
+			children = (
+				0E065957E28B3CCF7A5CF940 /* CalculatorViewModelTests.swift */,
+			);
+			path = tests;
+			sourceTree = "<group>";
+		};
+		3774E60D103BB6F9C83E988D /* apple */ = {
+			isa = PBXGroup;
+			children = (
+				062D831F4F2B2EE39738676D /* src */,
+				19093C03F05693990EF5CFC7 /* tests */,
+			);
+			name = apple;
+			path = ..;
+			sourceTree = "<group>";
+		};
+		483799DF3A3F047AFCD5FC0F /* shared */ = {
+			isa = PBXGroup;
+			children = (
+				ED127CAFCF93DAA6ED3718F0 /* Resources */,
+			);
+			path = shared;
+			sourceTree = "<group>";
+		};
+		4D31B8D9A214348166F91841 = {
+			isa = PBXGroup;
+			children = (
+				3774E60D103BB6F9C83E988D /* apple */,
+				AD52999F3E685B1700D3AA1E /* Packages */,
+				4F8C9E003786ED317513168E /* Resources */,
+				9AA5EB5EA035E37AF8FE23BC /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		4F8C9E003786ED317513168E /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				C024FCEE61269929862097E5 /* LICENSE */,
+				AD6BE06469541BC663A60C53 /* EnterCalc.icon */,
+			);
+			name = Resources;
+			sourceTree = "<group>";
+		};
+		9AA5EB5EA035E37AF8FE23BC /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				496691B1743EB1BD216312C0 /* EnterCalc.app */,
+				66631A671BBEDA7A5F27FA5C /* EnterCalc-iOSTests.xctest */,
+				109F533D71D21C9DBB994020 /* EnterCalc.app */,
+				F328066E909C5F92BBDFD95B /* EnterCalc-macOSTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		AD52999F3E685B1700D3AA1E /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				2018351E5E3FCFB25D7ED984 /* apple */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		C0C5F1B0308656D3D434F259 /* macOS */ = {
+			isa = PBXGroup;
+			children = (
+				EC1605B6AF4F0A247313C498 /* CalculatorWindowView.swift */,
+				9023608F78AF3A5DB7AAD75B /* KeyCaptureView.swift */,
+				238EE0EEE4F567719B32897A /* MacLocalization.swift */,
+				848A9FCE7D477720690F79A7 /* EnterCalcMacApp.swift */,
+			);
+			path = macOS;
+			sourceTree = "<group>";
+		};
+		E929FE0118FA7A1A4E116D35 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				0F4D979034A94F4439CDBDAC /* Settings.bundle */,
+				BB495AF3949718FD71195A6C /* EnterCalcIOSApp.swift */,
+			);
+			path = iOS;
+			sourceTree = "<group>";
+		};
+		ED127CAFCF93DAA6ED3718F0 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				2803F32D1028C77670D2ED2D /* Base.lproj */,
+				9F86CB7DBDB0BF7EEDD4C2CC /* de.lproj */,
+				B7C0467F1278D86CA5F3B60B /* en.lproj */,
+				502A91084F0FD79DE6744298 /* es.lproj */,
+				BC5FD7E70350F7936A39DDE0 /* fr.lproj */,
+				640943B8E867224E2F0B68F2 /* ja.lproj */,
+				EF3FAB0686DACBD7EA2B303B /* zh-Hans.lproj */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		2131D4FECA85AD8EF3947BAF /* EnterCalc-iOSTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E4981F199712D311D708DCCF /* Build configuration list for PBXNativeTarget "EnterCalc-iOSTests" */;
+			buildPhases = (
+				7E59E34B67406D15CF44925D /* Sources */,
+				2929F41FAB3BFEE5ADE967F5 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				465186FE45C3787637678284 /* PBXTargetDependency */,
+			);
+			name = "EnterCalc-iOSTests";
+			packageProductDependencies = (
+				F2A430F44110670D2831D9A8 /* EnterCalcCore */,
+			);
+			productName = "EnterCalc-iOSTests";
+			productReference = 66631A671BBEDA7A5F27FA5C /* EnterCalc-iOSTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		4F41FA0793ACF9BC937D4A30 /* EnterCalc-macOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C1AD65241760C82268D9A529 /* Build configuration list for PBXNativeTarget "EnterCalc-macOS" */;
+			buildPhases = (
+				6B336B00F127C75EB29ADDD9 /* Sources */,
+				631F32EC58E85E6CFD3BE531 /* Resources */,
+				AA789A3835C6BAAEF7475A7F /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "EnterCalc-macOS";
+			packageProductDependencies = (
+				D3235B7702F871A906C4F2B6 /* EnterCalcCore */,
+			);
+			productName = "EnterCalc-macOS";
+			productReference = 109F533D71D21C9DBB994020 /* EnterCalc.app */;
+			productType = "com.apple.product-type.application";
+		};
+		60A140ECE8B07BB9D2EE088A /* EnterCalc-iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 86224F2372571DA6FABDBF81 /* Build configuration list for PBXNativeTarget "EnterCalc-iOS" */;
+			buildPhases = (
+				56D14F2ED3F6581C6CACDD82 /* Sources */,
+				F34DA76ED20D694BCA859A44 /* Resources */,
+				FC3A0FA33180891977AE6501 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "EnterCalc-iOS";
+			packageProductDependencies = (
+				AAE26BF88ACDBE417D9C6F99 /* EnterCalcCore */,
+			);
+			productName = "EnterCalc-iOS";
+			productReference = 496691B1743EB1BD216312C0 /* EnterCalc.app */;
+			productType = "com.apple.product-type.application";
+		};
+		F3DDE1F35D822ECE14132093 /* EnterCalc-macOSTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A91374020B17F9003AF7BE7E /* Build configuration list for PBXNativeTarget "EnterCalc-macOSTests" */;
+			buildPhases = (
+				79B6660A2E75F9551340B89C /* Sources */,
+				07A7D5B8D2E26CD42CCC2032 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7EA981E97F04C8D62F78C3EC /* PBXTargetDependency */,
+			);
+			name = "EnterCalc-macOSTests";
+			packageProductDependencies = (
+				BCB8259171A285E118C1ADA1 /* EnterCalcCore */,
+			);
+			productName = "EnterCalc-macOSTests";
+			productReference = F328066E909C5F92BBDFD95B /* EnterCalc-macOSTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E2538D84F7EC1C7AFBFE0512 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2650;
+				TargetAttributes = {
+					2131D4FECA85AD8EF3947BAF = {
+						DevelopmentTeam = 5QN344W68F;
+						ProvisioningStyle = Automatic;
+					};
+					4F41FA0793ACF9BC937D4A30 = {
+						DevelopmentTeam = 5QN344W68F;
+						ProvisioningStyle = Automatic;
+					};
+					60A140ECE8B07BB9D2EE088A = {
+						DevelopmentTeam = 5QN344W68F;
+						ProvisioningStyle = Automatic;
+					};
+					F3DDE1F35D822ECE14132093 = {
+						DevelopmentTeam = 5QN344W68F;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 5DA81D9020F9743886638B20 /* Build configuration list for PBXProject "EnterCalc" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 4D31B8D9A214348166F91841;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				E3862896AD37BDE4D176D0D1 /* XCLocalSwiftPackageReference ".." */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 9AA5EB5EA035E37AF8FE23BC /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				60A140ECE8B07BB9D2EE088A /* EnterCalc-iOS */,
+				2131D4FECA85AD8EF3947BAF /* EnterCalc-iOSTests */,
+				4F41FA0793ACF9BC937D4A30 /* EnterCalc-macOS */,
+				F3DDE1F35D822ECE14132093 /* EnterCalc-macOSTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		631F32EC58E85E6CFD3BE531 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F8D88845082D9A2DF9FF47EA /* LICENSE in Resources */,
+				23F9AF3D7A27C257ADDCF262 /* EnterCalc.icon in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F34DA76ED20D694BCA859A44 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C423B2D9907634F5A6CC1F6A /* LICENSE in Resources */,
+				BC5D6A0E18912CC4B70F1AF2 /* Settings.bundle in Resources */,
+				F1972E266D6660D9DE97B6A2 /* EnterCalc.icon in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		56D14F2ED3F6581C6CACDD82 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1ED893C8781849B2F034A90B /* EnterCalcIOSApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6B336B00F127C75EB29ADDD9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FD50C9803C0CF7A629D459C8 /* CalculatorWindowView.swift in Sources */,
+				3297115E09D9D955F1069163 /* KeyCaptureView.swift in Sources */,
+				B8F9B687E7972D0F224675B5 /* MacLocalization.swift in Sources */,
+				45377293F3B5022ECA4B3A80 /* EnterCalcMacApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		79B6660A2E75F9551340B89C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9FC66B20E0C2D74BFD20D77D /* CalculatorViewModelTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7E59E34B67406D15CF44925D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CA734AB7431B5773A7ECB9B8 /* CalculatorViewModelTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		465186FE45C3787637678284 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 60A140ECE8B07BB9D2EE088A /* EnterCalc-iOS */;
+			targetProxy = A923616C48521112D630CAC2 /* PBXContainerItemProxy */;
+		};
+		7EA981E97F04C8D62F78C3EC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4F41FA0793ACF9BC937D4A30 /* EnterCalc-macOS */;
+			targetProxy = 0D88BD600E672B0DB0325562 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		0C3BFD6CED077714C1D2BFC7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = EnterCalc;
+				CODE_SIGN_ENTITLEMENTS = macOS/Support/EnterCalc.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = macOS/Support/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = EnterCalc;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tipliai.entercalc;
+				PRODUCT_NAME = EnterCalc;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		24EE41CDF090239B0EBAD782 /* QA */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 5QN344W68F;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = QA;
+		};
+		2915EB4A86571867722E9DB9 /* QA */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = EnterCalc;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = iOS/Support/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = EnterCalc;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.tipliai.entercalc.qa;
+				PRODUCT_NAME = EnterCalc;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = QA;
+		};
+		490F06384A917F69BE9494AE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 5QN344W68F;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Debug;
+		};
+		5872A16587CA7E9262670F96 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "macOS/Support/Tests-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tipliai.entercalc.tests.macos;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/EnterCalc.app/Contents/MacOS/EnterCalc";
+			};
+			name = Release;
+		};
+		8884AB24C31D1F05224D02F2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "iOS/Support/Tests-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.tipliai.entercalc.tests.ios;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/EnterCalc.app/EnterCalc";
+			};
+			name = Release;
+		};
+		96322C98AD3C9C911E66C57B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "macOS/Support/Tests-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tipliai.entercalc.tests.macos;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/EnterCalc.app/Contents/MacOS/EnterCalc";
+			};
+			name = Debug;
+		};
+		9658282B02BA891634D1008B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = EnterCalc;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = iOS/Support/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = EnterCalc;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.tipliai.entercalc;
+				PRODUCT_NAME = EnterCalc;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		9874D8DBB9993227E0086E28 /* QA */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "iOS/Support/Tests-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.tipliai.entercalc.tests.ios;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/EnterCalc.app/EnterCalc";
+			};
+			name = QA;
+		};
+		AFECB2C3DEFD81F7035B389E /* QA */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = EnterCalc;
+				CODE_SIGN_ENTITLEMENTS = macOS/Support/EnterCalc.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = macOS/Support/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = EnterCalc;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tipliai.entercalc.qa;
+				PRODUCT_NAME = EnterCalc;
+				SDKROOT = macosx;
+			};
+			name = QA;
+		};
+		D0A15B48F4A6CE7AE01B99DD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "iOS/Support/Tests-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.tipliai.entercalc.tests.ios;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/EnterCalc.app/EnterCalc";
+			};
+			name = Debug;
+		};
+		DD06F48F076D363D357FB18E /* QA */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "macOS/Support/Tests-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tipliai.entercalc.tests.macos;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/EnterCalc.app/Contents/MacOS/EnterCalc";
+			};
+			name = QA;
+		};
+		E1B0C4803E5A641B281D6926 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = EnterCalc;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = iOS/Support/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = EnterCalc;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.tipliai.entercalc.dev;
+				PRODUCT_NAME = EnterCalc;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		EFBF9DE313E66EAFF51A3781 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = EnterCalc;
+				CODE_SIGN_ENTITLEMENTS = macOS/Support/EnterCalc.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
+				INFOPLIST_FILE = macOS/Support/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = EnterCalc;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tipliai.entercalc.dev;
+				PRODUCT_NAME = EnterCalc;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		F70CF9AF13226F220CFA701C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 5QN344W68F;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		5DA81D9020F9743886638B20 /* Build configuration list for PBXProject "EnterCalc" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				490F06384A917F69BE9494AE /* Debug */,
+				24EE41CDF090239B0EBAD782 /* QA */,
+				F70CF9AF13226F220CFA701C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		86224F2372571DA6FABDBF81 /* Build configuration list for PBXNativeTarget "EnterCalc-iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1B0C4803E5A641B281D6926 /* Debug */,
+				2915EB4A86571867722E9DB9 /* QA */,
+				9658282B02BA891634D1008B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		A91374020B17F9003AF7BE7E /* Build configuration list for PBXNativeTarget "EnterCalc-macOSTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				96322C98AD3C9C911E66C57B /* Debug */,
+				DD06F48F076D363D357FB18E /* QA */,
+				5872A16587CA7E9262670F96 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C1AD65241760C82268D9A529 /* Build configuration list for PBXNativeTarget "EnterCalc-macOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EFBF9DE313E66EAFF51A3781 /* Debug */,
+				AFECB2C3DEFD81F7035B389E /* QA */,
+				0C3BFD6CED077714C1D2BFC7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		E4981F199712D311D708DCCF /* Build configuration list for PBXNativeTarget "EnterCalc-iOSTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D0A15B48F4A6CE7AE01B99DD /* Debug */,
+				9874D8DBB9993227E0086E28 /* QA */,
+				8884AB24C31D1F05224D02F2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		E3862896AD37BDE4D176D0D1 /* XCLocalSwiftPackageReference ".." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AAE26BF88ACDBE417D9C6F99 /* EnterCalcCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = EnterCalcCore;
+		};
+		BCB8259171A285E118C1ADA1 /* EnterCalcCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = EnterCalcCore;
+		};
+		D3235B7702F871A906C4F2B6 /* EnterCalcCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = EnterCalcCore;
+		};
+		F2A430F44110670D2831D9A8 /* EnterCalcCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = EnterCalcCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = E2538D84F7EC1C7AFBFE0512 /* Project object */;
+}

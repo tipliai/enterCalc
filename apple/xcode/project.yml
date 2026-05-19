@@ -1,0 +1,158 @@
+name: EnterCalc
+options:
+  createIntermediateGroups: true
+fileGroups:
+  - ../src/shared/Resources/Base.lproj
+  - ../src/shared/Resources/de.lproj
+  - ../src/shared/Resources/en.lproj
+  - ../src/shared/Resources/es.lproj
+  - ../src/shared/Resources/fr.lproj
+  - ../src/shared/Resources/ja.lproj
+  - ../src/shared/Resources/zh-Hans.lproj
+configs:
+  Debug: debug
+  QA: release
+  Release: release
+packages:
+  enterCalcPackage:
+    path: ..
+# Update MARKETING_VERSION for each release and increment CURRENT_PROJECT_VERSION for every App Store upload.
+settings:
+  base:
+    SWIFT_VERSION: 5.9
+    VERSIONING_SYSTEM: apple-generic
+    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: 1.0.0
+    GENERATE_INFOPLIST_FILE: NO
+  configs:
+    QA:
+      COPY_PHASE_STRIP: YES
+      DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
+      SWIFT_COMPILATION_MODE: wholemodule
+    Release:
+      COPY_PHASE_STRIP: YES
+      DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
+      SWIFT_COMPILATION_MODE: wholemodule
+targets:
+  EnterCalc-iOS:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: ../src/iOS
+      - path: ../src/shared/Resources/EnterCalc.icon
+        buildPhase: resources
+        type: file
+        group: Resources
+      - path: ../../LICENSE
+        buildPhase: resources
+        type: file
+        group: Resources
+    dependencies:
+      - package: enterCalcPackage
+        product: EnterCalcCore
+    settings:
+      base:
+        PRODUCT_NAME: EnterCalc
+        PRODUCT_BUNDLE_IDENTIFIER: com.tipliai.entercalc
+        INFOPLIST_FILE: iOS/Support/Info.plist
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: EnterCalc
+        INFOPLIST_KEY_CFBundleDisplayName: EnterCalc
+        DEVELOPMENT_TEAM: 5QN344W68F
+        CODE_SIGN_STYLE: Automatic
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.tipliai.entercalc.dev
+        QA:
+          PRODUCT_BUNDLE_IDENTIFIER: com.tipliai.entercalc.qa
+        Release: {}
+    scheme:
+      testTargets:
+        - EnterCalc-iOSTests
+      gatherCoverageData: false
+
+  EnterCalc-iOSTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: ../tests
+        excludes:
+          - logs/**
+    dependencies:
+      - target: EnterCalc-iOS
+      - package: enterCalcPackage
+        product: EnterCalcCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tipliai.entercalc.tests.ios
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: iOS/Support/Tests-Info.plist
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 5QN344W68F
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/EnterCalc.app/EnterCalc
+        BUNDLE_LOADER: $(TEST_HOST)
+
+  EnterCalc-macOS:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: ../src/macOS
+      - path: ../src/shared/Resources/EnterCalc.icon
+        buildPhase: resources
+        type: file
+        group: Resources
+      - path: ../../LICENSE
+        buildPhase: resources
+        type: file
+        group: Resources
+    dependencies:
+      - package: enterCalcPackage
+        product: EnterCalcCore
+    settings:
+      base:
+        PRODUCT_NAME: EnterCalc
+        PRODUCT_BUNDLE_IDENTIFIER: com.tipliai.entercalc
+        INFOPLIST_FILE: macOS/Support/Info.plist
+        CODE_SIGN_ENTITLEMENTS: macOS/Support/EnterCalc.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: EnterCalc
+        INFOPLIST_KEY_CFBundleDisplayName: EnterCalc
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
+        DEVELOPMENT_TEAM: 5QN344W68F
+        CODE_SIGN_STYLE: Automatic
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.tipliai.entercalc.dev
+        QA:
+          PRODUCT_BUNDLE_IDENTIFIER: com.tipliai.entercalc.qa
+          ENABLE_HARDENED_RUNTIME: YES
+        Release:
+          ENABLE_HARDENED_RUNTIME: YES
+    scheme:
+      testTargets:
+        - EnterCalc-macOSTests
+      gatherCoverageData: false
+
+  EnterCalc-macOSTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: ../tests
+        excludes:
+          - logs/**
+    dependencies:
+      - target: EnterCalc-macOS
+      - package: enterCalcPackage
+        product: EnterCalcCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tipliai.entercalc.tests.macos
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: macOS/Support/Tests-Info.plist
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 5QN344W68F
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/EnterCalc.app/Contents/MacOS/EnterCalc
+        BUNDLE_LOADER: $(TEST_HOST)

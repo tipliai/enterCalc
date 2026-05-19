@@ -1,0 +1,942 @@
+import XCTest
+@testable import EnterCalcCore
+
+#if os(macOS)
+import AppKit
+#endif
+
+final class CalculatorViewModelTests: XCTestCase {
+    override func tearDown() {
+        languageOverrideBundle = nil
+        super.tearDown()
+    }
+
+    func testSquareRootPlusAdditionProducesExpectedResultAndHistory() {
+        let viewModel = CalculatorViewModel()
+
+        enter("97", into: viewModel)
+        viewModel.squareRoot()
+        viewModel.setOperator(.add)
+        enter("8", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "17.8488578017961")
+        XCTAssertEqual(viewModel.expressionDisplay, "√(97) + 8 =")
+        XCTAssertEqual(viewModel.history.count, 1)
+        XCTAssertEqual(viewModel.history.first?.expression, "√(97) + 8")
+        XCTAssertEqual(viewModel.history.first?.result, "17.8488578017961")
+    }
+
+    func testDecimalSubtractionDoesNotExposeBinaryFloatingPointResidue() {
+        let viewModel = CalculatorViewModel()
+
+        enter("123246", into: viewModel)
+        viewModel.setOperator(.subtract)
+        enter("105317.74", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "17,928.26")
+        XCTAssertEqual(viewModel.history.first?.result, "17928.26")
+    }
+
+    func testTenthsAdditionRoundsLikeANormalCalculatorDisplay() {
+        let viewModel = CalculatorViewModel()
+
+        enter("0.1", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("0.2", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "0.3")
+        XCTAssertEqual(viewModel.history.first?.result, "0.3")
+    }
+
+    func testLargeResultUsesScientificNotationByDefault() {
+        let viewModel = CalculatorViewModel()
+
+        enter("1234567891234567", into: viewModel)
+        viewModel.setOperator(.multiply)
+        enter("9999999999999999", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertTrue(viewModel.usesScientificNotation)
+        XCTAssertEqual(viewModel.display, "1.234567891234567e+31")
+    }
+
+    func testScientificNotationMatchesCalculatorForLargeIntegerProduct() {
+        let viewModel = CalculatorViewModel()
+
+        enter("99999999999", into: viewModel)
+        viewModel.setOperator(.multiply)
+        enter("99999999999", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "9.9999999998e+21")
+        XCTAssertEqual(viewModel.history.first?.result, "9.9999999998e+21")
+    }
+
+    func testTwoThirdsStaysInDecimalNotation() {
+        let viewModel = CalculatorViewModel()
+
+        enter("2", into: viewModel)
+        viewModel.setOperator(.divide)
+        enter("3", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertFalse(viewModel.display.localizedCaseInsensitiveContains("e"))
+        XCTAssertEqual(viewModel.display, "0.6666666666666667")
+        XCTAssertEqual(viewModel.history.first?.result, "0.6666666666666667")
+    }
+
+    func testSmallDecimalInputsDoNotCollapseToZero() {
+        let viewModel = CalculatorViewModel()
+
+        enter("0.000000000000001", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("0.000000000000001", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "0.000000000000002")
+        XCTAssertEqual(viewModel.history.first?.result, "0.000000000000002")
+    }
+
+    func testSimpleDecimalDifferenceDoesNotSwitchToScientificNotation() {
+        let viewModel = CalculatorViewModel()
+
+        enter("1.01", into: viewModel)
+        viewModel.setOperator(.subtract)
+        enter("0.42", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertFalse(viewModel.display.localizedCaseInsensitiveContains("e"))
+        XCTAssertEqual(viewModel.display, "0.59")
+        XCTAssertEqual(viewModel.history.first?.result, "0.59")
+    }
+
+    func testTenThirdsMatchesCalculatorRounding() {
+        let viewModel = CalculatorViewModel()
+
+        enter("10", into: viewModel)
+        viewModel.setOperator(.divide)
+        enter("3", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "3.333333333333333")
+        XCTAssertEqual(viewModel.history.first?.result, "3.333333333333333")
+    }
+
+    func testReciprocalMatchesCalculatorRounding() {
+        let viewModel = CalculatorViewModel()
+
+        enter("7", into: viewModel)
+        viewModel.reciprocal()
+
+        XCTAssertEqual(viewModel.display, "0.1428571428571429")
+    }
+
+    func testLargeIntegerDifferenceMatchesCalculatorExactly() {
+        let viewModel = CalculatorViewModel()
+
+        enter("9999999999999999", into: viewModel)
+        viewModel.setOperator(.subtract)
+        enter("9999999999999998", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "1")
+        XCTAssertEqual(viewModel.history.first?.result, "1")
+    }
+
+    func testScientificNotationCanBeDisabledToShowExpandedValue() {
+        let viewModel = CalculatorViewModel()
+
+        enter("1234567891234567", into: viewModel)
+        viewModel.setOperator(.multiply)
+        enter("9999999999999999", into: viewModel)
+        viewModel.evaluate()
+        viewModel.setScientificNotationEnabled(false)
+
+        XCTAssertFalse(viewModel.usesScientificNotation)
+        XCTAssertEqual(viewModel.display, "12,345,678,912,345,670,000,000,000,000,000")
+    }
+
+    func testNumberFormatStyleCanDisplayEuropeanSeparators() {
+        let viewModel = CalculatorViewModel()
+
+        enter("1234567.89", into: viewModel)
+        viewModel.setNumberFormatStyle(.european)
+
+        XCTAssertEqual(viewModel.display, "1.234.567,89")
+    }
+
+    func testSystemLocaleDetectionMapsKnownFormats() {
+        XCTAssertEqual(NumberFormatStyle.detected(from: Locale(identifier: "en_US")), .western)
+        XCTAssertEqual(NumberFormatStyle.detected(from: Locale(identifier: "de_DE")), .european)
+        XCTAssertEqual(NumberFormatStyle.detected(from: Locale(identifier: "fr_FR")), .french)
+        XCTAssertEqual(NumberFormatStyle.detected(from: Locale(identifier: "hi_IN")), .indian)
+        XCTAssertEqual(NumberFormatStyle.detected(from: Locale(identifier: "de_CH")), .swiss)
+    }
+
+    func testDivideByZeroSetsLocalizedErrorState() {
+        let viewModel = CalculatorViewModel()
+
+        enter("9", into: viewModel)
+        viewModel.setOperator(.divide)
+        enter("0", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertTrue(viewModel.isErrorState)
+        XCTAssertEqual(viewModel.display, "Cannot divide by zero")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+        XCTAssertTrue(viewModel.canUndo)
+    }
+
+    func testUndoAndRedoRestorePriorDisplayStates() {
+        let viewModel = CalculatorViewModel()
+
+        enter("12", into: viewModel)
+        XCTAssertEqual(viewModel.display, "12")
+        XCTAssertTrue(viewModel.canUndo)
+        XCTAssertFalse(viewModel.canRedo)
+
+        viewModel.undo()
+        XCTAssertEqual(viewModel.display, "1")
+        XCTAssertTrue(viewModel.canRedo)
+
+        viewModel.undo()
+        XCTAssertEqual(viewModel.display, "0")
+
+        viewModel.redo()
+        XCTAssertEqual(viewModel.display, "1")
+
+        viewModel.redo()
+        XCTAssertEqual(viewModel.display, "12")
+        XCTAssertFalse(viewModel.canRedo)
+    }
+
+    func testInputDigitsAreCappedAtMaximumLength() {
+        let viewModel = CalculatorViewModel()
+
+        enter(String(repeating: "9", count: CalculatorViewModel.Limits.maxInputDigits + 5), into: viewModel)
+
+        XCTAssertEqual(viewModel.display.replacingOccurrences(of: ",", with: ""), String(repeating: "9", count: CalculatorViewModel.Limits.maxInputDigits))
+    }
+
+    func testRepeatedEqualsRepeatsLastBinaryOperation() {
+        let viewModel = CalculatorViewModel()
+
+        enter("5", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("2", into: viewModel)
+        viewModel.evaluate()
+        viewModel.evaluate()
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "11")
+        XCTAssertEqual(viewModel.expressionDisplay, "9 + 2 =")
+        XCTAssertEqual(viewModel.history.count, 3)
+        XCTAssertEqual(viewModel.history[0].expression, "9 + 2")
+        XCTAssertEqual(viewModel.history[0].result, "11")
+        XCTAssertEqual(viewModel.history[1].expression, "7 + 2")
+        XCTAssertEqual(viewModel.history[1].result, "9")
+        XCTAssertEqual(viewModel.history[2].expression, "5 + 2")
+        XCTAssertEqual(viewModel.history[2].result, "7")
+    }
+
+    func testParenthesesExpressionEvaluatesWithExpectedPrecedence() {
+        let viewModel = CalculatorViewModel()
+
+        viewModel.inputParenthesis("(")
+        enter("2", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("3", into: viewModel)
+        viewModel.inputParenthesis(")")
+        viewModel.setOperator(.multiply)
+        enter("4", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "20")
+        XCTAssertEqual(viewModel.expressionDisplay, "( 2 + 3 ) × 4 =")
+        XCTAssertEqual(viewModel.history.first?.expression, "( 2 + 3 ) × 4")
+        XCTAssertEqual(viewModel.history.first?.result, "20")
+    }
+
+    func testParenthesesToggleButtonInsertsOpenThenClose() {
+        let viewModel = CalculatorViewModel()
+
+        viewModel.inputParentheses()
+        enter("8", into: viewModel)
+        viewModel.inputParentheses()
+        viewModel.setOperator(.add)
+        enter("2", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "10")
+        XCTAssertEqual(viewModel.history.first?.expression, "( 8 ) + 2")
+    }
+
+    func testSquareInsideParenthesesRemainsInExpressionAndEvaluates() {
+        let viewModel = CalculatorViewModel()
+
+        enter("8", into: viewModel)
+        viewModel.setOperator(.multiply)
+        viewModel.inputParenthesis("(")
+        enter("9", into: viewModel)
+        viewModel.square()
+
+        XCTAssertEqual(viewModel.expressionDisplay, "8 × ( 9²")
+
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "648")
+        XCTAssertEqual(viewModel.expressionDisplay, "8 × ( 9² ) =")
+        XCTAssertEqual(viewModel.history.first?.expression, "8 × ( sqr(9) )")
+        XCTAssertEqual(viewModel.history.first?.displayExpression, "8 × ( 9² )")
+        XCTAssertEqual(viewModel.history.first?.result, "648")
+    }
+
+    func testPercentConvertsCurrentInputToDecimalValue() {
+        let viewModel = CalculatorViewModel()
+
+        enter("50", into: viewModel)
+        viewModel.applyPercent()
+
+        XCTAssertEqual(viewModel.display, "0.5")
+        XCTAssertEqual(viewModel.expressionDisplay, "50%")
+        XCTAssertFalse(viewModel.isErrorState)
+    }
+
+    func testClassicPercentModeTreatsEvaluatedValuesLikeClassicBehavior() {
+        let viewModel = CalculatorViewModel()
+
+        enter("50", into: viewModel)
+        viewModel.evaluate()
+        viewModel.setClassicPercentBehaviorEnabled(true)
+        viewModel.applyPercent()
+
+        XCTAssertEqual(viewModel.display, "25")
+        XCTAssertEqual(viewModel.expressionDisplay, "50%")
+        XCTAssertFalse(viewModel.isErrorState)
+    }
+
+    func testClassicPercentModeTreatsStandaloneInputLikeCalculator() {
+        let viewModel = CalculatorViewModel()
+
+        viewModel.setClassicPercentBehaviorEnabled(true)
+        enter("50", into: viewModel)
+        viewModel.applyPercent()
+
+        XCTAssertEqual(viewModel.display, "0")
+        XCTAssertEqual(viewModel.expressionDisplay, "50%")
+        XCTAssertFalse(viewModel.isErrorState)
+    }
+
+    func testPercentMatchesCalculatorForAddition() {
+        let viewModel = CalculatorViewModel()
+
+        enter("10", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("10", into: viewModel)
+        viewModel.applyPercent()
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "11")
+        XCTAssertEqual(viewModel.expressionDisplay, "10 + 1 =")
+        XCTAssertEqual(viewModel.history.first?.expression, "10 + 1")
+        XCTAssertEqual(viewModel.history.first?.result, "11")
+    }
+
+    func testPercentMatchesCalculatorForDivision() {
+        let viewModel = CalculatorViewModel()
+
+        enter("10", into: viewModel)
+        viewModel.setOperator(.divide)
+        enter("10", into: viewModel)
+        viewModel.applyPercent()
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "100")
+        XCTAssertEqual(viewModel.expressionDisplay, "10 ÷ 0.1 =")
+        XCTAssertEqual(viewModel.history.first?.expression, "10 ÷ 0.1")
+        XCTAssertEqual(viewModel.history.first?.result, "100")
+    }
+
+    func testPercentAfterStandalonePercentUsesStandaloneSemantics() {
+        let viewModel = CalculatorViewModel()
+
+        enter("5", into: viewModel)
+        viewModel.applyPercent()
+        viewModel.setOperator(.add)
+        enter("3", into: viewModel)
+        viewModel.applyPercent()
+
+        XCTAssertEqual(viewModel.expressionDisplay, "5% + 3%")
+
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "0.08")
+        XCTAssertEqual(viewModel.expressionDisplay, "5% + 3% =")
+        XCTAssertEqual(viewModel.history.first?.expression, "5% + 3%")
+        XCTAssertEqual(viewModel.history.first?.result, "0.08")
+    }
+
+    func testAdditionAfterStandalonePercentUsesPercentValueAsLeftOperand() {
+        let viewModel = CalculatorViewModel()
+
+        enter("5", into: viewModel)
+        viewModel.applyPercent()
+        viewModel.setOperator(.add)
+        enter("3", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "3.05")
+        XCTAssertEqual(viewModel.expressionDisplay, "5% + 3 =")
+        XCTAssertEqual(viewModel.history.first?.expression, "5% + 3")
+        XCTAssertEqual(viewModel.history.first?.result, "3.05")
+    }
+
+    func testSquareRootOfNegativeNumberSetsInvalidInputError() {
+        let viewModel = CalculatorViewModel()
+
+        enter("9", into: viewModel)
+        viewModel.toggleSign()
+        viewModel.squareRoot()
+
+        XCTAssertTrue(viewModel.isErrorState)
+        XCTAssertEqual(viewModel.display, "Invalid input")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+    }
+
+    func testReciprocalOfZeroSetsDivideByZeroError() {
+        let viewModel = CalculatorViewModel()
+
+        viewModel.reciprocal()
+
+        XCTAssertTrue(viewModel.isErrorState)
+        XCTAssertEqual(viewModel.display, "Cannot divide by zero")
+    }
+
+    func testMemoryStoreRecallAddSubtractAndClearFlow() {
+        let viewModel = CalculatorViewModel()
+
+        enter("12", into: viewModel)
+        viewModel.storeMemory()
+        XCTAssertEqual(viewModel.memoryValue, 12)
+        XCTAssertEqual(viewModel.memoryDisplay, "12")
+
+        viewModel.clearAll()
+        enter("3", into: viewModel)
+        viewModel.addToMemory()
+        XCTAssertEqual(viewModel.memoryValue, 15)
+        XCTAssertEqual(viewModel.memoryDisplay, "15")
+
+        viewModel.clearAll()
+        enter("5", into: viewModel)
+        viewModel.subtractFromMemory()
+        XCTAssertEqual(viewModel.memoryValue, 10)
+        XCTAssertEqual(viewModel.memoryDisplay, "10")
+
+        viewModel.recallMemory()
+        XCTAssertEqual(viewModel.display, "10")
+
+        viewModel.clearMemory()
+        XCTAssertNil(viewModel.memoryValue)
+        XCTAssertNil(viewModel.memoryDisplay)
+        XCTAssertTrue(viewModel.memoryEntries.isEmpty)
+    }
+
+    func testHistoryIsCappedAtMaximumEntryCount() {
+        let viewModel = CalculatorViewModel()
+        let retainedEntryCount = CalculatorViewModel.Limits.maxStoredHistoryEntries
+        let totalEvaluations = retainedEntryCount + 10
+        let expectedNewestExpression = "\(totalEvaluations) + 1"
+        let expectedOldestRetainedExpression = "11 + 1"
+
+        enter("1", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("1", into: viewModel)
+
+        for _ in 0..<totalEvaluations {
+            viewModel.evaluate()
+        }
+
+        XCTAssertEqual(viewModel.history.count, retainedEntryCount)
+        XCTAssertEqual(viewModel.history.first?.expression, expectedNewestExpression)
+        XCTAssertEqual(viewModel.history.last?.expression, expectedOldestRetainedExpression)
+    }
+
+    func testMemoryEntriesAreCappedAtMaximumEntryCount() {
+        let viewModel = CalculatorViewModel()
+        let retainedEntryCount = CalculatorViewModel.Limits.maxStoredMemoryEntries
+        let totalStoredValues = retainedEntryCount + 5
+        let expectedOldestRetainedValue = Double(totalStoredValues - retainedEntryCount + 1)
+
+        for value in 1...totalStoredValues {
+            viewModel.clearAll()
+            enter(String(value), into: viewModel)
+            viewModel.storeMemory()
+        }
+
+        XCTAssertEqual(viewModel.memoryEntries.count, retainedEntryCount)
+        XCTAssertEqual(viewModel.memoryEntries.first?.value, Double(totalStoredValues))
+        XCTAssertEqual(viewModel.memoryEntries.last?.value, expectedOldestRetainedValue)
+    }
+
+    func testUndoDepthIsCappedAtMaximumEntryCount() {
+        let viewModel = CalculatorViewModel()
+
+        for value in 0..<(CalculatorViewModel.Limits.maxUndoDepth + 20) {
+            viewModel.clearAll()
+            viewModel.inputDigit(String((value % 9) + 1))
+        }
+
+        XCTAssertEqual(viewModel.undoDepth, CalculatorViewModel.Limits.maxUndoDepth)
+        XCTAssertEqual(viewModel.redoDepth, 0)
+    }
+
+    func testReuseHistoryEntryRestoresResultAsNewInput() {
+        let viewModel = CalculatorViewModel()
+
+        enter("8", into: viewModel)
+        viewModel.setOperator(.multiply)
+        enter("7", into: viewModel)
+        viewModel.evaluate()
+        XCTAssertNotNil(viewModel.history.first)
+        let entry = viewModel.history[0]
+
+        viewModel.clearAll()
+        viewModel.reuse(entry)
+
+        XCTAssertEqual(viewModel.display, "56")
+        XCTAssertEqual(viewModel.expressionDisplay, "8 × 7 =")
+
+        viewModel.inputDigit("2")
+        XCTAssertEqual(viewModel.display, "2")
+    }
+
+    func testLanguageOverrideReturnsLocalizedSettingsLabel() throws {
+        let bundle = try localizedBundle(named: "de")
+
+        languageOverrideBundle = bundle
+
+        XCTAssertEqual(localized("settings.language"), "Sprache")
+        XCTAssertEqual(localized("settings.credit.linkText"), "Open-Source-Software")
+    }
+
+    func testRefreshLocalizationUpdatesActiveErrorMessage() throws {
+        let viewModel = CalculatorViewModel()
+
+        enter("1", into: viewModel)
+        viewModel.setOperator(.divide)
+        enter("0", into: viewModel)
+        viewModel.evaluate()
+        XCTAssertEqual(viewModel.display, "Cannot divide by zero")
+
+        languageOverrideBundle = try localizedBundle(named: "de")
+        viewModel.refreshLocalization()
+
+        XCTAssertEqual(viewModel.display, "Durch Null kann nicht geteilt werden")
+    }
+
+    func testLocalizedUsesModuleFallbackWhenLanguageOverrideIsNil() {
+        let originalBundle = languageOverrideBundle
+        defer { languageOverrideBundle = originalBundle }
+
+        languageOverrideBundle = nil
+
+        let key = "settings.title"
+        let moduleValue = Bundle.enterCalcCore.localizedString(forKey: key, value: nil, table: "Localizable")
+
+        XCTAssertNotEqual(moduleValue, key)
+        XCTAssertEqual(localized(key), moduleValue)
+        XCTAssertNil(languageOverrideBundle)
+    }
+
+    func testLocalizedCreditsExistAcrossSupportedBundles() throws {
+        let localeCodes = ["Base", "en", "de", "es", "fr", "ja", "zh-Hans"]
+        let creditKeys = [
+            "settings.credit.part1",
+            "settings.credit.linkText",
+            "settings.credit.middle"
+        ]
+
+        for localeCode in localeCodes {
+            let strings = try localizedStrings(named: localeCode)
+            for key in creditKeys {
+                guard let value = strings[key] as? String else {
+                    XCTFail("Missing \(key) in \(localeCode).lproj")
+                    continue
+                }
+                XCTAssertNotNil(value, "Missing \(key) in \(localeCode).lproj")
+                XCTAssertNotEqual(value, key, "Missing \(key) in \(localeCode).lproj")
+                XCTAssertFalse(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, "Empty \(key) in \(localeCode).lproj")
+            }
+        }
+
+        let englishStrings = try localizedStrings(named: "en")
+        let englishCredit = [
+            englishStrings["settings.credit.part1"] as? String ?? "",
+            englishStrings["settings.credit.linkText"] as? String ?? "",
+            englishStrings["settings.credit.middle"] as? String ?? ""
+        ].joined()
+
+        XCTAssertTrue(englishCredit.contains("MIT License"))
+        XCTAssertTrue(englishCredit.contains("Tipli AI"))
+    }
+
+    func testScreenStoreStartsWithOneHomeScreen() {
+        let store = CalculatorScreenStore(homeSettings: makeScreenSettings())
+
+        XCTAssertEqual(store.screenCount, 1)
+        XCTAssertEqual(store.activeIndex, 0)
+        XCTAssertTrue(store.activeScreen.isHomeScreen)
+        XCTAssertFalse(store.canCloseActiveScreen)
+        XCTAssertTrue(store.canCreateScreen)
+    }
+
+    func testScreenInsertionOccursImmediatelyRightOfActiveScreen() {
+        let homeSettings = makeScreenSettings()
+        let store = CalculatorScreenStore(homeSettings: homeSettings)
+
+        XCTAssertTrue(store.insertScreenAfterActive(homeSettings: homeSettings))
+        let firstInsertedID = store.activeScreen.id
+
+        XCTAssertTrue(store.insertScreenAfterActive(homeSettings: homeSettings))
+        let secondInsertedID = store.activeScreen.id
+
+        XCTAssertTrue(store.activateScreen(at: 1))
+        XCTAssertTrue(store.insertScreenAfterActive(homeSettings: homeSettings))
+        let middleInsertedID = store.activeScreen.id
+
+        XCTAssertEqual(store.screenCount, 4)
+        XCTAssertEqual(store.activeIndex, 2)
+        XCTAssertEqual(store.screens.map(\.id), [store.homeScreen.id, firstInsertedID, middleInsertedID, secondInsertedID])
+    }
+
+    func testClosingSubScreenSelectsImmediateLeftNeighbor() {
+        let homeSettings = makeScreenSettings()
+        let store = CalculatorScreenStore(homeSettings: homeSettings)
+
+        XCTAssertTrue(store.insertScreenAfterActive(homeSettings: homeSettings))
+        let leftNeighborID = store.activeScreen.id
+        XCTAssertTrue(store.insertScreenAfterActive(homeSettings: homeSettings))
+
+        XCTAssertTrue(store.closeActiveScreen())
+        XCTAssertEqual(store.screenCount, 2)
+        XCTAssertEqual(store.activeIndex, 1)
+        XCTAssertEqual(store.activeScreen.id, leftNeighborID)
+        XCTAssertFalse(store.activeScreen.isHomeScreen)
+    }
+
+    func testHomeScreenCannotBeClosedAndScreenCountCapsAtFive() {
+        let homeSettings = makeScreenSettings()
+        let store = CalculatorScreenStore(homeSettings: homeSettings)
+
+        XCTAssertFalse(store.closeActiveScreen())
+
+        for _ in 0..<4 {
+            XCTAssertTrue(store.insertScreenAfterActive(homeSettings: homeSettings))
+        }
+
+        XCTAssertEqual(store.screenCount, CalculatorScreenStore.maxScreenCount)
+        XCTAssertFalse(store.canCreateScreen)
+        XCTAssertFalse(store.insertScreenAfterActive(homeSettings: homeSettings))
+    }
+
+    func testNewScreenInheritsHomeSettingsNotCurrentSubScreenSettings() {
+        let homeSettings = makeScreenSettings(themeRawValue: "light", languageCode: "en")
+        let store = CalculatorScreenStore(homeSettings: homeSettings)
+
+        XCTAssertTrue(store.insertScreenAfterActive(homeSettings: homeSettings))
+
+        let subScreen = store.activeScreen
+        subScreen.updateSettings {
+            $0.themeRawValue = "dark"
+            $0.languageCode = "de"
+            $0.usesScientificNotation = false
+            $0.numberFormatStyleRawValue = NumberFormatStyle.european.rawValue
+            $0.usesClassicPercentBehavior = true
+        }
+
+        XCTAssertTrue(store.insertScreenAfterActive(homeSettings: homeSettings))
+
+        XCTAssertEqual(store.activeScreen.settings, homeSettings)
+        XCTAssertNotEqual(store.activeScreen.settings, subScreen.settings)
+    }
+
+    func testNewScreenUsesUpdatedHomeSettingsWhileExistingSubScreenKeepsItsOwnSettings() {
+        let initialHomeSettings = makeScreenSettings(themeRawValue: "light", languageCode: defaultLocalizationSelectionCode)
+        let store = CalculatorScreenStore(homeSettings: initialHomeSettings)
+
+        XCTAssertTrue(store.insertScreenAfterActive(homeSettings: initialHomeSettings))
+        let existingSubScreen = store.activeScreen
+        existingSubScreen.updateSettings {
+            $0.languageCode = "fr"
+            $0.themeRawValue = "dark"
+        }
+
+        let updatedHomeSettings = makeScreenSettings(themeRawValue: "system", languageCode: "de")
+        store.syncHomeScreenSettings(updatedHomeSettings)
+
+        XCTAssertEqual(store.homeScreen.settings, updatedHomeSettings)
+        XCTAssertEqual(existingSubScreen.settings.languageCode, "fr")
+        XCTAssertEqual(existingSubScreen.settings.themeRawValue, "dark")
+
+        XCTAssertTrue(store.insertScreenAfterActive(homeSettings: updatedHomeSettings))
+        XCTAssertEqual(store.activeScreen.settings, updatedHomeSettings)
+        XCTAssertEqual(existingSubScreen.settings.languageCode, "fr")
+    }
+
+    func testPersistedSettingsAffectNewlyLoadedSettingsWithoutMutatingExistingInMemorySettings() {
+        let suiteName = "enterCalc.tests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Unable to create isolated user defaults suite")
+            return
+        }
+
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let existingLoadedSettings = CalculatorScreenSettingsPersistence.load(from: defaults)
+        let updatedDefaults = makeScreenSettings(themeRawValue: "dark", languageCode: "de")
+
+        CalculatorScreenSettingsPersistence.persist(updatedDefaults, to: defaults)
+        let reloadedSettings = CalculatorScreenSettingsPersistence.load(from: defaults)
+
+        XCTAssertEqual(existingLoadedSettings.languageCode, defaultLocalizationSelectionCode)
+        XCTAssertEqual(reloadedSettings, updatedDefaults)
+    }
+
+    func testScreensKeepIndependentCalculatorState() {
+        let homeSettings = makeScreenSettings()
+        let store = CalculatorScreenStore(homeSettings: homeSettings)
+        let homeViewModel = store.homeScreen.viewModel
+
+        enter("12", into: homeViewModel)
+        homeViewModel.setOperator(.add)
+        enter("3", into: homeViewModel)
+        homeViewModel.evaluate()
+        homeViewModel.storeMemory()
+
+        XCTAssertTrue(store.insertScreenAfterActive(homeSettings: homeSettings))
+        let secondViewModel = store.activeScreen.viewModel
+
+        enter("7", into: secondViewModel)
+        secondViewModel.storeMemory()
+
+        XCTAssertEqual(homeViewModel.display, "15")
+        XCTAssertEqual(homeViewModel.history.count, 1)
+        XCTAssertEqual(homeViewModel.memoryValue, 15)
+        XCTAssertTrue(secondViewModel.history.isEmpty)
+        XCTAssertEqual(secondViewModel.memoryValue, 7)
+        XCTAssertEqual(secondViewModel.display, "7")
+    }
+
+    func testScreenLocalizationKeysExistAcrossSupportedBundles() throws {
+        let localeCodes = ["Base", "en", "de", "es", "fr", "ja", "zh-Hans"]
+        let screenKeys = [
+            "settings.screen.title",
+            "settings.appearance.screenLabel",
+            "screen.new",
+            "screen.close",
+            "screen.pageStatus"
+        ]
+
+        for localeCode in localeCodes {
+            let strings = try localizedStrings(named: localeCode)
+            for key in screenKeys {
+                guard let value = strings[key] as? String else {
+                    XCTFail("Missing \(key) in \(localeCode).lproj")
+                    continue
+                }
+                XCTAssertFalse(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, "Empty \(key) in \(localeCode).lproj")
+                XCTAssertNotEqual(value, key, "Untranslated \(key) in \(localeCode).lproj")
+            }
+        }
+    }
+
+    func testResolvedLocalizationCodeMapsBaseLanguageToSupportedScriptLocalization() {
+        let resolvedCode = resolvedLocalizationCode(for: "zh", in: Bundle.enterCalcCore, preferredLanguages: ["zh"])
+
+        XCTAssertEqual(resolvedCode.lowercased(), "zh-hans")
+        XCTAssertNotNil(localizationBundle(for: "zh", in: Bundle.enterCalcCore))
+    }
+
+    func testResolvedLocalizationCodeFallsBackToEnglishForUnknownLanguage() {
+        XCTAssertEqual(
+            resolvedLocalizationCode(for: "zz-ZZ", in: Bundle.enterCalcCore, preferredLanguages: ["zz-ZZ"]),
+            "en"
+        )
+    }
+
+    func testResolvedLocalizationCodeUsesPreferredLanguageForDefaultSelection() {
+        XCTAssertEqual(
+            resolvedLocalizationCode(for: defaultLocalizationSelectionCode, in: Bundle.enterCalcCore, preferredLanguages: ["de-DE"]),
+            "de"
+        )
+    }
+
+    func testLicenseFileContainsRequiredNotices() throws {
+        let licenseURL = try XCTUnwrap(findLicenseURL(), "Unable to locate LICENSE in bundled resources or repository checkout")
+        let licenseText = try String(contentsOf: licenseURL, encoding: .utf8)
+
+        XCTAssertTrue(licenseText.contains("MIT License"))
+        XCTAssertTrue(licenseText.contains("Tipli AI"))
+    }
+
+    #if canImport(AppKit)
+    func testCopyToPasteboardWritesUngroupedValue() {
+        let viewModel = CalculatorViewModel()
+
+        enter("1234", into: viewModel)
+        viewModel.copyToPasteboard()
+
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "1234")
+    }
+
+    func testCopyOperationThenPasteReplaysTheOperation() {
+        let sourceViewModel = CalculatorViewModel()
+        enter("12", into: sourceViewModel)
+        sourceViewModel.setOperator(.add)
+        enter("3", into: sourceViewModel)
+        sourceViewModel.evaluate()
+        sourceViewModel.copyOperationToPasteboard()
+
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "12 + 3 = 15")
+
+        let pastedViewModel = CalculatorViewModel()
+        pastedViewModel.pasteFromPasteboard()
+
+        XCTAssertEqual(pastedViewModel.display, "15")
+        XCTAssertTrue(pastedViewModel.history.isEmpty)
+        XCTAssertFalse(pastedViewModel.isErrorState)
+    }
+
+    func testPasteFromPasteboardNormalizesFormattedNumericContent() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("$1,234.50", forType: .string)
+
+        let viewModel = CalculatorViewModel()
+        viewModel.pasteFromPasteboard()
+
+        XCTAssertEqual(viewModel.display, "1,234.5")
+        XCTAssertFalse(viewModel.isErrorState)
+    }
+
+    func testPasteFromPasteboardRejectsOversizedNumericInput() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(String(repeating: "9", count: CalculatorViewModel.Limits.maxPasteCharacters + 1), forType: .string)
+
+        let viewModel = CalculatorViewModel()
+        viewModel.pasteFromPasteboard()
+
+        XCTAssertEqual(viewModel.display, "0")
+        XCTAssertTrue(viewModel.history.isEmpty)
+        XCTAssertTrue(viewModel.memoryEntries.isEmpty)
+    }
+    #endif
+
+    private func enter(_ value: String, into viewModel: CalculatorViewModel) {
+        for character in value {
+            if character == "." {
+                viewModel.inputDecimal()
+            } else {
+                viewModel.inputDigit(String(character))
+            }
+        }
+    }
+
+    private func makeScreenSettings(
+        themeRawValue: String = "system",
+        languageCode: String = "en",
+        usesScientificNotation: Bool = true,
+        numberFormatStyleRawValue: String = NumberFormatStyle.western.rawValue,
+        usesClassicPercentBehavior: Bool = false
+    ) -> CalculatorScreenSettings {
+        CalculatorScreenSettings(
+            themeRawValue: themeRawValue,
+            languageCode: languageCode,
+            usesScientificNotation: usesScientificNotation,
+            numberFormatStyleRawValue: numberFormatStyleRawValue,
+            usesClassicPercentBehavior: usesClassicPercentBehavior
+        )
+    }
+
+    private func localizedBundle(named localeCode: String) throws -> Bundle {
+        if let path = Bundle.enterCalcCore.path(forResource: localeCode, ofType: "lproj"),
+           let bundle = Bundle(path: path) {
+            return bundle
+        }
+
+        let normalizedLocale = localeCode.replacingOccurrences(of: "-", with: "_")
+        let resourceRoot = try XCTUnwrap(Bundle.enterCalcCore.resourceURL)
+        let lprojURLs = try FileManager.default.contentsOfDirectory(
+            at: resourceRoot,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ).filter { $0.pathExtension == "lproj" }
+
+        guard let bundleURL = lprojURLs.first(where: {
+            $0.deletingPathExtension()
+                .lastPathComponent
+                .replacingOccurrences(of: "-", with: "_")
+                .caseInsensitiveCompare(normalizedLocale) == .orderedSame
+        }),
+        let bundle = Bundle(path: bundleURL.path) else {
+            throw XCTSkip("Missing localization bundle: \(localeCode).lproj")
+        }
+        return bundle
+    }
+
+    private func localizedStrings(named localeCode: String) throws -> NSDictionary {
+        let bundle = try localizedBundle(named: localeCode)
+        guard let stringsURL = bundle.url(forResource: "Localizable", withExtension: "strings") else {
+            throw NSError(
+                domain: "CalculatorViewModelTests",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Unable to locate Localizable.strings in \(localeCode).lproj bundle"]
+            )
+        }
+
+        guard let strings = NSDictionary(contentsOf: stringsURL) else {
+            throw NSError(
+                domain: "CalculatorViewModelTests",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Unable to load localized strings at \(stringsURL.path)"]
+            )
+        }
+
+        return strings
+    }
+
+    private func findLicenseURL() -> URL? {
+        let bundleCandidates = [Bundle.main, Bundle(for: Self.self), Bundle.enterCalcCore]
+        for bundle in bundleCandidates {
+            if let url = bundle.url(forResource: "LICENSE", withExtension: nil) {
+                return url
+            }
+
+            if let resourceURL = bundle.resourceURL {
+                let candidate = resourceURL.appendingPathComponent("LICENSE")
+                if FileManager.default.fileExists(atPath: candidate.path) {
+                    return candidate
+                }
+            }
+        }
+
+        let sourceURL = URL(fileURLWithPath: #filePath)
+        let packageRoot = sourceURL.deletingLastPathComponent().deletingLastPathComponent()
+        let packageLicenseURL = packageRoot.appendingPathComponent("LICENSE")
+        if FileManager.default.fileExists(atPath: packageLicenseURL.path) {
+            return packageLicenseURL
+        }
+
+        let repositoryRoot = packageRoot.deletingLastPathComponent()
+        let repoLicenseURL = repositoryRoot.appendingPathComponent("LICENSE")
+        if FileManager.default.fileExists(atPath: repoLicenseURL.path) {
+            return repoLicenseURL
+        }
+
+        return nil
+    }
+}

@@ -1,0 +1,1765 @@
+// src/macOS/CalculatorWindowView.swift
+import SwiftUI
+import AppKit
+import EnterCalcCore
+
+struct CalculatorWindowView: View {
+    private enum OverlayPane {
+        case history
+        case settings
+    }
+
+    @ObservedObject var viewModel: CalculatorViewModel
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var showHistory: Bool = false
+    @State private var userToggledHistory: Bool = false
+    @State private var flashCopy: Bool = false
+    @State private var currentWidth: CGFloat = 0
+    @State private var appliedStoredSize: Bool = false
+    @State private var widthBeforeHistory: CGFloat? = nil
+    @State private var lockCalculatorWidth: Bool = false
+    @State private var lockedCalculatorWidth: CGFloat? = nil
+    @State private var menuHover: Bool = false
+    @State private var newWindowHover: Bool = false
+    @State private var historyHover: Bool = false
+    @State private var activeOverlay: OverlayPane? = nil
+    @State private var historyTrashHover: Bool = false
+    @State private var displayHover: Bool = false
+    @State private var windowReference: NSWindow? = nil
+    @State private var operatorRevealProgress: Double = 0.0
+    @State private var operatorAnimFadeOpacity: Double = 1.0
+    private let minimumWindowWidthPoints: CGFloat = 280
+    private let minimumWindowHeightPoints: CGFloat = 452
+    private let fallbackBackingScaleFactor: CGFloat = 2
+    private let outerHorizontalPadding: CGFloat = 8 * 2
+    private let compactHistoryWidthThreshold: CGFloat = 350
+    private let historyPanelWidth: CGFloat = 240
+    private let historySpacing: CGFloat = 6
+    private let calculatorContentCoordinateSpace = "calculatorContent"
+    @State private var windowSettings: CalculatorScreenSettings
+    @AppStorage("window.width") private var storedWindowWidth: Double = 0
+    @AppStorage("window.height") private var storedWindowHeight: Double = 0
+    @AppStorage("window.historyOpen") private var storedHistoryOpen: Bool = false
+
+    init(viewModel: CalculatorViewModel) {
+        _viewModel = ObservedObject(wrappedValue: viewModel)
+        _windowSettings = State(initialValue: Self.loadStoredSettings())
+    }
+
+    private var palette: Palette { currentTheme.palette(using: colorScheme) }
+
+    private var currentTheme: AppTheme {
+        AppTheme(rawValue: windowSettings.themeRawValue) ?? .system
+    }
+
+    private var currentNumberFormatStyle: NumberFormatStyle {
+        NumberFormatStyle(rawValue: windowSettings.numberFormatStyleRawValue) ?? NumberFormatStyle.detected()
+    }
+
+    private var currentLocalizationBundle: Bundle? {
+        isDefaultLocalizationSelection(windowSettings.languageCode)
+            ? nil
+            : localizationBundle(for: windowSettings.languageCode)
+    }
+
+    private func logUI(_ message: String) {
+        DebugLog.emit("UI", message)
+    }
+
+    private var actionContext: CalculatorActionContext {
+        CalculatorActionContext(
+            copy: { viewModel.copyToPasteboard() },
+            copyOperation: { viewModel.copyOperationToPasteboard() },
+            canCopyOperation: viewModel.hasOperationToCopy,
+            paste: { viewModel.pasteFromPasteboard() },
+            undo: { viewModel.undo() },
+            redo: { viewModel.redo() },
+            canUndo: viewModel.canUndo,
+            canRedo: viewModel.canRedo,
+            clear: { viewModel.clearAll() }
+        )
+    }
+
+    private var keypadColumns: [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: 4), count: 4)
+    }
+
+    private var calculatorContentWidth: CGFloat? {
+        guard lockCalculatorWidth, let locked = lockedCalculatorWidth else { return nil }
+        return max(minimumCalculatorPaneWidth, locked - outerHorizontalPadding)
+    }
+
+    private var minimumCalculatorPaneWidth: CGFloat {
+        let minimumContentWidth = minimumContentSize(showingHistory: false, window: currentWindow()).width
+        return max(280, minimumContentWidth - outerHorizontalPadding)
+    }
+
+    private func headerHoverBackground(_ hovering: Bool) -> Color {
+        guard hovering else { return .clear }
+        return palette.headerHover
+    }
+
+    private var usesCompactHistoryOverlay: Bool {
+        currentWidth <= compactHistoryWidthThreshold
+    }
+
+    private var showHistoryOverlay: Bool {
+        activeOverlay == .history
+    }
+
+    private var showSettingsOverlay: Bool {
+        activeOverlay == .settings
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            HStack(spacing: 6) {
+                calculatorPane
+
+                if showHistory && !usesCompactHistoryOverlay {
+                    HistoryPanel(
+                        entries: viewModel.history,
+                        onSelect: { entry in viewModel.reuse(entry) },
+                        onClear: { viewModel.clearHistory() },
+                        onCopyOperation: { entry in viewModel.copyOperationToPasteboard(entry) },
+                        palette: palette
+                    )
+                    .frame(width: historyPanelWidth)
+                }
+            }
+            .padding(8)
+            .background(surfaceColor)
+            .environment(\.macLocalizationBundle, currentLocalizationBundle)
+            .preferredColorScheme(currentTheme.preferredColorScheme)
+            .background(CalculatorWindowResolver { window in
+                guard windowReference !== window else {
+                    return
+                }
+
+                windowReference = window
+            })
+            .focusedSceneValue(\.calculatorActions, actionContext)
+            .onAppear {
+                NSApp.activate(ignoringOtherApps: true)
+                normalizeWindowLanguageIfNeeded()
+                applyCurrentWindowSettings()
+                currentWidth = geo.size.width
+                DispatchQueue.main.async {
+                    updateWindowMinSize()
+                    applyStoredWindowSizeIfNeeded()
+                    updateHistoryVisibility(for: currentWidth, fromUser: false)
+                }
+                startOperatorIntroAnimation()
+            }
+            .onChange(of: windowReference?.windowNumber) {
+                guard windowReference != nil else {
+                    return
+                }
+
+                applyCurrentWindowSettings()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                guard newPhase == .active, isDefaultLocalizationSelection(windowSettings.languageCode) else {
+                    return
+                }
+
+                applyCurrentWindowSettings()
+                startOperatorIntroAnimation()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { notification in
+                guard let window = notification.object as? NSWindow,
+                      window === windowReference else {
+                    return
+                }
+
+                applyCurrentWindowSettings()
+            }
+            .onChange(of: geo.size.width) { _, width in
+                currentWidth = width
+                updateHistoryVisibility(for: width, fromUser: false)
+            }
+            .background(
+                KeyCaptureView { event in
+                    _ = handleKey(event)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .allowsHitTesting(false)
+            )
+            .keyEventMonitor { event in
+                handleKey(event)
+            }
+            .onChange(of: showHistory) {
+                updateWindowMinSize()
+                logUI("showHistory changed -> \(showHistory) keyWindow#\(NSApp.keyWindow?.windowNumber ?? -1)")
+            }
+        }
+    }
+
+    private var calculatorPane: some View {
+        let headerToDisplaySpacing: CGFloat = 8
+        let displayToKeypadSpacing: CGFloat = 36
+
+        return VStack(alignment: .trailing, spacing: 0) {
+            HStack(spacing: 6) {
+                header
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, headerToDisplaySpacing)
+
+            display
+                .padding(.bottom, displayToKeypadSpacing)
+            keypadArea
+        }
+        .frame(
+            minWidth: calculatorContentWidth,
+            idealWidth: calculatorContentWidth,
+            maxWidth: calculatorContentWidth ?? .infinity,
+            maxHeight: .infinity,
+            alignment: .top
+        )
+        .coordinateSpace(name: calculatorContentCoordinateSpace)
+        .overlayPreferenceValue(MemoryControlsBoundsKey.self) { anchor in
+            GeometryReader { geo in
+                if let anchor {
+                    let controlsRect = geo[anchor]
+                    let overlayTop = showSettingsOverlay
+                        ? CGFloat.zero
+                        : max(0, min(controlsRect.maxY, geo.size.height))
+                    let overlayHeight = showSettingsOverlay
+                        ? geo.size.height
+                        : max(0, geo.size.height - overlayTop)
+
+                    ZStack(alignment: .top) {
+                        Color.black.opacity(activeOverlay == nil ? 0 : overlayScrimOpacity)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if activeOverlay != nil {
+                                    closeActiveOverlay()
+                                }
+                            }
+                            .allowsHitTesting(activeOverlay != nil)
+                            .animation(.easeInOut, value: activeOverlay)
+                            .padding(.horizontal, -8)
+                            .padding(.top, -8)
+                            .padding(.bottom, -8)
+
+                        if showHistoryOverlay {
+                            historyOverlay
+                                .frame(width: geo.size.width, height: overlayHeight, alignment: .top)
+                                .offset(y: overlayTop)
+                                .transition(.opacity)
+                        } else if showSettingsOverlay {
+                            settingsOverlay
+                                .frame(width: geo.size.width, height: overlayHeight, alignment: .top)
+                                .offset(y: overlayTop)
+                                .transition(.opacity)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Sections
+
+    private var header: some View {
+        HStack(spacing: 6) {
+            Menu {
+                Button {
+                    viewModel.copyToPasteboard()
+                } label: {
+                    Label(macLocalized("copy", bundle: currentLocalizationBundle), systemImage: "doc.on.doc")
+                }
+                Button {
+                    viewModel.copyOperationToPasteboard()
+                } label: {
+                    Label(macLocalized("history.copyOperation", bundle: currentLocalizationBundle), systemImage: "doc.on.doc")
+                }
+                .disabled(!viewModel.hasOperationToCopy)
+                Button {
+                    viewModel.pasteFromPasteboard()
+                } label: {
+                    Label(macLocalized("paste", bundle: currentLocalizationBundle), systemImage: "doc.on.clipboard")
+                }
+                Divider()
+                Button {
+                    toggleSettingsOverlay()
+                } label: {
+                    Label(macLocalized("settings.title", bundle: currentLocalizationBundle), systemImage: "gearshape")
+                }
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(EnterCalcFont.appFont(size: 16))
+                    .foregroundStyle(primaryForeground)
+                    .frame(width: 18, height: 18, alignment: .center)
+                    .padding(6)
+                    .background(headerHoverBackground(menuHover))
+                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+            .onHover { hovering in
+                menuHover = hovering
+                hovering ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
+            }
+            .onTapGesture { toggleSettingsOverlay() }
+
+            Spacer()
+
+            Button {
+                withAnimation {
+                    userToggledHistory = true
+                    logUI("History toggle tapped (before) showHistory=\(showHistory) keyWindow#\(NSApp.keyWindow?.windowNumber ?? -1)")
+                    if usesCompactHistoryOverlay {
+                        toggleHistoryOverlay()
+                    } else {
+                        handleHistoryToggle(atWidth: currentWidth)
+                    }
+                    storeWindowSize()
+                    logUI("History toggle tapped (after) showHistory=\(showHistory) keyWindow#\(NSApp.keyWindow?.windowNumber ?? -1)")
+                }
+            } label: {
+                Image(systemName: "clock.arrow.circlepath")
+                    .frame(width: 18, height: 18, alignment: .center)
+                    .padding(6)
+                    .background(headerHoverBackground(historyHover))
+                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(primaryForeground)
+            .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .onHover { hovering in
+                historyHover = hovering
+                hovering ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
+            }
+            .help(macLocalized("history.toggle", bundle: currentLocalizationBundle))
+
+            Button {
+                storeWindowSize()
+                logUI("New window button tapped; keyWindow#\(NSApp.keyWindow?.windowNumber ?? -1)")
+                openWindow(id: "main")
+                focusNewestWindowSoon()
+            } label: {
+                Image(systemName: "plus.square.on.square")
+                    .frame(width: 18, height: 18, alignment: .center)
+                    .padding(6)
+                    .background(headerHoverBackground(newWindowHover))
+                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(primaryForeground)
+            .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .onHover { hovering in
+                newWindowHover = hovering
+                hovering ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
+            }
+            .help(macLocalized("window.new", bundle: currentLocalizationBundle))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var display: some View {
+        let basicFontSize: CGFloat = 12
+
+        return VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(viewModel.expressionDisplay)
+                    .font(EnterCalcFont.appFont(size: basicFontSize))
+                    .foregroundStyle(fadedForeground)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .lineLimit(1)
+                    .allowsTightening(true)
+                    .minimumScaleFactor(0.35)
+
+                Text(viewModel.display)
+                    .font(EnterCalcFont.appFont(size: 48))
+                    .foregroundStyle(primaryForeground)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .lineLimit(1)
+                    .allowsTightening(true)
+                    .minimumScaleFactor(0.15)
+                    .layoutPriority(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .topTrailing)
+
+            Spacer(minLength: 0)
+
+            memoryControls
+        }
+        .padding(.top, 8)
+        .padding(.horizontal, 8)
+        .padding(.bottom, 3)
+        .frame(maxWidth: .infinity, minHeight: 100, maxHeight: 100, alignment: .top)
+        .background(displayHover ? panelColor : surfaceColor)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color.white.opacity(colorScheme == .dark ? 0.22 : 0.46), location: 0.0),
+                            .init(color: Color.white.opacity(colorScheme == .dark ? 0.22 : 0.46), location: 0.06),
+                            .init(color: Color.white.opacity(0), location: 0.16),
+                            .init(color: Color.white.opacity(colorScheme == .dark ? 0.10 : 0.18), location: 1.0)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .allowsHitTesting(false)
+        )
+        .contextMenu {
+            Button {
+                viewModel.copyToPasteboard()
+            } label: {
+                Label(macLocalized("copy", bundle: currentLocalizationBundle), systemImage: "doc.on.doc")
+            }
+            Button {
+                viewModel.copyOperationToPasteboard()
+            } label: {
+                Label(macLocalized("history.copyOperation", bundle: currentLocalizationBundle), systemImage: "doc.on.doc")
+            }
+            .disabled(!viewModel.hasOperationToCopy)
+            Button {
+                viewModel.pasteFromPasteboard()
+            } label: {
+                Label(macLocalized("paste", bundle: currentLocalizationBundle), systemImage: "doc.on.clipboard")
+            }
+        }
+        .onHover { hovering in
+              displayHover = hovering
+              if hovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+        }
+        .onTapGesture {
+            viewModel.copyToPasteboard()
+            withAnimation(.easeOut(duration: 0.1)) {
+                flashCopy = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                withAnimation(.easeOut(duration: 0.1)) {
+                    flashCopy = false
+                }
+            }
+        }
+        .overlay {
+            if flashCopy {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.white.opacity(colorScheme == .dark ? 0.15 : 0.25))
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    private var memoryControls: some View {
+        Text("Basic")
+            .font(EnterCalcFont.appFont(size: 12))
+            .foregroundStyle(primaryForeground.opacity(0.15))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .lineLimit(1)
+            .anchorPreference(
+                key: MemoryControlsBoundsKey.self,
+                value: .bounds,
+                transform: { $0 }
+            )
+    }
+
+    private var keypadArea: some View {
+        keypadGrid
+    }
+
+    private var keypadGrid: some View {
+        GeometryReader { geo in
+            let rows: CGFloat = 6
+            let spacing: CGFloat = 4
+            let availableHeight = max(geo.size.height, spacing * (rows - 1) + rows)
+            let cellHeight = (availableHeight - spacing * (rows - 1)) / rows
+            let buttons = keypadButtons()
+
+            LazyVGrid(columns: keypadColumns, spacing: spacing) {
+                ForEach(buttons.indices, id: \.self) { index in
+                    let button = buttons[index]
+                    CalculatorButton(title: button.title, kind: button.kind, height: cellHeight, action: button.action, enabled: button.enabled, palette: palette, operatorRevealProgress: operatorRevealProgress, operatorAnimFadeOpacity: operatorAnimFadeOpacity)
+                }
+            }
+        }
+    }
+
+    private var historyOverlay: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if viewModel.history.isEmpty {
+                Text(macLocalized("history.empty", bundle: currentLocalizationBundle))
+                    .font(EnterCalcFont.subheadline)
+                    .foregroundStyle(fadedForeground)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 8) {
+                        ForEach(viewModel.history) { entry in
+                            HistoryEntryRow(
+                                entry: entry,
+                                primaryForeground: primaryForeground,
+                                fadedForeground: fadedForeground,
+                                tileBackground: memoryOverlayRowHoverColor,
+                                onSelect: {
+                                    viewModel.reuse(entry)
+                                    closeHistoryOverlay()
+                                },
+                                onCopyOperation: {
+                                    viewModel.copyOperationToPasteboard(entry)
+                                }
+                            )
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+            }
+            Spacer(minLength: 0)
+            HStack {
+                Spacer()
+                Button {
+                    if viewModel.history.isEmpty {
+                        withAnimation {
+                            if usesCompactHistoryOverlay {
+                                toggleHistoryOverlay()
+                            } else {
+                                handleHistoryToggle(atWidth: currentWidth)
+                            }
+                            storeWindowSize()
+                        }
+                    } else {
+                        viewModel.clearHistory()
+                    }
+                } label: {
+                    Image(systemName: "trash")
+                        .frame(width: 16, height: 16, alignment: .center)
+                        .padding(6)
+                        .background(historyTrashHover ? palette.headerHover : Color.clear)
+                        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(palette.textSecondary)
+                .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                .help(macLocalized("history.clear", bundle: currentLocalizationBundle))
+                .onHover { hovering in
+                    historyTrashHover = hovering
+                }
+            }
+        }
+        .padding(.horizontal, 5)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(memoryOverlayBackgroundColor)
+        .clipShape(
+            UnevenRoundedRectangle(
+                topLeadingRadius: 10,
+                bottomLeadingRadius: 0,
+                bottomTrailingRadius: 0,
+                topTrailingRadius: 10,
+                style: .continuous
+            )
+        )
+        .padding(.horizontal, -8)
+        .padding(.bottom, -8)
+    }
+
+    private var settingsOverlay: some View {
+        makeSettingsSheet()
+            .environment(\.macLocalizationBundle, currentLocalizationBundle)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(memoryOverlayBackgroundColor)
+            .clipShape(
+                RoundedRectangle(
+                    cornerRadius: 10,
+                    style: .continuous
+                )
+            )
+            .padding(.horizontal, -8)
+            .padding(.top, -8)
+            .padding(.bottom, -8)
+    }
+
+    private func setActiveOverlay(_ overlay: OverlayPane?) {
+        withAnimation(.easeInOut) {
+            activeOverlay = overlay
+        }
+        if overlay != .history {
+            historyTrashHover = false
+            storedHistoryOpen = showHistory
+        }
+    }
+
+    private func setHistoryOverlayVisible(_ visible: Bool) {
+        storedHistoryOpen = visible
+        setActiveOverlay(visible ? .history : nil)
+    }
+
+    private func toggleHistoryOverlay() {
+        setHistoryOverlayVisible(!showHistoryOverlay)
+    }
+
+    private func closeHistoryOverlay() {
+        setHistoryOverlayVisible(false)
+    }
+
+    private func setSettingsOverlayVisible(_ visible: Bool) {
+        setActiveOverlay(visible ? .settings : nil)
+    }
+
+    private func toggleSettingsOverlay() {
+        setSettingsOverlayVisible(!showSettingsOverlay)
+    }
+
+    private func closeSettingsOverlay() {
+        setSettingsOverlayVisible(false)
+    }
+
+    private func closeActiveOverlay() {
+        switch activeOverlay {
+        case .history:
+            closeHistoryOverlay()
+        case .settings:
+            closeSettingsOverlay()
+        case nil:
+            break
+        }
+    }
+
+    @discardableResult
+    private func handleKey(_ event: NSEvent) -> Bool {
+        guard let chars = event.charactersIgnoringModifiers else { return false }
+        let inputChars = event.characters ?? chars
+        var handled = false
+        let isCommand = event.modifierFlags.contains(.command)
+
+        if isCommand {
+            if event.keyCode == 51 { // Cmd + Backspace = clear all
+                viewModel.clearAll()
+                return true
+            }
+            switch chars.lowercased() {
+            case "c":
+                viewModel.copyToPasteboard()
+                return true
+            case "v":
+                viewModel.pasteFromPasteboard()
+                return true
+            default:
+                break
+            }
+        }
+
+        // Keypad support by keyCode
+        switch event.keyCode {
+        case 82: viewModel.inputDigit("0"); return true
+        case 83: viewModel.inputDigit("1"); return true
+        case 84: viewModel.inputDigit("2"); return true
+        case 85: viewModel.inputDigit("3"); return true
+        case 86: viewModel.inputDigit("4"); return true
+        case 87: viewModel.inputDigit("5"); return true
+        case 88: viewModel.inputDigit("6"); return true
+        case 89: viewModel.inputDigit("7"); return true
+        case 91: viewModel.inputDigit("8"); return true
+        case 92: viewModel.inputDigit("9"); return true
+        case 65: viewModel.inputDecimal(); return true // keypad .
+        case 67: viewModel.setOperator(.multiply); return true
+        case 69: viewModel.setOperator(.add); return true
+        case 75: viewModel.setOperator(.divide); return true
+        case 78: viewModel.setOperator(.subtract); return true
+        case 81, 76: viewModel.evaluate(); return true // keypad = / enter
+        default:
+            break
+        }
+
+        if event.keyCode == 53 { // Escape
+            viewModel.clearAll()
+            return true
+        }
+        if event.keyCode == 51 { // Backspace
+            viewModel.backspace()
+            return true
+        }
+        if event.keyCode == 36 || event.keyCode == 76 || chars == "=" { // Return / Enter / =
+            viewModel.evaluate()
+            return true
+        }
+
+        switch inputChars {
+        case "(":
+            viewModel.inputParenthesis("(")
+            handled = true
+        case ")":
+            viewModel.inputParenthesis(")")
+            handled = true
+        case "0","1","2","3","4","5","6","7","8","9":
+            viewModel.inputDigit(inputChars)
+            handled = true
+        case "+": viewModel.setOperator(.add)
+            handled = true
+        case "-": viewModel.setOperator(.subtract)
+            handled = true
+        case "*", "x", "X": viewModel.setOperator(.multiply)
+            handled = true
+        case "/": viewModel.setOperator(.divide)
+            handled = true
+        case ".": viewModel.inputDecimal()
+            handled = true
+        case "%": viewModel.applyPercent()
+            handled = true
+        default:
+            break
+        }
+
+        return handled
+    }
+
+    // MARK: - Button metadata
+
+    private struct ButtonItem {
+        let title: String
+        let kind: CalculatorButton.Kind
+        let action: () -> Void
+        let enabled: Bool
+    }
+
+    private func keypadButtons() -> [ButtonItem] {
+        let errorMode = viewModel.isErrorState
+        func isEnabled(title: String, kind: CalculatorButton.Kind) -> Bool {
+            guard errorMode else { return true }
+            let allowedTitles: Set<String> = ["C", "( )", "⌫", ".", "0","1","2","3","4","5","6","7","8","9"]
+            if allowedTitles.contains(title) { return true }
+            return kind == .number
+        }
+
+        return [
+            ButtonItem(title: "C", kind: .function, action: { viewModel.clearAll() }, enabled: isEnabled(title: "C", kind: .function)),
+            ButtonItem(title: "( )", kind: .function, action: { viewModel.inputParentheses() }, enabled: isEnabled(title: "( )", kind: .function)),
+            ButtonItem(title: "%", kind: .function, action: { viewModel.applyPercent() }, enabled: isEnabled(title: "%", kind: .function)),
+            ButtonItem(title: "+/−", kind: .function, action: { viewModel.toggleSign() }, enabled: isEnabled(title: "+/−", kind: .function)),
+            ButtonItem(title: "1/x", kind: .function, action: { viewModel.reciprocal() }, enabled: isEnabled(title: "1/x", kind: .function)),
+            ButtonItem(title: "x²", kind: .function, action: { viewModel.square() }, enabled: isEnabled(title: "x²", kind: .function)),
+            ButtonItem(title: "√x", kind: .function, action: { viewModel.squareRoot() }, enabled: isEnabled(title: "√x", kind: .function)),
+            ButtonItem(title: "÷", kind: .operation, action: { viewModel.setOperator(.divide) }, enabled: isEnabled(title: "÷", kind: .operation)),
+            ButtonItem(title: "7", kind: .number, action: { viewModel.inputDigit("7") }, enabled: isEnabled(title: "7", kind: .number)),
+            ButtonItem(title: "8", kind: .number, action: { viewModel.inputDigit("8") }, enabled: isEnabled(title: "8", kind: .number)),
+            ButtonItem(title: "9", kind: .number, action: { viewModel.inputDigit("9") }, enabled: isEnabled(title: "9", kind: .number)),
+            ButtonItem(title: "×", kind: .operation, action: { viewModel.setOperator(.multiply) }, enabled: isEnabled(title: "×", kind: .operation)),
+            ButtonItem(title: "4", kind: .number, action: { viewModel.inputDigit("4") }, enabled: isEnabled(title: "4", kind: .number)),
+            ButtonItem(title: "5", kind: .number, action: { viewModel.inputDigit("5") }, enabled: isEnabled(title: "5", kind: .number)),
+            ButtonItem(title: "6", kind: .number, action: { viewModel.inputDigit("6") }, enabled: isEnabled(title: "6", kind: .number)),
+            ButtonItem(title: "−", kind: .operation, action: { viewModel.setOperator(.subtract) }, enabled: isEnabled(title: "−", kind: .operation)),
+            ButtonItem(title: "1", kind: .number, action: { viewModel.inputDigit("1") }, enabled: isEnabled(title: "1", kind: .number)),
+            ButtonItem(title: "2", kind: .number, action: { viewModel.inputDigit("2") }, enabled: isEnabled(title: "2", kind: .number)),
+            ButtonItem(title: "3", kind: .number, action: { viewModel.inputDigit("3") }, enabled: isEnabled(title: "3", kind: .number)),
+            ButtonItem(title: "+", kind: .operation, action: { viewModel.setOperator(.add) }, enabled: isEnabled(title: "+", kind: .operation)),
+            ButtonItem(title: "⌫", kind: .function, action: { viewModel.backspace() }, enabled: isEnabled(title: "⌫", kind: .function)),
+            ButtonItem(title: "0", kind: .number, action: { viewModel.inputDigit("0") }, enabled: isEnabled(title: "0", kind: .number)),
+            ButtonItem(title: ".", kind: .number, action: { viewModel.inputDecimal() }, enabled: isEnabled(title: ".", kind: .number)),
+            ButtonItem(
+                title: windowSettings.usesEnterKeySymbol ? "⏎" : "=",
+                kind: .accent,
+                action: { viewModel.evaluate() },
+                enabled: isEnabled(title: windowSettings.usesEnterKeySymbol ? "⏎" : "=", kind: .accent)
+            )
+        ]
+    }
+
+    // MARK: - Colors
+
+    private var surfaceColor: Color { palette.surface }
+    private var panelColor: Color { palette.panel }
+    private var fadedForeground: Color { palette.textSecondary }
+
+    private var primaryForeground: Color { palette.textPrimary }
+    private var memoryOverlayBackgroundColor: Color {
+        if colorScheme == .dark {
+            return Color(red: 29.0 / 255.0, green: 29.0 / 255.0, blue: 29.0 / 255.0)
+        }
+        return Color(red: 241.0 / 255.0, green: 241.0 / 255.0, blue: 241.0 / 255.0)
+    }
+
+    private var memoryOverlayRowBackgroundColor: Color { palette.historyTileBackground }
+
+    private var memoryOverlayRowHoverColor: Color {
+        palette.historyTileBackground
+    }
+
+    private var overlayScrimOpacity: Double { 0.35 }
+}
+
+private struct MemoryControlsBoundsKey: PreferenceKey {
+    static var defaultValue: Anchor<CGRect>? = nil
+
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
+    }
+}
+
+// MARK: - Button view
+
+    private struct CalculatorButton: View {
+        enum Kind {
+            case number
+            case function
+            case operation
+            case accent
+        }
+
+        let title: String
+        let kind: Kind
+        let height: CGFloat
+        let action: () -> Void
+        let enabled: Bool
+        let palette: Palette
+        var operatorRevealProgress: Double = 0.0
+        var operatorAnimFadeOpacity: Double = 1.0
+
+        @State private var hovering: Bool = false
+        @State private var shimmerProgress: CGFloat = 0
+        @State private var shimmerVisible: Bool = false
+        @Environment(\.colorScheme) private var colorScheme
+
+        var body: some View {
+            Button(action: handleTap) {
+                labelView
+                    .scaleEffect(x: horizontalScale, y: 1.0, anchor: .center)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(PlainButtonStyle())
+            .background(buttonBackground)
+            .foregroundStyle(foregroundColor)
+            .opacity(enabled ? 1.0 : 0.35)
+            .frame(height: max(height, 1))
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(borderColor, lineWidth: 1)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(hoverOverlay)
+                    .opacity(hovering ? 1.0 : 0.0)
+                    .allowsHitTesting(false)
+            )
+            .overlay {
+                if kind == .accent && shimmerVisible {
+                    GeometryReader { geo in
+                        let diagonal = (geo.size.width * geo.size.width + geo.size.height * geo.size.height).squareRoot()
+                        let travel = diagonal * 3.0
+                        let offset = (0.5 - shimmerProgress) * travel
+
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.white.opacity(0.08))
+                            .overlay {
+                                Rectangle()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [
+                                                Color.white.opacity(0),
+                                                Color.white.opacity(0.58),
+                                                Color.white.opacity(0)
+                                            ],
+                                            startPoint: .bottomTrailing,
+                                            endPoint: .topLeading
+                                        )
+                                    )
+                                            .frame(width: max(diagonal * 2.2, 60), height: diagonal * 3.2)
+                                    .rotationEffect(.degrees(-36))
+                                    .offset(x: offset, y: offset)
+                            }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .allowsHitTesting(false)
+                }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 6))
+            .disabled(!enabled)
+            .onHover { hovering in
+                self.hovering = hovering
+                if hovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+            }
+        }
+
+        private func handleTap() {
+            action()
+            guard kind == .accent else { return }
+            shimmerProgress = 0
+            shimmerVisible = true
+            withAnimation(.linear(duration: 0.17)) {
+                shimmerProgress = 1
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                shimmerVisible = false
+            }
+        }
+
+        private var backgroundColor: Color {
+            switch kind {
+            case .accent:
+                return palette.accent
+            case .operation, .function:
+                return palette.buttonOperation
+            case .number:
+                return palette.buttonNumber
+            }
+        }
+
+        private var borderColor: Color {
+            palette.buttonBorder
+        }
+
+        private var horizontalScale: CGFloat {
+            kind == .accent ? 1.2 : 1.0
+        }
+
+        private var foregroundColor: Color {
+            switch kind {
+            case .accent:
+                return palette.accentText
+            default:
+                return palette.textPrimary
+            }
+        }
+
+        private static let operatorRevealOrder: [String: Int] = ["+": 0, "−": 1, "×": 2, "÷": 3]
+
+        private var backgroundStyle: AnyShapeStyle {
+            AnyShapeStyle(backgroundColor)
+        }
+
+        private var accentButtonGradient: LinearGradient {
+            LinearGradient(
+                stops: [
+                    .init(color: palette.accentGradientStart, location: 0.0),
+                    .init(color: palette.accentGradientMid, location: 0.42),
+                    .init(color: palette.accentGradientEnd, location: 1.0)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+
+        @ViewBuilder
+        private var buttonBackground: some View {
+            if kind == .accent {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(accentButtonGradient)
+            } else if let revealOrder = Self.operatorRevealOrder[title],
+               let gradColor = palette.operatorColumnColor(for: title) {
+                let overlayOpacity = min(1.0, max(0.0, operatorRevealProgress - Double(revealOrder))) * operatorAnimFadeOpacity
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(backgroundColor)
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(gradColor)
+                        .opacity(overlayOpacity)
+                }
+            } else {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(backgroundStyle)
+            }
+        }
+
+        private var hoverOverlay: Color {
+            palette.buttonHoverOverlay
+        }
+
+        private var primaryFontSize: CGFloat {
+            min(max(height * 0.38, 14), 28)
+        }
+
+        @ViewBuilder
+        private var labelView: some View {
+            if title == "1/x" {
+                let secondaryFontSize = min(max(height * 0.28, 10), 20)
+                let slashFontSize = min(max(height * 0.36, 14), 28)
+
+                HStack(spacing: 0) {
+                    Text("1")
+                        .font(EnterCalcFont.thinAppFont(size: secondaryFontSize))
+                        .offset(x: -0.5, y: 0)
+                    Text("/")
+                        .font(EnterCalcFont.thinAppFont(size: slashFontSize))
+                        .offset(x: 0, y: -0.15)
+                    Text("x")
+                        .font(EnterCalcFont.thinAppFont(size: secondaryFontSize))
+                        .offset(x: 0.5, y: 1.6)
+                }
+                .offset(x: 0, y: -0.35)
+            } else if title == "x²" {
+                let secondaryFontSize = min(max(height * 0.28, 10), 20)
+                let superscriptFontSize = min(max(height * 0.18, 8), 12)
+
+                ZStack {
+                    Text("X")
+                        .font(EnterCalcFont.thinAppFont(size: secondaryFontSize))
+                        .offset(x: 0, y: 0)
+                    Text("2")
+                        .font(EnterCalcFont.thinAppFont(size: superscriptFontSize))
+                        .offset(
+                            x: primaryFontSize * 0.34,
+                            y: primaryFontSize * -0.27
+                        )
+                }
+                .offset(x: 0, y: -0.25)
+            } else if title == "+/−" {
+                let secondaryFontSize = min(max(height * 0.28, 10), 20)
+                let slashFontSize = min(max(height * 0.36, 14), 26)
+
+                HStack(spacing: 0) {
+                    Text("+")
+                        .font(EnterCalcFont.thinAppFont(size: secondaryFontSize * 0.9))
+                        .offset(x: -0.2, y: -0.1)
+                    Text("/")
+                        .font(EnterCalcFont.thinAppFont(size: slashFontSize))
+                        .offset(x: 0, y: -0.15)
+                    Text("−")
+                        .font(EnterCalcFont.thinAppFont(size: secondaryFontSize * 0.9))
+                        .offset(x: 0.2, y: 0.1)
+                }
+                .offset(x: 0, y: -0.2)
+            } else if title == "√x" {
+                let secondaryFontSize = min(max(height * 0.28, 10), 20)
+                let superscriptFontSize = min(max(height * 0.18, 8), 12)
+
+                ZStack(alignment: .topLeading) {
+                    HStack(spacing: -0.6) {
+                        Text("√")
+                            .font(EnterCalcFont.thinAppFont(size: primaryFontSize))
+                            .scaleEffect(x: 1.2, y: 1, anchor: .trailing)
+                            .offset(x: 1.5, y: 0)
+                        Text("x")
+                            .font(EnterCalcFont.thinAppFont(size: secondaryFontSize))
+                            .offset(x: 0, y: 0)
+                    }
+
+                    Text("2")
+                        .font(EnterCalcFont.thinAppFont(size: superscriptFontSize))
+                        .offset(
+                            x: primaryFontSize * 0.34,
+                            y: primaryFontSize * -0.27
+                        )
+                }
+                .offset(x: 0.6, y: -0.25)
+            } else {
+                baseLabel
+            }
+        }
+
+        private var baseLabel: some View {
+            Text(title)
+                .font(EnterCalcFont.thinAppFont(size: primaryFontSize))
+                .minimumScaleFactor(0.7)
+                .lineLimit(1)
+        }
+    }
+
+// MARK: - History UI
+
+private struct HistoryPanel: View {
+    let entries: [HistoryEntry]
+    let onSelect: (HistoryEntry) -> Void
+    let onClear: () -> Void
+    let onCopyOperation: (HistoryEntry) -> Void
+    let palette: Palette
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.macLocalizationBundle) private var localizationBundle
+    @State private var hoverState: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(macLocalized("history.title", bundle: localizationBundle))
+                    .font(EnterCalcFont.headline)
+                    .foregroundStyle(primaryForeground)
+                Spacer()
+                if !entries.isEmpty {
+                    Button {
+                        DebugLog.emit("UI", "History clear tapped")
+                        onClear()
+                    } label: {
+                        Image(systemName: "trash")
+                            .frame(width: 16, height: 16, alignment: .center)
+                            .padding(6)
+                            .background(hoverState ? hoverBackground : Color.clear)
+                            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                            .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(accentColor)
+                    .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .onHover { hovering in
+                        hoverState = hovering
+                        hovering ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
+                    }
+                    .help(macLocalized("history.clear", bundle: localizationBundle))
+                    .accessibilityLabel(Text(macLocalized("history.clear", bundle: localizationBundle)))
+                }
+            }
+
+            if entries.isEmpty {
+                Text(macLocalized("history.empty", bundle: localizationBundle))
+                    .font(EnterCalcFont.subheadline)
+                    .foregroundStyle(fadedForeground)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 8) {
+                        ForEach(entries) { entry in
+                            HistoryEntryRow(
+                                entry: entry,
+                                primaryForeground: primaryForeground,
+                                fadedForeground: fadedForeground,
+                                tileBackground: historyTileBackground,
+                                onSelect: { onSelect(entry) },
+                                onCopyOperation: {
+                                    onCopyOperation(entry)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        .padding(6)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(historyBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+
+    private var primaryForeground: Color { palette.textPrimary }
+
+    private var fadedForeground: Color { palette.textSecondary }
+
+    private var accentColor: Color { palette.accent }
+
+    private var historyBackground: Color { palette.historyBackground }
+
+    private var historyTileBackground: Color { palette.historyTileBackground }
+
+    private var hoverBackground: Color { palette.headerHover }
+}
+
+private struct HistoryEntryRow: View {
+    let entry: HistoryEntry
+    let primaryForeground: Color
+    let fadedForeground: Color
+    let tileBackground: Color
+    let onSelect: () -> Void
+    let onCopyOperation: () -> Void
+    @Environment(\.macLocalizationBundle) private var localizationBundle
+    @State private var isHovering: Bool = false
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 3) {
+            Text("\(entry.displayExpression) =")
+                .font(EnterCalcFont.appFont(size: 12))
+                .foregroundStyle(fadedForeground)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            Text(entry.displayResult)
+                .font(EnterCalcFont.appFont(size: 16))
+                .foregroundStyle(primaryForeground)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .padding(4)
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+        .background(isHovering ? tileBackground : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+        .onHover { hovering in
+            isHovering = hovering
+            if hovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+        }
+        .onTapGesture { onSelect() }
+        .contextMenu {
+            Button(action: onCopyOperation) {
+                Label(macLocalized("history.copyOperation", bundle: localizationBundle), systemImage: "doc.on.doc")
+            }
+        }
+    }
+}
+
+// MARK: - Settings Sheet and helpers
+
+enum MacAboutContent {
+    static func aboutWindowTitle(bundle: Bundle?) -> String {
+        String(format: macLocalized("mac.about.windowTitle", bundle: bundle), appName)
+    }
+
+    static var appName: String {
+        if let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String,
+           !displayName.isEmpty {
+            return displayName
+        }
+
+        if let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String,
+           !name.isEmpty {
+            return name
+        }
+
+        return "EnterCalc"
+    }
+
+    static func creditAttributedString(bundle: Bundle?) -> AttributedString {
+        let part1 = AttributedString(macLocalized("settings.credit.part1", bundle: bundle))
+        var linkText = AttributedString(macLocalized("settings.credit.linkText", bundle: bundle))
+        linkText.link = URL(string: "https://github.com/tipliai/enterCalc")!
+        let middle = AttributedString(macLocalized("settings.credit.middle", bundle: bundle))
+
+        return part1 + linkText + middle
+    }
+
+    static func appVersionText(bundle: Bundle?) -> String {
+        String(format: macLocalized("settings.credits.version", bundle: bundle), versionString)
+    }
+
+    private static var versionString: String {
+        if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+           !version.isEmpty {
+            return version
+        }
+        if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String,
+           !version.isEmpty {
+            return version
+        }
+        if let envVersion = ProcessInfo.processInfo.environment["WIN_CALC_VERSION"],
+           !envVersion.isEmpty {
+            return envVersion
+        }
+        return "Version unavailable"
+    }
+
+}
+
+struct MacAboutView: View {
+    @Environment(\.macLocalizationBundle) private var localizationBundle
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 16) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 72, height: 72)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(MacAboutContent.appName)
+                        .font(EnterCalcFont.title2)
+                    Text(MacAboutContent.appVersionText(bundle: localizationBundle))
+                        .font(EnterCalcFont.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(macLocalized("settings.credits", bundle: localizationBundle))
+                    .font(EnterCalcFont.headline)
+                Text(MacAboutContent.creditAttributedString(bundle: localizationBundle))
+                    .font(EnterCalcFont.subheadline)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+        }
+        .padding(20)
+        .frame(minWidth: 420, minHeight: 260, alignment: .topLeading)
+    }
+}
+
+private struct SettingsSheet: View {
+    @Binding var selectedTheme: AppTheme
+    @Binding var selectedLanguage: String
+    @Binding var usesScientificNotation: Bool
+    @Binding var selectedNumberFormat: NumberFormatStyle
+    @Binding var usesClassicPercentBehavior: Bool
+    @Binding var usesEnterKeySymbol: Bool
+    let availableLanguages: [LanguageOption]
+    let onClose: () -> Void
+    @Environment(\.macLocalizationBundle) private var localizationBundle
+
+    private let settingsTitleSize: CGFloat = NSFont.systemFontSize + 1
+    private let settingsSectionSize: CGFloat = NSFont.systemFontSize
+    private let settingsBodySize: CGFloat = NSFont.systemFontSize
+    private let settingsSecondarySize: CGFloat = NSFont.smallSystemFontSize
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(macLocalized("settings.title", bundle: localizationBundle))
+                    .font(EnterCalcFont.appFont(size: settingsTitleSize))
+                Spacer()
+                Button {
+                    onClose()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(EnterCalcFont.appFont(size: settingsBodySize))
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel(Text(macLocalized("settings.close", bundle: localizationBundle)))
+            }
+
+            Divider()
+                .padding(.top, 16)
+
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(macLocalized("settings.appearance", bundle: localizationBundle))
+                            .font(EnterCalcFont.appFont(size: settingsSectionSize))
+                        Picker(macLocalized("settings.appearance.label", bundle: localizationBundle), selection: $selectedTheme) {
+                            ForEach(AppTheme.allCases, id: \.self) { theme in
+                                Text(theme.label(using: localizationBundle)).tag(theme)
+                            }
+                        }
+                        .pickerStyle(.radioGroup)
+                        .font(EnterCalcFont.normalAppFont(size: settingsBodySize))
+                        .id(selectedLanguage) // force refresh of localized labels on change
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(macLocalized("settings.language", bundle: localizationBundle))
+                            .font(EnterCalcFont.appFont(size: settingsSectionSize))
+                        Picker(macLocalized("settings.language.label", bundle: localizationBundle), selection: $selectedLanguage) {
+                            ForEach(availableLanguages, id: \.code) { lang in
+                                Text(lang.displayName).tag(lang.code)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .font(EnterCalcFont.normalAppFont(size: settingsBodySize))
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(macLocalized("settings.userInterface", bundle: localizationBundle))
+                            .font(EnterCalcFont.appFont(size: settingsSectionSize))
+                        Toggle(macLocalized("settings.numberFormat.scientific", bundle: localizationBundle), isOn: $usesScientificNotation)
+                            .font(EnterCalcFont.normalAppFont(size: settingsBodySize))
+                        Toggle(macLocalized("settings.percent.classicBehavior", bundle: localizationBundle), isOn: $usesClassicPercentBehavior)
+                            .font(EnterCalcFont.normalAppFont(size: settingsBodySize))
+                        Toggle(
+                            macLocalized("settings.equals.enterKeySymbol", bundle: localizationBundle),
+                            isOn: Binding(
+                                get: { !usesEnterKeySymbol },
+                                set: { usesEnterKeySymbol = !$0 }
+                            )
+                        )
+                        .font(EnterCalcFont.normalAppFont(size: settingsBodySize))
+                        Picker(macLocalized("settings.numberFormat.style", bundle: localizationBundle), selection: $selectedNumberFormat) {
+                            ForEach(NumberFormatStyle.allCases, id: \.self) { style in
+                                Text(style.example).tag(style)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .font(EnterCalcFont.normalAppFont(size: settingsBodySize))
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(.top, 16)
+                .padding(.bottom, 20)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+private struct LanguageOption {
+    let code: String
+    let displayName: String
+}
+
+private enum AppTheme: String, CaseIterable {
+    case system
+    case light
+    case dark
+    case blue
+
+    func label(using localizationBundle: Bundle?) -> String {
+        switch self {
+        case .system: return macLocalized("settings.theme.system", bundle: localizationBundle)
+        case .light: return macLocalized("settings.theme.light", bundle: localizationBundle)
+        case .dark: return macLocalized("settings.theme.dark", bundle: localizationBundle)
+        case .blue: return macLocalized("settings.theme.blue", bundle: localizationBundle)
+        }
+    }
+
+    var preferredColorScheme: ColorScheme? {
+        switch self {
+        case .system:
+            return nil
+        case .light:
+            return .light
+        case .dark:
+            return .dark
+        case .blue:
+            return .dark
+        }
+    }
+
+    func palette(using systemColorScheme: ColorScheme) -> Palette {
+        switch self {
+        case .light:
+            return .light
+        case .dark:
+            return .dark
+        case .blue:
+            return .blue
+        case .system:
+            return Palette.forScheme(systemColorScheme)
+        }
+    }
+}
+
+private extension CalculatorWindowView {
+    static func loadStoredSettings(from defaults: UserDefaults = .standard) -> CalculatorScreenSettings {
+        CalculatorScreenSettingsPersistence.load(from: defaults)
+    }
+
+    func currentWindow() -> NSWindow? {
+        windowReference ?? NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first
+    }
+
+    func makeSettingsSheet() -> SettingsSheet {
+        SettingsSheet(
+            selectedTheme: Binding(
+                get: { currentTheme },
+                set: { newValue in
+                    updateWindowSettings { $0.themeRawValue = newValue.rawValue }
+                    applyTheme(newValue)
+                }
+            ),
+            selectedLanguage: Binding(
+                get: { windowSettings.languageCode },
+                set: { newValue in
+                    updateWindowSettings { $0.languageCode = newValue }
+                    applyLanguage(newValue)
+                }
+            ),
+            usesScientificNotation: Binding(
+                get: { windowSettings.usesScientificNotation },
+                set: { newValue in
+                    updateWindowSettings { $0.usesScientificNotation = newValue }
+                    viewModel.setScientificNotationEnabled(newValue)
+                }
+            ),
+            selectedNumberFormat: Binding(
+                get: { currentNumberFormatStyle },
+                set: { newValue in
+                    updateWindowSettings { $0.numberFormatStyleRawValue = newValue.rawValue }
+                    viewModel.setNumberFormatStyle(newValue)
+                }
+            ),
+            usesClassicPercentBehavior: Binding(
+                get: { windowSettings.usesClassicPercentBehavior },
+                set: { newValue in
+                    updateWindowSettings { $0.usesClassicPercentBehavior = newValue }
+                    viewModel.setClassicPercentBehaviorEnabled(newValue)
+                }
+            ),
+            usesEnterKeySymbol: Binding(
+                get: { windowSettings.usesEnterKeySymbol },
+                set: { newValue in
+                    updateWindowSettings { $0.usesEnterKeySymbol = newValue }
+                }
+            ),
+            availableLanguages: availableLanguageOptions(),
+            onClose: { closeSettingsOverlay() }
+        )
+    }
+
+    func backingScaleFactor(for window: NSWindow?) -> CGFloat {
+        let scale = window?.screen?.backingScaleFactor
+            ?? NSScreen.main?.backingScaleFactor
+            ?? fallbackBackingScaleFactor
+        return max(scale, 1)
+    }
+
+    func minimumWindowFrameSize(showingHistory: Bool, window: NSWindow?) -> CGSize {
+        let extraWidth = showingHistory ? historyPanelWidth + historySpacing : 0
+        return CGSize(
+            width: minimumWindowWidthPoints + extraWidth,
+            height: minimumWindowHeightPoints
+        )
+    }
+
+    func minimumContentSize(showingHistory: Bool, window: NSWindow?) -> CGSize {
+        let minimumFrameSize = minimumWindowFrameSize(showingHistory: showingHistory, window: window)
+        guard let window else { return minimumFrameSize }
+        return window.contentRect(forFrameRect: NSRect(origin: .zero, size: minimumFrameSize)).size
+    }
+
+    func startOperatorIntroAnimation() {
+        let revealDuration: Double = 0.46
+        let fadeDelay: Double = 0.48
+        let fadeDuration: Double = 0.22
+        operatorRevealProgress = 0.0
+        operatorAnimFadeOpacity = 1.0
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            withAnimation(.linear(duration: revealDuration)) {
+                operatorRevealProgress = 4.0
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + fadeDelay) {
+                withAnimation(.easeIn(duration: fadeDuration)) {
+                    operatorAnimFadeOpacity = 0.0
+                }
+            }
+        }
+    }
+
+    func updateHistoryVisibility(for width: CGFloat, fromUser: Bool) {
+        if usesCompactHistoryOverlay {
+            if showHistory {
+                showHistory = false
+                widthBeforeHistory = nil
+                setHistoryOverlayVisible(true)
+            }
+            return
+        }
+
+        if showHistoryOverlay {
+            showHistory = true
+            setHistoryOverlayVisible(false)
+        }
+
+        if showHistory {
+            expandWindowWidthIfNeeded(currentWidth: width)
+        }
+    }
+
+    func handleHistoryToggle(atWidth width: CGFloat) {
+        logUI("handleHistoryToggle start showHistory=\(showHistory) width=\(width) keyWindow#\(NSApp.keyWindow?.windowNumber ?? -1)")
+        if showHistory {
+            showHistory = false
+            storedHistoryOpen = showHistory
+            lockCalculatorWidth = true
+            lockedCalculatorWidth = currentWidth
+            collapseWindowWidthIfNeeded(currentWidth: width)
+            widthBeforeHistory = nil
+            unlockCalculatorWidthAfterAnimation()
+            logUI("handleHistoryToggle closing history; frame=\(NSApp.keyWindow?.frame.debugDescription ?? "<nil>")")
+            return
+        }
+
+        // Opening history
+        lockCalculatorWidth = true
+        lockedCalculatorWidth = currentWidth
+        widthBeforeHistory = currentWidth
+        showHistory = true
+        storedHistoryOpen = showHistory
+        expandWindowWidthIfNeeded(currentWidth: width)
+        unlockCalculatorWidthAfterAnimation()
+        logUI("handleHistoryToggle opening history; frame=\(NSApp.keyWindow?.frame.debugDescription ?? "<nil>")")
+    }
+
+    func expandWindowWidthIfNeeded(currentWidth: CGFloat) {
+        guard let window = currentWindow() else { return }
+        let baseWidth = widthBeforeHistory ?? currentWidth
+        let targetWidth = max(window.frame.width, baseWidth + historyPanelWidth + historySpacing)
+        if window.frame.width < targetWidth {
+            var frame = window.frame
+            frame.size.width = targetWidth
+            window.setFrame(frame, display: true, animate: true)
+            logUI("expandWindowWidthIfNeeded to \(targetWidth) (base \(baseWidth)) for window#\(window.windowNumber)")
+        }
+        storedWindowWidth = Double(window.frame.width)
+        storedWindowHeight = Double(window.frame.height)
+    }
+
+    func collapseWindowWidthIfNeeded(currentWidth: CGFloat) {
+        guard let window = currentWindow() else { return }
+        let minimumWidth = minimumContentSize(showingHistory: false, window: window).width
+        let targetWidth = max(minimumWidth, min(window.frame.width, widthBeforeHistory ?? (window.frame.width - 200)))
+        if window.frame.width != targetWidth {
+            var frame = window.frame
+            frame.size.width = targetWidth
+            window.setFrame(frame, display: true, animate: true)
+            self.currentWidth = frame.size.width
+            logUI("collapseWindowWidthIfNeeded to \(targetWidth) for window#\(window.windowNumber)")
+        }
+        storedWindowWidth = Double(window.frame.width)
+        storedWindowHeight = Double(window.frame.height)
+    }
+
+    func storeWindowSize() {
+        guard let window = currentWindow() else { return }
+        storedWindowWidth = Double(window.frame.width)
+        storedWindowHeight = Double(window.frame.height)
+        storedHistoryOpen = showHistory
+    }
+
+    func applyStoredWindowSizeIfNeeded() {
+        guard let window = currentWindow() else { return }
+        guard !appliedStoredSize else { return }
+        let minimumFrameSize = minimumWindowFrameSize(showingHistory: storedHistoryOpen, window: window)
+        if storedWindowWidth > 0 && storedWindowHeight > 0 {
+            var frame = window.frame
+            frame.size.width = max(CGFloat(storedWindowWidth), minimumFrameSize.width)
+            frame.size.height = max(CGFloat(storedWindowHeight), minimumFrameSize.height)
+            window.setFrame(frame, display: true, animate: false)
+            currentWidth = frame.size.width
+        } else {
+            var frame = window.frame
+            let targetSize = minimumWindowFrameSize(showingHistory: showHistory, window: window)
+            if frame.size.width != targetSize.width || frame.size.height != targetSize.height {
+                frame.size.width = targetSize.width
+                frame.size.height = targetSize.height
+                window.setFrame(frame, display: true, animate: false)
+                currentWidth = frame.size.width
+            }
+        }
+        showHistory = storedHistoryOpen
+        widthBeforeHistory = showHistory ? currentWidth : nil
+        userToggledHistory = storedHistoryOpen
+        if showHistory && currentWidth < 700 {
+            expandWindowWidthIfNeeded(currentWidth: currentWidth)
+        }
+        appliedStoredSize = true
+    }
+
+    func unlockCalculatorWidthAfterAnimation() {
+        let delay: TimeInterval = 0
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            self.lockCalculatorWidth = false
+            self.lockedCalculatorWidth = nil
+        }
+    }
+
+    func updateWindowMinSize() {
+        guard let window = currentWindow() else { return }
+        let minimumFrameSize = minimumWindowFrameSize(showingHistory: showHistory, window: window)
+        let minimumContentSize = minimumContentSize(showingHistory: showHistory, window: window)
+
+        window.contentMinSize = minimumContentSize
+
+        if window.frame.width < minimumFrameSize.width || window.frame.height < minimumFrameSize.height {
+            var frame = window.frame
+            frame.size.width = max(frame.size.width, minimumFrameSize.width)
+            frame.size.height = max(frame.size.height, minimumFrameSize.height)
+            window.setFrame(frame, display: true, animate: false)
+            currentWidth = frame.size.width
+        }
+    }
+
+    func focusCurrentWindow() {
+        DispatchQueue.main.async {
+            NSApp.activate(ignoringOtherApps: true)
+            if let window = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first {
+                window.makeKeyAndOrderFront(nil)
+            }
+        }
+    }
+
+    func focusNewestWindowSoon() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            NSApp.activate(ignoringOtherApps: true)
+            let newest = NSApp.windows.max(by: { $0.windowNumber < $1.windowNumber })
+            if let window = newest {
+                window.makeKeyAndOrderFront(nil)
+                window.makeFirstResponder(window.contentView)
+            }
+        }
+    }
+
+    func updateWindowSettings(_ update: (inout CalculatorScreenSettings) -> Void) {
+        var updated = windowSettings
+        update(&updated)
+        guard updated != windowSettings else { return }
+        windowSettings = updated
+        persistWindowSettings(updated)
+    }
+
+    func persistWindowSettings(_ settings: CalculatorScreenSettings) {
+        CalculatorScreenSettingsPersistence.persist(settings)
+    }
+
+    func applyCurrentWindowSettings() {
+        applyTheme(currentTheme)
+        applyLanguage(windowSettings.languageCode)
+        viewModel.setScientificNotationEnabled(windowSettings.usesScientificNotation)
+        viewModel.setNumberFormatStyle(currentNumberFormatStyle)
+        viewModel.setClassicPercentBehaviorEnabled(windowSettings.usesClassicPercentBehavior)
+    }
+
+    func normalizeWindowLanguageIfNeeded() {
+        guard !isDefaultLocalizationSelection(windowSettings.languageCode) else {
+            return
+        }
+
+        let resolvedCode = resolvedLocalizationCode(for: windowSettings.languageCode)
+        if windowSettings.languageCode != resolvedCode {
+            updateWindowSettings { $0.languageCode = resolvedCode }
+        }
+    }
+
+    func availableLanguageOptions() -> [LanguageOption] {
+        let resolvedDefaultCode = resolvedLocalizationCode()
+        let defaultOption = LanguageOption(
+            code: defaultLocalizationSelectionCode,
+            displayName: String(
+                format: macLocalized("settings.language.defaultOption", bundle: currentLocalizationBundle),
+                localizationDisplayName(for: resolvedDefaultCode)
+            )
+        )
+
+        let explicitOptions = supportedLocalizationCodes().map { code in
+            LanguageOption(code: code, displayName: localizationDisplayName(for: code).capitalized)
+        }.sorted { $0.displayName < $1.displayName }
+
+        return [defaultOption] + explicitOptions
+    }
+
+    func applyTheme(_ theme: AppTheme) {
+        let appearance: NSAppearance?
+        switch theme {
+        case .system:
+            appearance = nil
+        case .light:
+            appearance = NSAppearance(named: .aqua)
+        case .dark:
+            appearance = NSAppearance(named: .darkAqua)
+        case .blue:
+            appearance = NSAppearance(named: .darkAqua)
+        }
+
+        windowReference?.appearance = appearance
+    }
+
+    func applyLanguage(_ code: String) {
+        languageOverrideBundle = isDefaultLocalizationSelection(code) ? nil : localizationBundle(for: code)
+        viewModel.refreshLocalization()
+    }
+}
+
+private struct CalculatorWindowResolver: NSViewRepresentable {
+    let onResolve: (NSWindow?) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { [weak view] in
+            onResolve(view?.window)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { [weak nsView] in
+            onResolve(nsView?.window)
+        }
+    }
+}

@@ -1,0 +1,44 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:enterCalc}",
+            "name": "Debug EnterCalc-macOS",
+            "target": "EnterCalc-macOS",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug EnterCalc-macOS"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:enterCalc}",
+            "name": "Release EnterCalc-macOS",
+            "target": "EnterCalc-macOS",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release EnterCalc-macOS"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:enterCalc}",
+            "name": "Debug EnterCalc-iOS",
+            "target": "EnterCalc-iOS",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug EnterCalc-iOS"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:enterCalc}",
+            "name": "Release EnterCalc-iOS",
+            "target": "EnterCalc-iOS",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release EnterCalc-iOS"
+        }
+    ]
+}
