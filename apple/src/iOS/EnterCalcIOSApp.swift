@@ -2554,32 +2554,6 @@ private struct IOSKeypadButton: View {
         var vertical: CGFloat = 0
     }
 
-    private struct GlyphScale {
-        var horizontal: CGFloat = 1
-        var vertical: CGFloat = 1
-    }
-
-    private struct ReciprocalLabelTuning {
-        var overallLabelOffset: GlyphOffset = GlyphOffset()
-        var glyphSpacing: CGFloat = 0
-        var oneGlyphOffset: GlyphOffset = GlyphOffset(horizontal: -2, vertical: -2)
-        var slashGlyphOffset: GlyphOffset = GlyphOffset()
-        var xGlyphOffset: GlyphOffset = GlyphOffset(horizontal: 2, vertical: 2)
-    }
-
-    private struct SquareLabelTuning {
-        var overallLabelOffset: GlyphOffset = GlyphOffset()
-        var baseGlyphOffset: GlyphOffset = GlyphOffset()
-        var superscriptHorizontalOffsetMultiplier: CGFloat = 0.45
-        var superscriptVerticalOffsetMultiplier: CGFloat = -0.25
-    }
-
-    private struct SquareRootLabelTuning {
-        var overallLabelOffset: GlyphOffset = GlyphOffset()
-        var baseGlyphOffset: GlyphOffset = GlyphOffset()
-        var superscriptGlyphOffset: GlyphOffset = GlyphOffset(horizontal: 1, vertical: 0)
-    }
-
     private struct SignToggleLabelTuning {
         var overallLabelOffset: GlyphOffset = GlyphOffset()
         var glyphSpacing: CGFloat = 0
@@ -2589,9 +2563,6 @@ private struct IOSKeypadButton: View {
     }
 
     private enum SpecialButtonLabelTuning {
-        static let reciprocal = ReciprocalLabelTuning()
-        static let square = SquareLabelTuning()
-        static let squareRoot = SquareRootLabelTuning()
         static let signToggle = SignToggleLabelTuning()
     }
 
@@ -2621,6 +2592,7 @@ private struct IOSKeypadButton: View {
                 .background(buttonBackground)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(Text(button.title))
         .buttonStyle(
             IOSPressedButtonStyle(
                 cornerRadius: scaledCornerRadius,
@@ -2700,47 +2672,59 @@ private struct IOSKeypadButton: View {
     private var labelView: some View {
         switch button.title {
         case "1/x":
-            let tuning = SpecialButtonLabelTuning.reciprocal
+            let iconWidth = min(max(buttonHeight * 0.68, 24), 38)
+            let iconHeight = min(max(buttonHeight * 0.68, 24), 38)
+            let iconFrameWidth = iconWidth
+            let iconFrameHeight = iconHeight
+            let iconScaleX: CGFloat = 0.94
+            let iconScaleY: CGFloat = 0.94
+            let iconOffsetX: CGFloat = 0
+            let iconOffsetY: CGFloat = -0.1
 
-            HStack(spacing: tuning.glyphSpacing) {
-                Text("1")
-                    .font(EnterCalcFont.thinAppFont(size: signSize))
-                    .offset(x: tuning.oneGlyphOffset.horizontal, y: tuning.oneGlyphOffset.vertical)
-                Text("/")
-                    .font(EnterCalcFont.thinAppFont(size: slashSize))
-                    .offset(x: tuning.slashGlyphOffset.horizontal, y: tuning.slashGlyphOffset.vertical)
-                Text("x")
-                    .font(EnterCalcFont.thinAppFont(size: signSize))
-                    .offset(x: tuning.xGlyphOffset.horizontal, y: tuning.xGlyphOffset.vertical)
-            }
-            .offset(x: tuning.overallLabelOffset.horizontal, y: tuning.overallLabelOffset.vertical)
+            Image("one-over-x", bundle: .enterCalcCore)
+                .renderingMode(.template)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: iconWidth, height: iconHeight)
+                .frame(width: iconFrameWidth, height: iconFrameHeight)
+                .scaleEffect(x: iconScaleX, y: iconScaleY)
+                .offset(x: iconOffsetX, y: iconOffsetY)
         case "x²":
-            let tuning = SpecialButtonLabelTuning.square
+            let iconWidth = min(max(buttonHeight * 0.68, 24), 38)
+            let iconHeight = min(max(buttonHeight * 0.68, 24), 38)
+            let iconFrameWidth = iconWidth
+            let iconFrameHeight = iconHeight
+            let iconScaleX: CGFloat = 0.9
+            let iconScaleY: CGFloat = 0.9
+            let iconOffsetX: CGFloat = 0
+            let iconOffsetY: CGFloat = -0.15
 
-            ZStack {
-                Text("x")
-                    .font(EnterCalcFont.thinAppFont(size: symbolBaseSize))
-                    .offset(x: tuning.baseGlyphOffset.horizontal, y: tuning.baseGlyphOffset.vertical)
-                Text("2")
-                    .font(EnterCalcFont.thinAppFont(size: superscriptSize))
-                    .offset(
-                        x: symbolBaseSize * tuning.superscriptHorizontalOffsetMultiplier,
-                        y: symbolBaseSize * tuning.superscriptVerticalOffsetMultiplier
-                    )
-            }
-            .offset(x: tuning.overallLabelOffset.horizontal, y: tuning.overallLabelOffset.vertical)
+            Image("x-squared", bundle: .enterCalcCore)
+                .renderingMode(.template)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: iconWidth, height: iconHeight)
+                .frame(width: iconFrameWidth, height: iconFrameHeight)
+                .scaleEffect(x: iconScaleX, y: iconScaleY)
+                .offset(x: iconOffsetX, y: iconOffsetY)
         case "²√x":
-            let tuning = SpecialButtonLabelTuning.squareRoot
+            let iconWidth = min(max(buttonHeight * 0.68, 24), 38)
+            let iconHeight = min(max(buttonHeight * 0.68, 24), 38)
+            let iconFrameWidth = iconWidth
+            let iconFrameHeight = iconHeight
+            let iconScaleX: CGFloat = 0.92
+            let iconScaleY: CGFloat = 0.92
+            let iconOffsetX: CGFloat = 0.15
+            let iconOffsetY: CGFloat = -0.05
 
-            ZStack(alignment: .topLeading) {
-                Text("√x")
-                    .font(EnterCalcFont.thinAppFont(size: symbolBaseSize))
-                    .offset(x: tuning.baseGlyphOffset.horizontal, y: tuning.baseGlyphOffset.vertical)
-                Text("2")
-                    .font(EnterCalcFont.thinAppFont(size: superscriptSize))
-                    .offset(x: tuning.superscriptGlyphOffset.horizontal, y: tuning.superscriptGlyphOffset.vertical)
-            }
-            .offset(x: tuning.overallLabelOffset.horizontal, y: tuning.overallLabelOffset.vertical)
+            Image("square-root", bundle: .enterCalcCore)
+                .renderingMode(.template)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: iconWidth, height: iconHeight)
+                .frame(width: iconFrameWidth, height: iconFrameHeight)
+                .scaleEffect(x: iconScaleX, y: iconScaleY)
+                .offset(x: iconOffsetX, y: iconOffsetY)
         case "+/−":
             let tuning = SpecialButtonLabelTuning.signToggle
 
@@ -2764,10 +2748,6 @@ private struct IOSKeypadButton: View {
 
     private var symbolBaseSize: CGFloat {
         min(metrics.buttonFontSize, buttonHeight * 0.52)
-    }
-
-    private var superscriptSize: CGFloat {
-        symbolBaseSize * 0.56
     }
 
     private var slashSize: CGFloat {

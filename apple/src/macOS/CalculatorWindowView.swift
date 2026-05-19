@@ -743,7 +743,7 @@ struct CalculatorWindowView: View {
             ButtonItem(title: "C", kind: .function, action: { viewModel.clearAll() }, enabled: isEnabled(title: "C", kind: .function)),
             ButtonItem(title: "( )", kind: .function, action: { viewModel.inputParentheses() }, enabled: isEnabled(title: "( )", kind: .function)),
             ButtonItem(title: "%", kind: .function, action: { viewModel.applyPercent() }, enabled: isEnabled(title: "%", kind: .function)),
-            ButtonItem(title: "+/−", kind: .function, action: { viewModel.toggleSign() }, enabled: isEnabled(title: "+/−", kind: .function)),
+            ButtonItem(title: "⌫", kind: .function, action: { viewModel.backspace() }, enabled: isEnabled(title: "⌫", kind: .function)),
             ButtonItem(title: "1/x", kind: .function, action: { viewModel.reciprocal() }, enabled: isEnabled(title: "1/x", kind: .function)),
             ButtonItem(title: "x²", kind: .function, action: { viewModel.square() }, enabled: isEnabled(title: "x²", kind: .function)),
             ButtonItem(title: "√x", kind: .function, action: { viewModel.squareRoot() }, enabled: isEnabled(title: "√x", kind: .function)),
@@ -760,7 +760,7 @@ struct CalculatorWindowView: View {
             ButtonItem(title: "2", kind: .number, action: { viewModel.inputDigit("2") }, enabled: isEnabled(title: "2", kind: .number)),
             ButtonItem(title: "3", kind: .number, action: { viewModel.inputDigit("3") }, enabled: isEnabled(title: "3", kind: .number)),
             ButtonItem(title: "+", kind: .operation, action: { viewModel.setOperator(.add) }, enabled: isEnabled(title: "+", kind: .operation)),
-            ButtonItem(title: "⌫", kind: .function, action: { viewModel.backspace() }, enabled: isEnabled(title: "⌫", kind: .function)),
+            ButtonItem(title: "+/−", kind: .function, action: { viewModel.toggleSign() }, enabled: isEnabled(title: "+/−", kind: .function)),
             ButtonItem(title: "0", kind: .number, action: { viewModel.inputDigit("0") }, enabled: isEnabled(title: "0", kind: .number)),
             ButtonItem(title: ".", kind: .number, action: { viewModel.inputDecimal() }, enabled: isEnabled(title: ".", kind: .number)),
             ButtonItem(
@@ -835,6 +835,7 @@ private struct MemoryControlsBoundsKey: PreferenceKey {
                     .contentShape(Rectangle())
             }
             .buttonStyle(PlainButtonStyle())
+            .accessibilityLabel(Text(title))
             .background(buttonBackground)
             .foregroundStyle(foregroundColor)
             .opacity(enabled ? 1.0 : 0.35)
@@ -980,37 +981,41 @@ private struct MemoryControlsBoundsKey: PreferenceKey {
         @ViewBuilder
         private var labelView: some View {
             if title == "1/x" {
-                let secondaryFontSize = min(max(height * 0.28, 10), 20)
-                let slashFontSize = min(max(height * 0.36, 14), 28)
+                let iconWidth = min(max(height * 0.68, 22), 34)
+                let iconHeight = min(max(height * 0.68, 22), 34)
+                let iconFrameWidth = iconWidth
+                let iconFrameHeight = iconHeight
+                let iconScaleX: CGFloat = 0.94
+                let iconScaleY: CGFloat = 0.94
+                let iconOffsetX: CGFloat = 0
+                let iconOffsetY: CGFloat = -0.1
 
-                HStack(spacing: 0) {
-                    Text("1")
-                        .font(EnterCalcFont.thinAppFont(size: secondaryFontSize))
-                        .offset(x: -0.5, y: 0)
-                    Text("/")
-                        .font(EnterCalcFont.thinAppFont(size: slashFontSize))
-                        .offset(x: 0, y: -0.15)
-                    Text("x")
-                        .font(EnterCalcFont.thinAppFont(size: secondaryFontSize))
-                        .offset(x: 0.5, y: 1.6)
-                }
-                .offset(x: 0, y: -0.35)
+                Image("one-over-x", bundle: .enterCalcCore)
+                    .renderingMode(.template)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: iconWidth, height: iconHeight)
+                    .frame(width: iconFrameWidth, height: iconFrameHeight)
+                    .scaleEffect(x: iconScaleX, y: iconScaleY)
+                    .offset(x: iconOffsetX, y: iconOffsetY)
             } else if title == "x²" {
-                let secondaryFontSize = min(max(height * 0.28, 10), 20)
-                let superscriptFontSize = min(max(height * 0.18, 8), 12)
+                let iconWidth = min(max(height * 0.68, 22), 34)
+                let iconHeight = min(max(height * 0.68, 22), 34)
+                let iconFrameWidth = iconWidth
+                let iconFrameHeight = iconHeight
+                let iconScaleX: CGFloat = 0.9
+                let iconScaleY: CGFloat = 0.9
+                let iconOffsetX: CGFloat = 0
+                let iconOffsetY: CGFloat = -0.15
 
-                ZStack {
-                    Text("X")
-                        .font(EnterCalcFont.thinAppFont(size: secondaryFontSize))
-                        .offset(x: 0, y: 0)
-                    Text("2")
-                        .font(EnterCalcFont.thinAppFont(size: superscriptFontSize))
-                        .offset(
-                            x: primaryFontSize * 0.34,
-                            y: primaryFontSize * -0.27
-                        )
-                }
-                .offset(x: 0, y: -0.25)
+                Image("x-squared", bundle: .enterCalcCore)
+                    .renderingMode(.template)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: iconWidth, height: iconHeight)
+                    .frame(width: iconFrameWidth, height: iconFrameHeight)
+                    .scaleEffect(x: iconScaleX, y: iconScaleY)
+                    .offset(x: iconOffsetX, y: iconOffsetY)
             } else if title == "+/−" {
                 let secondaryFontSize = min(max(height * 0.28, 10), 20)
                 let slashFontSize = min(max(height * 0.36, 14), 26)
@@ -1028,28 +1033,23 @@ private struct MemoryControlsBoundsKey: PreferenceKey {
                 }
                 .offset(x: 0, y: -0.2)
             } else if title == "√x" {
-                let secondaryFontSize = min(max(height * 0.28, 10), 20)
-                let superscriptFontSize = min(max(height * 0.18, 8), 12)
+                let iconWidth = min(max(height * 0.68, 22), 34)
+                let iconHeight = min(max(height * 0.68, 22), 34)
+                let iconFrameWidth = iconWidth
+                let iconFrameHeight = iconHeight
+                let iconScaleX: CGFloat = 0.92
+                let iconScaleY: CGFloat = 0.92
+                let iconOffsetX: CGFloat = 0.15
+                let iconOffsetY: CGFloat = -0.05
 
-                ZStack(alignment: .topLeading) {
-                    HStack(spacing: -0.6) {
-                        Text("√")
-                            .font(EnterCalcFont.thinAppFont(size: primaryFontSize))
-                            .scaleEffect(x: 1.2, y: 1, anchor: .trailing)
-                            .offset(x: 1.5, y: 0)
-                        Text("x")
-                            .font(EnterCalcFont.thinAppFont(size: secondaryFontSize))
-                            .offset(x: 0, y: 0)
-                    }
-
-                    Text("2")
-                        .font(EnterCalcFont.thinAppFont(size: superscriptFontSize))
-                        .offset(
-                            x: primaryFontSize * 0.34,
-                            y: primaryFontSize * -0.27
-                        )
-                }
-                .offset(x: 0.6, y: -0.25)
+                Image("square-root", bundle: .enterCalcCore)
+                    .renderingMode(.template)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: iconWidth, height: iconHeight)
+                    .frame(width: iconFrameWidth, height: iconFrameHeight)
+                    .scaleEffect(x: iconScaleX, y: iconScaleY)
+                    .offset(x: iconOffsetX, y: iconOffsetY)
             } else {
                 baseLabel
             }
