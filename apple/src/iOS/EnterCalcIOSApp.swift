@@ -839,9 +839,9 @@ private extension EnterCalcIOSView {
     ) -> some View {
         GeometryReader { geometry in
             let usesLandscapeNavigationRail = metrics.mode != .phonePortrait
-            let paginationSpacing = showsPaginationIndicator ? metrics.sectionSpacing : 0
+            let paginationSpacing = showsPaginationIndicator ? metrics.pageIndicatorVerticalSpacing : 0
             let bottomFooterHeight = showsPaginationIndicator
-                ? metrics.pageIndicatorHeight
+                ? 0
                 : (metrics.mode == .phonePortrait ? metrics.portraitBottomReserveWithoutPagination : 0)
             let paginationReserve = showsPaginationIndicator ? metrics.pageIndicatorHeight + paginationSpacing : 0
 
@@ -869,21 +869,37 @@ private extension EnterCalcIOSView {
     @ViewBuilder
     func screenBody(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession) -> some View {
         let showsPaginationIndicator = screenStore.screenCount > 1
-        let paginationBottomInset = metrics.mode == .phonePortrait
-            ? (showsPaginationIndicator
-                ? metrics.pageIndicatorHeight + metrics.sectionSpacing
-                : 0)
-            : 0
+        let paginationBottomInset: CGFloat = 0
 
         switch metrics.mode {
         case .phoneLandscape:
             if metrics.usesInlineLandscapeHistory {
-                pageContentWithPagination(metrics: metrics, showsPaginationIndicator: showsPaginationIndicator) {
-                    HStack(spacing: metrics.outerPadding) {
-                        landscapeHistoryPane(metrics: metrics, screen: screen)
-                            .frame(width: metrics.historyPanelWidth)
-                            .frame(maxHeight: .infinity)
+                VStack(spacing: metrics.usesTitlebarHeader ? 6 : 0) {
+                    if metrics.usesTitlebarHeader {
+                        titlebarHeader(metrics: metrics, screen: screen)
+                    }
 
+                    pageContentWithPagination(metrics: metrics, showsPaginationIndicator: showsPaginationIndicator) {
+                        HStack(spacing: metrics.outerPadding) {
+                            landscapeHistoryPane(metrics: metrics, screen: screen)
+                                .frame(width: metrics.historyPanelWidth)
+                                .frame(maxHeight: .infinity)
+
+                            calculatorSurface(metrics: metrics, screen: screen, paginationBottomInset: paginationBottomInset)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        }
+                    }
+                }
+                .padding(.horizontal, metrics.outerPadding)
+                .padding(.top, metrics.topPadding)
+                .padding(.bottom, metrics.bottomPadding)
+            } else {
+                VStack(spacing: metrics.usesTitlebarHeader ? 6 : 0) {
+                    if metrics.usesTitlebarHeader {
+                        titlebarHeader(metrics: metrics, screen: screen)
+                    }
+
+                    pageContentWithPagination(metrics: metrics, showsPaginationIndicator: showsPaginationIndicator) {
                         calculatorSurface(metrics: metrics, screen: screen, paginationBottomInset: paginationBottomInset)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     }
@@ -891,19 +907,17 @@ private extension EnterCalcIOSView {
                 .padding(.horizontal, metrics.outerPadding)
                 .padding(.top, metrics.topPadding)
                 .padding(.bottom, metrics.bottomPadding)
-            } else {
+            }
+        case .phonePortrait:
+            VStack(spacing: metrics.usesTitlebarHeader ? 6 : 0) {
+                if metrics.usesTitlebarHeader {
+                    titlebarHeader(metrics: metrics, screen: screen)
+                }
+
                 pageContentWithPagination(metrics: metrics, showsPaginationIndicator: showsPaginationIndicator) {
                     calculatorSurface(metrics: metrics, screen: screen, paginationBottomInset: paginationBottomInset)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
-                .padding(.horizontal, metrics.outerPadding)
-                .padding(.top, metrics.topPadding)
-                .padding(.bottom, metrics.bottomPadding)
-            }
-        case .phonePortrait:
-            pageContentWithPagination(metrics: metrics, showsPaginationIndicator: showsPaginationIndicator) {
-                calculatorSurface(metrics: metrics, screen: screen, paginationBottomInset: paginationBottomInset)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
             .padding(.horizontal, metrics.outerPadding)
             .padding(.top, metrics.topPadding)
@@ -932,7 +946,7 @@ private extension EnterCalcIOSView {
             let scale = metrics.surfaceScaleFactor(for: geometry.size.height)
             let isLandscapeMode = metrics.mode == .phoneLandscape || metrics.mode == .padWide
             let allowsKeypadResize = !isLandscapeMode
-            let showsInlineLandscapeHeader = !metrics.usesInlineLandscapeHistory
+            let showsInlineLandscapeHeader = !metrics.usesInlineLandscapeHistory && !metrics.usesTitlebarHeader
             let keypadHeightMultiplier = allowsKeypadResize ? normalizedKeypadHeightMultiplier(for: screen) : 1.0
             let baseKeypadHeight = metrics.keypadHeight
             let baseButtonHeight = metrics.buttonHeight * keypadHeightMultiplier
@@ -999,6 +1013,42 @@ private extension EnterCalcIOSView {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
+    func historyButton(
+        metrics: IOSLayoutMetrics,
+        buttonSize: CGFloat? = nil,
+        iconSize: CGFloat? = nil
+    ) -> some View {
+        Button {
+            toggleOverlay(.history)
+        } label: {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(EnterCalcFont.appFont(size: iconSize ?? metrics.headerIconFontSize))
+                .frame(width: buttonSize ?? metrics.headerButtonSize, height: buttonSize ?? metrics.headerButtonSize)
+                .foregroundStyle(palette.textPrimary)
+        }
+        .buttonStyle(.plain)
+        .buttonStyle(IOSPressedButtonStyle(cornerRadius: metrics.headerCornerRadius, overlayColor: palette.headerHover))
+        .accessibilityLabel(Text(localized("history.toggle")))
+    }
+
+    func titlebarHeader(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession) -> some View {
+        HStack(spacing: metrics.headerSpacing) {
+            settingsButton(metrics: metrics, screen: screen)
+                .padding(.leading, metrics.titlebarLeadingInset)
+
+            Spacer(minLength: 0)
+
+            if metrics.showsHistoryButton {
+                historyButton(metrics: metrics)
+            }
+
+            pageActionButton(metrics: metrics, screen: screen)
+        }
+        .frame(height: metrics.headerHeight)
+        .background(palette.surface)
+        .offset(y: -5)
+    }
+
     func landscapeHistoryPane(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession) -> some View {
         IOSHistoryPanel(
             entries: screen.viewModel.history,
@@ -1039,17 +1089,7 @@ private extension EnterCalcIOSView {
             Spacer(minLength: 0)
 
             if metrics.showsHistoryButton {
-                Button {
-                    toggleOverlay(.history)
-                } label: {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(EnterCalcFont.appFont(size: metrics.headerIconFontSize))
-                        .frame(width: metrics.headerButtonSize, height: metrics.headerButtonSize)
-                        .foregroundStyle(palette.textPrimary)
-                }
-                .buttonStyle(.plain)
-                .buttonStyle(IOSPressedButtonStyle(cornerRadius: metrics.headerCornerRadius, overlayColor: palette.headerHover))
-                .accessibilityLabel(Text(localized("history.toggle")))
+                historyButton(metrics: metrics)
             }
 
             if !showsLandscapeRailControls {
@@ -2128,7 +2168,9 @@ private struct IOSLayoutMetrics {
     let minimumButtonHeight: CGFloat
     let pageIndicatorDotSize: CGFloat
     let pageIndicatorSpacing: CGFloat
+    let pageIndicatorVerticalSpacing: CGFloat
     let portraitBottomReserveWithoutPagination: CGFloat
+    let usesTitlebarHeader: Bool
     let usesInlineLandscapeHistory: Bool
     let titlebarLeadingInset: CGFloat
     let usesAdaptiveScaling: Bool
@@ -2152,7 +2194,7 @@ private struct IOSLayoutMetrics {
         case .phonePortrait:
             outerPadding = isPadWindow ? max(14, safeAreaInsets.leading + 14) : 12
             innerHorizontalPadding = 0
-            topPadding = isPadWindow ? max(48, safeAreaInsets.top + 16) : 0
+            topPadding = isPadWindow ? 8 : 0
             bottomPadding = isPadWindow ? max(8, safeAreaInsets.bottom + 2) : 8
             contentTopPadding = 6
             contentBottomPadding = 6
@@ -2160,9 +2202,9 @@ private struct IOSLayoutMetrics {
             headerSpacing = 10
             gridSpacing = 8
             memorySpacing = 6
-            headerHeight = isPadWindow ? 46 : 52
-            headerButtonSize = isPadWindow ? 42 : 50
-            headerIconFontSize = isPadWindow ? 20 : 24
+            headerHeight = isPadWindow ? 38 : 52
+            headerButtonSize = isPadWindow ? 34 : 50
+            headerIconFontSize = isPadWindow ? 17 : 24
             headerCornerRadius = 10
             titleFontSize = isPadWindow ? 23 : 27
             let availableHeight = max(size.height - topPadding - bottomPadding - contentTopPadding - contentBottomPadding, isPadWindow ? 320 : 480)
@@ -2194,14 +2236,16 @@ private struct IOSLayoutMetrics {
             minimumButtonHeight = isPadWindow ? 24 : 34
             pageIndicatorDotSize = 7
             pageIndicatorSpacing = 8
+            pageIndicatorVerticalSpacing = isPadWindow ? 1 : sectionSpacing
             portraitBottomReserveWithoutPagination = needsLegacyPhoneBottomReserve ? 24 : 0
+            usesTitlebarHeader = isPadWindow
             usesInlineLandscapeHistory = false
-            titlebarLeadingInset = 0
+            titlebarLeadingInset = isPadWindow ? 54 : 0
             usesAdaptiveScaling = isPadWindow
         case .phoneLandscape:
             outerPadding = isPadWindow ? max(14, safeAreaInsets.leading + 14) : 10
             innerHorizontalPadding = 0
-            topPadding = isPadWindow ? max(40, safeAreaInsets.top + 14) : 8
+            topPadding = isPadWindow ? 6 : 8
             bottomPadding = isPadWindow ? max(8, safeAreaInsets.bottom + 8) : 8
             contentTopPadding = 0
             contentBottomPadding = 0
@@ -2209,9 +2253,9 @@ private struct IOSLayoutMetrics {
             headerSpacing = 8
             gridSpacing = 6
             memorySpacing = 4
-            headerHeight = isPadWindow ? 38 : 34
-            headerButtonSize = isPadWindow ? 34 : 30
-            headerIconFontSize = isPadWindow ? 15 : 14
+            headerHeight = isPadWindow ? 34 : 34
+            headerButtonSize = isPadWindow ? 30 : 30
+            headerIconFontSize = isPadWindow ? 14 : 14
             headerCornerRadius = 7
             titleFontSize = isPadWindow ? 18 : 17
             let historyWidth = min(max(size.width * 0.31, 185), 250)
@@ -2245,9 +2289,11 @@ private struct IOSLayoutMetrics {
             minimumButtonHeight = isPadWindow ? 20 : 24
             pageIndicatorDotSize = 6
             pageIndicatorSpacing = 6
+            pageIndicatorVerticalSpacing = isPadWindow ? 1 : sectionSpacing
             portraitBottomReserveWithoutPagination = 0
+            usesTitlebarHeader = isPadWindow
             usesInlineLandscapeHistory = !isPadWindow
-            titlebarLeadingInset = 0
+            titlebarLeadingInset = isPadWindow ? 54 : 0
             usesAdaptiveScaling = isPadWindow
         case .padWide:
             outerPadding = max(18, safeAreaInsets.leading + 12)
@@ -2294,7 +2340,9 @@ private struct IOSLayoutMetrics {
             minimumButtonHeight = 40
             pageIndicatorDotSize = 7
             pageIndicatorSpacing = 8
+            pageIndicatorVerticalSpacing = sectionSpacing
             portraitBottomReserveWithoutPagination = 0
+            usesTitlebarHeader = false
             usesInlineLandscapeHistory = false
             titlebarLeadingInset = 0
             usesAdaptiveScaling = true
