@@ -840,6 +840,9 @@ private extension EnterCalcIOSView {
         GeometryReader { geometry in
             let usesLandscapeNavigationRail = metrics.mode != .phonePortrait
             let paginationSpacing = showsPaginationIndicator ? metrics.sectionSpacing : 0
+            let bottomFooterHeight = showsPaginationIndicator
+                ? metrics.pageIndicatorHeight
+                : (metrics.mode == .phonePortrait ? metrics.portraitBottomReserveWithoutPagination : 0)
             let paginationReserve = showsPaginationIndicator ? metrics.pageIndicatorHeight + paginationSpacing : 0
 
             if usesLandscapeNavigationRail {
@@ -849,10 +852,13 @@ private extension EnterCalcIOSView {
                 VStack(spacing: paginationSpacing) {
                     content()
                         .frame(maxWidth: .infinity, alignment: .top)
-                        .frame(height: max(0, geometry.size.height - paginationReserve), alignment: .top)
+                        .frame(height: max(0, geometry.size.height - paginationReserve - bottomFooterHeight), alignment: .top)
 
                     if showsPaginationIndicator {
                         paginationIndicator(metrics: metrics)
+                    } else if bottomFooterHeight > 0 {
+                        Color.clear
+                            .frame(height: bottomFooterHeight)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -863,8 +869,10 @@ private extension EnterCalcIOSView {
     @ViewBuilder
     func screenBody(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession) -> some View {
         let showsPaginationIndicator = screenStore.screenCount > 1
-        let paginationBottomInset = showsPaginationIndicator && metrics.mode == .phonePortrait
-            ? metrics.pageIndicatorHeight + metrics.sectionSpacing
+        let paginationBottomInset = metrics.mode == .phonePortrait
+            ? (showsPaginationIndicator
+                ? metrics.pageIndicatorHeight + metrics.sectionSpacing
+                : 0)
             : 0
 
         switch metrics.mode {
@@ -2120,6 +2128,7 @@ private struct IOSLayoutMetrics {
     let minimumButtonHeight: CGFloat
     let pageIndicatorDotSize: CGFloat
     let pageIndicatorSpacing: CGFloat
+    let portraitBottomReserveWithoutPagination: CGFloat
     let usesInlineLandscapeHistory: Bool
     let titlebarLeadingInset: CGFloat
     let usesAdaptiveScaling: Bool
@@ -2129,6 +2138,7 @@ private struct IOSLayoutMetrics {
         let usesWidePadLayout = deviceFamily == .pad && horizontalSizeClass == .regular && size.width >= 700
         let isPadWindow = deviceFamily == .pad
         let pageIndicatorReserve: CGFloat = isPadWindow ? 18 : 0
+        let needsLegacyPhoneBottomReserve = !isPadWindow && !isLandscape && size.height <= 750 && safeAreaInsets.bottom < 10
 
         if usesWidePadLayout {
             mode = .padWide
@@ -2184,6 +2194,7 @@ private struct IOSLayoutMetrics {
             minimumButtonHeight = isPadWindow ? 24 : 34
             pageIndicatorDotSize = 7
             pageIndicatorSpacing = 8
+            portraitBottomReserveWithoutPagination = needsLegacyPhoneBottomReserve ? 24 : 0
             usesInlineLandscapeHistory = false
             titlebarLeadingInset = 0
             usesAdaptiveScaling = isPadWindow
@@ -2234,6 +2245,7 @@ private struct IOSLayoutMetrics {
             minimumButtonHeight = isPadWindow ? 20 : 24
             pageIndicatorDotSize = 6
             pageIndicatorSpacing = 6
+            portraitBottomReserveWithoutPagination = 0
             usesInlineLandscapeHistory = !isPadWindow
             titlebarLeadingInset = 0
             usesAdaptiveScaling = isPadWindow
@@ -2282,6 +2294,7 @@ private struct IOSLayoutMetrics {
             minimumButtonHeight = 40
             pageIndicatorDotSize = 7
             pageIndicatorSpacing = 8
+            portraitBottomReserveWithoutPagination = 0
             usesInlineLandscapeHistory = false
             titlebarLeadingInset = 0
             usesAdaptiveScaling = true
