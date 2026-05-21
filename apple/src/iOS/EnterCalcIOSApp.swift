@@ -866,23 +866,31 @@ private extension EnterCalcIOSView {
         }
     }
 
+    func paginationBottomInset(metrics: IOSLayoutMetrics, showsPaginationIndicator: Bool) -> CGFloat {
+        guard metrics.mode == .phonePortrait, showsPaginationIndicator else {
+            return 0
+        }
+
+        if metrics.isPadWindow {
+            return metrics.pageIndicatorHeight
+                + metrics.pageIndicatorVerticalSpacing
+                + metrics.sectionSpacing
+        }
+
+        if !metrics.usesTitlebarHeader {
+            return metrics.pageIndicatorHeight + metrics.sectionSpacing
+        }
+
+        return 0
+    }
+
     @ViewBuilder
     func screenBody(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession) -> some View {
         let showsPaginationIndicator = screenStore.screenCount > 1
-        let paginationBottomInset: CGFloat
-        if metrics.mode == .phonePortrait, showsPaginationIndicator {
-            if metrics.isPadWindow {
-                paginationBottomInset = metrics.pageIndicatorHeight
-                    + metrics.pageIndicatorVerticalSpacing
-                    + metrics.sectionSpacing
-            } else if !metrics.usesTitlebarHeader {
-                paginationBottomInset = metrics.pageIndicatorHeight + metrics.sectionSpacing
-            } else {
-                paginationBottomInset = 0
-            }
-        } else {
-            paginationBottomInset = 0
-        }
+        let paginationBottomInset = paginationBottomInset(
+            metrics: metrics,
+            showsPaginationIndicator: showsPaginationIndicator
+        )
 
         switch metrics.mode {
         case .phoneLandscape:
