@@ -869,13 +869,20 @@ private extension EnterCalcIOSView {
     @ViewBuilder
     func screenBody(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession) -> some View {
         let showsPaginationIndicator = screenStore.screenCount > 1
-        let paginationBottomInset = metrics.mode == .phonePortrait
-            ? (showsPaginationIndicator
-                ? (metrics.isPadWindow
-                    ? metrics.pageIndicatorHeight + metrics.pageIndicatorVerticalSpacing + metrics.sectionSpacing
-                    : (!metrics.usesTitlebarHeader ? metrics.pageIndicatorHeight + metrics.sectionSpacing : 0))
-                : 0)
-            : 0
+        let paginationBottomInset: CGFloat
+        if metrics.mode == .phonePortrait, showsPaginationIndicator {
+            if metrics.isPadWindow {
+                paginationBottomInset = metrics.pageIndicatorHeight
+                    + metrics.pageIndicatorVerticalSpacing
+                    + metrics.sectionSpacing
+            } else if !metrics.usesTitlebarHeader {
+                paginationBottomInset = metrics.pageIndicatorHeight + metrics.sectionSpacing
+            } else {
+                paginationBottomInset = 0
+            }
+        } else {
+            paginationBottomInset = 0
+        }
 
         switch metrics.mode {
         case .phoneLandscape:
