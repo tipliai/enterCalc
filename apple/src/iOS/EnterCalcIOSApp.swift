@@ -1043,17 +1043,22 @@ private extension EnterCalcIOSView {
         .accessibilityLabel(Text(localized("history.toggle")))
     }
 
+    @ViewBuilder
+    func trailingHeaderButtons(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession) -> some View {
+        Spacer(minLength: 0)
+
+        if metrics.showsHistoryButton {
+            historyButton(metrics: metrics)
+        }
+
+        settingsButton(metrics: metrics, screen: screen)
+        pageActionButton(metrics: metrics, screen: screen)
+    }
+
     func titlebarHeader(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession) -> some View {
         HStack(alignment: .top, spacing: metrics.headerSpacing) {
             if metrics.isPadWindow {
-                Spacer(minLength: 0)
-
-                if metrics.showsHistoryButton {
-                    historyButton(metrics: metrics)
-                }
-
-                settingsButton(metrics: metrics, screen: screen)
-                pageActionButton(metrics: metrics, screen: screen)
+                trailingHeaderButtons(metrics: metrics, screen: screen)
             } else {
                 settingsButton(metrics: metrics, screen: screen)
                     .padding(.leading, metrics.titlebarLeadingInset)
@@ -1106,14 +1111,7 @@ private extension EnterCalcIOSView {
 
         return HStack(alignment: .top, spacing: metrics.headerSpacing) {
             if metrics.isPadWindow {
-                Spacer(minLength: 0)
-
-                if metrics.showsHistoryButton {
-                    historyButton(metrics: metrics)
-                }
-
-                settingsButton(metrics: metrics, screen: screen)
-                pageActionButton(metrics: metrics, screen: screen)
+                trailingHeaderButtons(metrics: metrics, screen: screen)
             } else {
                 if !showsLandscapeRailControls {
                     settingsButton(metrics: metrics, screen: screen)
