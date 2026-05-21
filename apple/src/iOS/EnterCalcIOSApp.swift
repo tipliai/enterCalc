@@ -2191,7 +2191,6 @@ private struct IOSLayoutMetrics {
     let surfaceCornerRadius: CGFloat
     let historyPanelWidth: CGFloat
     let overlayPanelWidth: CGFloat
-    let calculatorWidth: CGFloat
     let panelSpacing: CGFloat
     let panelItemSpacing: CGFloat
     let panelHorizontalPadding: CGFloat
@@ -2259,7 +2258,6 @@ private struct IOSLayoutMetrics {
             surfaceCornerRadius = 24
             historyPanelWidth = 0
             overlayPanelWidth = min(max(size.width - outerPadding * 2, 280), 460)
-            calculatorWidth = size.width - outerPadding * 2
             panelSpacing = 12
             panelItemSpacing = 8
             panelHorizontalPadding = 10
@@ -2295,8 +2293,6 @@ private struct IOSLayoutMetrics {
             titleFontSize = isPadWindow ? 18 : 17
             let historyWidth = min(max(size.width * 0.31, 185), 250)
             historyPanelWidth = historyWidth
-            let leftWidth = max(size.width - historyWidth - outerPadding * 3, 300)
-            calculatorWidth = leftWidth
             let availableHeight = max(size.height - topPadding - bottomPadding, isPadWindow ? 250 : 260)
             displayHeight = min(max(availableHeight * 0.18, isPadWindow ? 54 : 62), 88)
             displaySpacing = 3
@@ -2347,7 +2343,6 @@ private struct IOSLayoutMetrics {
             headerCornerRadius = 9
             titleFontSize = 22
             let maxSurfaceWidth = max(0, size.width - outerPadding * 2)
-            calculatorWidth = maxSurfaceWidth
             let availableHeight = max(size.height - topPadding - bottomPadding, 320)
             displayHeight = min(max(availableHeight * 0.15, 82), 156)
             displaySpacing = 6
