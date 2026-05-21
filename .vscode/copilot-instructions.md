@@ -10,6 +10,7 @@
 - Treat the repo as a public open source project: prefer clear naming, contributor-friendly structure, and changes that are easy for new maintainers to trace.
 - Preserve readable history. Keep changes focused, avoid unnecessary file moves, and do not introduce gratuitous refactors unless they solve a real maintenance problem.
 - Update docs when behavior, structure, build steps, or contributor workflow changes.
+- Treat issue creation as public by default. When the user asks to create a "todo" in this repo, create an actual GitHub issue in `tipliai/enterCalc` and apply the closest matching existing labels.
 - Call out testing gaps honestly. If an area is only manually verified, say so.
 - Prefer portable build and tooling choices that other contributors can run without private infrastructure.
 - Do not add local-machine assumptions, personal paths, credentials, signing assets, or generated binaries to the repo.
