@@ -32,11 +32,6 @@ private enum IOSActionHaptics {
     }
 
     static func perform(emphasized: Bool) {
-        guard supportsHaptics else {
-            playFallbackClick()
-            return
-        }
-
         if emphasized {
             mediumImpact.prepare()
             mediumImpact.impactOccurred(intensity: 1)

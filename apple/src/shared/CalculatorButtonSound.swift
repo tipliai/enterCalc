@@ -18,14 +18,14 @@ public enum CalculatorButtonSound {
     private static let enterPlayerPool = ButtonSoundPlayerPool(resourceName: "enter-click", fallbackResourceName: "button-click")
 
     public static func playClick() {
-        playerPool(for: .button).play(volume: playbackVolume)
+        play(kind: .button)
     }
 
     public static func playEnterClick() {
-        playerPool(for: .enter).play(volume: playbackVolume)
+        play(kind: .enter)
     }
 
-    private static func playClick(kind: Kind) {
+    private static func play(kind: Kind) {
         playerPool(for: kind).play(volume: playbackVolume)
     }
 
