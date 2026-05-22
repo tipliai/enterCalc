@@ -2642,6 +2642,8 @@ private struct IOSKeypadButton: View {
     let action: () -> Void
     var operatorRevealProgress: Double = 0.0
     var operatorAnimFadeOpacity: Double = 1.0
+    @State private var isPressed: Bool = false
+    @State private var touchCancelledBySwipe: Bool = false
     @State private var shimmerProgress: CGFloat = 0
     @State private var shimmerVisible: Bool = false
 
@@ -2664,6 +2666,11 @@ private struct IOSKeypadButton: View {
         static let signToggle = SignToggleLabelTuning()
     }
 
+    private static let horizontalSwipeCancellationDistance: CGFloat = 8
+    private static let horizontalSwipeDominanceRatio: CGFloat = 1.15
+    private static let tapCommitDistance: CGFloat = 14
+    private static let pressedScale: CGFloat = 0.97
+
     private var isEqualsButton: Bool { button.kind == .equals }
     private var scaledCornerRadius: CGFloat {
         let baseHeight = max(metrics.buttonHeight, 1)
@@ -2683,51 +2690,114 @@ private struct IOSKeypadButton: View {
     }
 
     var body: some View {
-        Button(action: handleTap) {
-            labelView
-                .foregroundStyle(button.foregroundColor(palette: palette))
-                .frame(maxWidth: .infinity, minHeight: buttonHeight, maxHeight: buttonHeight)
-                .background(buttonBackground)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Text(button.title))
-        .buttonStyle(
-            IOSPressedButtonStyle(
-                cornerRadius: scaledCornerRadius,
-                overlayColor: palette.buttonHoverOverlay
-            )
-        )
-        .overlay {
-            if isEqualsButton && shimmerVisible {
-                GeometryReader { geo in
-                    let diagonal = (geo.size.width * geo.size.width + geo.size.height * geo.size.height).squareRoot()
-                    let travel = diagonal * 3.0
-                    let offset = (0.5 - shimmerProgress) * travel
-
-                    RoundedRectangle(cornerRadius: scaledCornerRadius, style: .continuous)
-                        .fill(Color.white.opacity(0.08))
-                        .overlay {
-                            Rectangle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [
-                                            Color.white.opacity(0),
-                                            Color.white.opacity(0.58),
-                                            Color.white.opacity(0)
-                                        ],
-                                        startPoint: .bottomTrailing,
-                                        endPoint: .topLeading
-                                    )
-                                )
-                                .frame(width: max(diagonal * 2.2, 60), height: diagonal * 3.2)
-                                .rotationEffect(.degrees(-36))
-                                .offset(x: offset, y: offset)
-                        }
+        GeometryReader { geometry in
+            buttonSurface
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .contentShape(RoundedRectangle(cornerRadius: scaledCornerRadius, style: .continuous))
+                .gesture(pressGesture(in: geometry.size))
+                .accessibilityElement()
+                .accessibilityLabel(Text(button.title))
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction {
+                    handleTap()
                 }
-                .clipShape(RoundedRectangle(cornerRadius: scaledCornerRadius, style: .continuous))
-                .allowsHitTesting(false)
-            }
         }
+        .frame(height: buttonHeight)
+    }
+
+    private var buttonSurface: some View {
+        labelView
+            .foregroundStyle(button.foregroundColor(palette: palette))
+            .frame(maxWidth: .infinity, minHeight: buttonHeight, maxHeight: buttonHeight)
+            .background(buttonBackground)
+            .scaleEffect(isPressed ? Self.pressedScale : 1)
+            .overlay(
+                RoundedRectangle(cornerRadius: scaledCornerRadius, style: .continuous)
+                    .fill(palette.buttonHoverOverlay)
+                    .opacity(isPressed ? 1 : 0)
+                    .allowsHitTesting(false)
+            )
+            .overlay {
+                if isEqualsButton && shimmerVisible {
+                    GeometryReader { geo in
+                        let diagonal = (geo.size.width * geo.size.width + geo.size.height * geo.size.height).squareRoot()
+                        let travel = diagonal * 3.0
+                        let offset = (0.5 - shimmerProgress) * travel
+
+                        RoundedRectangle(cornerRadius: scaledCornerRadius, style: .continuous)
+                            .fill(Color.white.opacity(0.08))
+                            .overlay {
+                                Rectangle()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [
+                                                Color.white.opacity(0),
+                                                Color.white.opacity(0.58),
+                                                Color.white.opacity(0)
+                                            ],
+                                            startPoint: .bottomTrailing,
+                                            endPoint: .topLeading
+                                        )
+                                    )
+                                    .frame(width: max(diagonal * 2.2, 60), height: diagonal * 3.2)
+                                    .rotationEffect(.degrees(-36))
+                                    .offset(x: offset, y: offset)
+                            }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: scaledCornerRadius, style: .continuous))
+                    .allowsHitTesting(false)
+                }
+            }
+            .animation(.easeOut(duration: 0.08), value: isPressed)
+    }
+
+    private func pressGesture(in size: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+            .onChanged { value in
+                updatePressState(for: value, in: size)
+            }
+            .onEnded { value in
+                finishPress(for: value, in: size)
+            }
+    }
+
+    private func updatePressState(for value: DragGesture.Value, in size: CGSize) {
+        if isHorizontalSwipeIntent(translation: value.translation) {
+            touchCancelledBySwipe = true
+        }
+
+        let isInsideButton = contains(location: value.location, in: size)
+        let isTapEligible = isTapEligible(translation: value.translation)
+        isPressed = isInsideButton && isTapEligible && !touchCancelledBySwipe
+    }
+
+    private func finishPress(for value: DragGesture.Value, in size: CGSize) {
+        let shouldCommit = contains(location: value.location, in: size)
+            && isTapEligible(translation: value.translation)
+            && !touchCancelledBySwipe
+
+        isPressed = false
+        touchCancelledBySwipe = false
+
+        if shouldCommit {
+            handleTap()
+        }
+    }
+
+    private func contains(location: CGPoint, in size: CGSize) -> Bool {
+        location.x >= 0
+            && location.y >= 0
+            && location.x <= size.width
+            && location.y <= size.height
+    }
+
+    private func isTapEligible(translation: CGSize) -> Bool {
+        hypot(translation.width, translation.height) <= Self.tapCommitDistance
+    }
+
+    private func isHorizontalSwipeIntent(translation: CGSize) -> Bool {
+        abs(translation.width) > Self.horizontalSwipeCancellationDistance
+            && abs(translation.width) > abs(translation.height) * Self.horizontalSwipeDominanceRatio
     }
 
     private func handleTap() {
