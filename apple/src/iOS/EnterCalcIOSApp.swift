@@ -52,7 +52,9 @@ struct IOSHardwareKeyCaptureView: UIViewRepresentable {
 
     func updateUIView(_ uiView: IOSHardwareKeyCaptureUIView, context: Context) {
         uiView.onKeyPress = onKeyPress
-        uiView.isCaptureEnabled = isEnabled
+        if uiView.isCaptureEnabled != isEnabled {
+            uiView.isCaptureEnabled = isEnabled
+        }
     }
 }
 
@@ -60,6 +62,7 @@ final class IOSHardwareKeyCaptureUIView: UIView {
     var onKeyPress: ((IOSHardwareKeyEvent) -> Bool)?
     var isCaptureEnabled: Bool = true {
         didSet {
+            guard oldValue != isCaptureEnabled else { return }
             updateFirstResponderStatus()
         }
     }
