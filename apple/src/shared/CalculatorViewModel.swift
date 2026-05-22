@@ -238,7 +238,7 @@ public final class CalculatorViewModel: ObservableObject {
                 appendCurrentTokenToExpressionIfNeeded()
             }
             if let last = expressionTokens.last,
-               isExpressionNumberToken(last) || last == ")" {
+               isExpressionValueToken(last) || last == ")" {
                 expressionTokens.append(BinaryOperator.multiply.symbol)
             }
             expressionTokens.append("(")

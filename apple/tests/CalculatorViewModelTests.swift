@@ -294,6 +294,79 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.history.first?.result, "648")
     }
 
+    func testSquareRootThenParenthesizedExpressionImplicitlyMultiplies() {
+        let viewModel = CalculatorViewModel()
+
+        enter("4", into: viewModel)
+        viewModel.squareRoot()
+        viewModel.inputParenthesis("(")
+        enter("2", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("2", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "8")
+        XCTAssertEqual(viewModel.expressionDisplay, "√(4) × ( 2 + 2 ) =")
+        XCTAssertEqual(viewModel.history.first?.expression, "√(4) × ( 2 + 2 )")
+        XCTAssertEqual(viewModel.history.first?.result, "8")
+    }
+
+    func testReciprocalThenParenthesizedExpressionImplicitlyMultiplies() {
+        let viewModel = CalculatorViewModel()
+
+        enter("4", into: viewModel)
+        viewModel.reciprocal()
+        viewModel.inputParenthesis("(")
+        enter("2", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("2", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "1")
+        XCTAssertEqual(viewModel.expressionDisplay, "1/(4) × ( 2 + 2 ) =")
+        XCTAssertEqual(viewModel.history.first?.expression, "1/(4) × ( 2 + 2 )")
+        XCTAssertEqual(viewModel.history.first?.result, "1")
+    }
+
+    func testSquareThenParenthesizedExpressionImplicitlyMultiplies() {
+        let viewModel = CalculatorViewModel()
+
+        enter("3", into: viewModel)
+        viewModel.square()
+        viewModel.inputParenthesis("(")
+        enter("2", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("1", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "27")
+        XCTAssertEqual(viewModel.expressionDisplay, "3² × ( 2 + 1 ) =")
+        XCTAssertEqual(viewModel.history.first?.expression, "sqr(3) × ( 2 + 1 )")
+        XCTAssertEqual(viewModel.history.first?.displayExpression, "3² × ( 2 + 1 )")
+        XCTAssertEqual(viewModel.history.first?.result, "27")
+    }
+
+    func testNestedParenthesesWithSquareRootEvaluatesWithExpectedPrecedence() {
+        let viewModel = CalculatorViewModel()
+
+        viewModel.inputParenthesis("(")
+        enter("2", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("3", into: viewModel)
+        viewModel.inputParenthesis(")")
+        viewModel.inputParenthesis("(")
+        enter("4", into: viewModel)
+        viewModel.squareRoot()
+        viewModel.setOperator(.add)
+        enter("1", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "15")
+        XCTAssertEqual(viewModel.expressionDisplay, "( 2 + 3 ) × ( √(4) + 1 ) =")
+        XCTAssertEqual(viewModel.history.first?.expression, "( 2 + 3 ) × ( √(4) + 1 )")
+        XCTAssertEqual(viewModel.history.first?.result, "15")
+    }
+
     func testPercentConvertsCurrentInputToDecimalValue() {
         let viewModel = CalculatorViewModel()
 
