@@ -31,6 +31,98 @@ private enum IOSActionHaptics {
 #endif
 import EnterCalcCore
 
+struct IOSHardwareKeyEvent {
+    let characters: String?
+    let charactersIgnoringModifiers: String?
+    let keyCode: UIKeyboardHIDUsage?
+    let modifierFlags: UIKeyModifierFlags
+}
+
+struct IOSHardwareKeyCaptureView: UIViewRepresentable {
+    let isEnabled: Bool
+    let onKeyPress: (IOSHardwareKeyEvent) -> Bool
+
+    func makeUIView(context: Context) -> IOSHardwareKeyCaptureUIView {
+        let view = IOSHardwareKeyCaptureUIView()
+        view.backgroundColor = .clear
+        view.onKeyPress = onKeyPress
+        view.isCaptureEnabled = isEnabled
+        return view
+    }
+
+    func updateUIView(_ uiView: IOSHardwareKeyCaptureUIView, context: Context) {
+        uiView.onKeyPress = onKeyPress
+        if uiView.isCaptureEnabled != isEnabled {
+            uiView.isCaptureEnabled = isEnabled
+        }
+    }
+}
+
+final class IOSHardwareKeyCaptureUIView: UIView {
+    var onKeyPress: ((IOSHardwareKeyEvent) -> Bool)?
+    var isCaptureEnabled: Bool = true {
+        didSet {
+            guard oldValue != isCaptureEnabled else { return }
+            updateFirstResponderStatus()
+        }
+    }
+
+    override var canBecomeFirstResponder: Bool {
+        isCaptureEnabled
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        updateFirstResponderStatus()
+    }
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        guard isCaptureEnabled else {
+            super.pressesBegan(presses, with: event)
+            return
+        }
+
+        var unhandledPresses = Set<UIPress>()
+
+        for press in presses {
+            guard let key = press.key else {
+                unhandledPresses.insert(press)
+                continue
+            }
+
+            let keyEvent = IOSHardwareKeyEvent(
+                characters: key.characters,
+                charactersIgnoringModifiers: key.charactersIgnoringModifiers,
+                keyCode: key.keyCode,
+                modifierFlags: key.modifierFlags
+            )
+
+            if onKeyPress?(keyEvent) != true {
+                unhandledPresses.insert(press)
+            }
+        }
+
+        if !unhandledPresses.isEmpty {
+            super.pressesBegan(unhandledPresses, with: event)
+        }
+    }
+
+    private func updateFirstResponderStatus() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            guard self.window != nil else { return }
+
+            if self.isCaptureEnabled {
+                if !self.isFirstResponder {
+                    self.becomeFirstResponder()
+                }
+            } else if self.isFirstResponder {
+                self.resignFirstResponder()
+            }
+        }
+    }
+}
+
 @main
 struct EnterCalcIOSApp: App {
     @FocusedValue(\.calculatorActions) private var actionContext
@@ -257,6 +349,15 @@ struct EnterCalcIOSView: View {
 
                 overlayPanels(metrics: metrics)
                     .rotationEffect(.degrees(counterRotatesForUpsideDownPortrait ? 180 : 0))
+
+                IOSHardwareKeyCaptureView(
+                    isEnabled: scenePhase == .active && !showSettingsSheet,
+                    onKeyPress: handleHardwareKey
+                )
+                .frame(width: 1, height: 1)
+                .opacity(0.01)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .preferredColorScheme(activeTheme.preferredColorScheme)
@@ -411,6 +512,67 @@ private extension EnterCalcIOSView {
 
     func pageActionImageName(for screen: CalculatorScreenSession) -> String {
         screen.isHomeScreen ? "plus.square.on.square" : "xmark.square"
+    }
+
+    func handleHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
+        let unsupportedModifiers = event.modifierFlags.intersection([.command, .alternate, .control])
+        guard unsupportedModifiers.isEmpty else {
+            return false
+        }
+
+        let chars = event.charactersIgnoringModifiers ?? ""
+        let inputChars = event.characters ?? chars
+
+        switch event.keyCode {
+        case .keyboardEscape:
+            viewModel.clearAll()
+            return true
+        case .keyboardDeleteOrBackspace:
+            viewModel.backspace()
+            return true
+        case .keyboardReturnOrEnter, .keypadEnter:
+            viewModel.evaluate()
+            return true
+        default:
+            break
+        }
+
+        switch inputChars {
+        case "(":
+            viewModel.inputParenthesis("(")
+            return true
+        case ")":
+            viewModel.inputParenthesis(")")
+            return true
+        case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9":
+            viewModel.inputDigit(inputChars)
+            return true
+        case "+":
+            viewModel.setOperator(.add)
+            return true
+        case "-":
+            viewModel.setOperator(.subtract)
+            return true
+        case "*", "x", "X":
+            viewModel.setOperator(.multiply)
+            return true
+        case "/":
+            viewModel.setOperator(.divide)
+            return true
+        case ".":
+            viewModel.inputDecimal()
+            return true
+        case "%":
+            viewModel.applyPercent()
+            return true
+        case "=":
+            viewModel.evaluate()
+            return true
+        default:
+            break
+        }
+
+        return false
     }
 
     func syncHomeScreenFromStoredSettings() {
