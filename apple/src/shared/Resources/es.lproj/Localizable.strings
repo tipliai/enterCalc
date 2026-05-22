@@ -32,6 +32,10 @@
 "history.copyOperation" = "Copiar operación";
 "copy" = "Copiar";
 "paste" = "Pegar";
+"undo" = "Deshacer";
+"redo" = "Rehacer";
+"clear" = "Borrar";
+"clear.commandBackspace" = "Borrar (Cmd+Retroceso)";
 "screen.new" = "Nueva pantalla";
 "screen.close" = "Cerrar pantalla";
 "screen.pageStatus" = "Pantalla %1$@ de %2$@";

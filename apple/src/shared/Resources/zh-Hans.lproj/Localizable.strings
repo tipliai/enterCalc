@@ -32,6 +32,10 @@
 "history.copyOperation" = "复制算式";
 "copy" = "复制";
 "paste" = "粘贴";
+"undo" = "撤销";
+"redo" = "重做";
+"clear" = "清除";
+"clear.commandBackspace" = "清除（Cmd+Delete）";
 "screen.new" = "新建屏幕";
 "screen.close" = "关闭屏幕";
 "screen.pageStatus" = "第 %1$@ 个屏幕，共 %2$@ 个";

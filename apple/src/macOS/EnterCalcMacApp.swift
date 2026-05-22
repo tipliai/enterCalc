@@ -71,27 +71,27 @@ struct EnterCalcMacApp: App {
             }
 
             CommandGroup(replacing: .undoRedo) {
-                Button("Undo") {
+                Button(localized("undo")) {
                     actionContext?.undo()
                 }
                 .keyboardShortcut("z", modifiers: [.command])
                 .disabled(actionContext?.canUndo != true)
 
-                Button("Redo") {
+                Button(localized("redo")) {
                     actionContext?.redo()
                 }
-                .keyboardShortcut("Z", modifiers: [.command, .shift])
+                .keyboardShortcut("z", modifiers: [.command, .shift])
                 .disabled(actionContext?.canRedo != true)
             }
 
             CommandGroup(after: .undoRedo) {
-                Button("Clear") {
+                Button(localized("clear")) {
                     actionContext?.clear()
                 }
                 .keyboardShortcut(.escape, modifiers: [])
                 .disabled(actionContext == nil)
 
-                Button("Clear (Cmd+Backspace)") {
+                Button(localized("clear.commandBackspace")) {
                     actionContext?.clear()
                 }
                 .keyboardShortcut(.delete, modifiers: [.command])

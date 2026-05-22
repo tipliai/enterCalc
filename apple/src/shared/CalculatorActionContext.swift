@@ -34,8 +34,8 @@ public struct CalculatorActionContext {
     }
 }
 
-public struct CalculatorActionContextKey: FocusedValueKey {
-    public typealias Value = CalculatorActionContext
+private struct CalculatorActionContextKey: FocusedValueKey {
+    typealias Value = CalculatorActionContext
 }
 
 public extension FocusedValues {

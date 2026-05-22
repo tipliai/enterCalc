@@ -32,6 +32,10 @@
 "history.copyOperation" = "式をコピー";
 "copy" = "コピー";
 "paste" = "貼り付け";
+"undo" = "取り消す";
+"redo" = "やり直す";
+"clear" = "クリア";
+"clear.commandBackspace" = "クリア (Cmd+Delete)";
 "screen.new" = "新しい画面";
 "screen.close" = "画面を閉じる";
 "screen.pageStatus" = "画面 %1$@ / %2$@";
