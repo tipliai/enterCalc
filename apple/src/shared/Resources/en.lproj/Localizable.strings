@@ -19,6 +19,7 @@
 "settings.numberFormat.style" = "Number style";
 "settings.numberFormat.scientific" = "Use scientific notation";
 "settings.percent.classicBehavior" = "Use classic percent button";
+"settings.buttonSound.disabled" = "Disable button sound";
 "settings.credits" = "About";
 "settings.credits.version" = "Version %@";
 "mac.about.windowTitle" = "About %@";

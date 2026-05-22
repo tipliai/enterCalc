@@ -19,6 +19,7 @@
 "settings.numberFormat.style" = "Zahlenstil";
 "settings.numberFormat.scientific" = "Wissenschaftliche Notation verwenden";
 "settings.percent.classicBehavior" = "Klassische %-Taste verwenden";
+"settings.buttonSound.disabled" = "Tastenton deaktivieren";
 "settings.credits" = "Über";
 "settings.credits.version" = "Version %@";
 "mac.about.windowTitle" = "Über %@";

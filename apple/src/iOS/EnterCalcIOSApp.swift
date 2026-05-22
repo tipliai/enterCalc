@@ -1,17 +1,32 @@
 import SwiftUI
 #if canImport(UIKit)
 import UIKit
+#if canImport(CoreHaptics)
+import CoreHaptics
+#endif
 #if canImport(CoreMotion)
 import CoreMotion
 #endif
 
+@MainActor
 private enum IOSActionHaptics {
     static let keyPressImpact = UIImpactFeedbackGenerator(style: .light)
     static let lightImpact = UIImpactFeedbackGenerator(style: .light)
     static let mediumImpact = UIImpactFeedbackGenerator(style: .medium)
     static let successNotification = UINotificationFeedbackGenerator()
+    static let supportsHaptics: Bool = {
+#if canImport(CoreHaptics)
+        CHHapticEngine.capabilitiesForHardware().supportsHaptics
+#else
+        true
+#endif
+    }()
+    static func performKeyPress(isEnterKey: Bool = false) {
+        guard supportsHaptics else {
+            playFallbackClick(isEnterKey: isEnterKey)
+            return
+        }
 
-    static func performKeyPress() {
         keyPressImpact.prepare()
         keyPressImpact.impactOccurred(intensity: 0.95)
     }
@@ -25,6 +40,14 @@ private enum IOSActionHaptics {
         } else {
             lightImpact.prepare()
             lightImpact.impactOccurred(intensity: 0.8)
+        }
+    }
+
+    static func playFallbackClick(isEnterKey: Bool = false) {
+        if isEnterKey {
+            CalculatorButtonSound.playEnterClick()
+        } else {
+            CalculatorButtonSound.playClick()
         }
     }
 }
@@ -203,6 +226,7 @@ struct EnterCalcIOSView: View {
             numberFormatStyleRawValue: NumberFormatStyle.detected().rawValue,
             usesClassicPercentBehavior: false,
             usesEnterKeySymbol: true,
+            disablesButtonSound: false,
             keypadHeightMultiplier: 1.0
         )
     )
@@ -256,6 +280,7 @@ struct EnterCalcIOSView: View {
             numberFormatStyleRawValue: preferredNumberFormatRaw,
             usesClassicPercentBehavior: preferredClassicPercentBehavior,
             usesEnterKeySymbol: preferredUsesEnterKeySymbol,
+            disablesButtonSound: false,
             keypadHeightMultiplier: keypadHeightMultiplier
         )
     }
@@ -1635,13 +1660,13 @@ private extension EnterCalcIOSView {
         triggerActionFeedback(emphasized: false)
     }
 
-    func triggerKeyPressFeedback() {
+    func triggerKeyPressFeedback(for kind: IOSCalcButton.Kind) {
 #if canImport(UIKit)
         guard !actionHapticsDisabled() else {
             return
         }
 
-        IOSActionHaptics.performKeyPress()
+        IOSActionHaptics.performKeyPress(isEnterKey: kind == .equals)
 #endif
     }
 
@@ -2867,7 +2892,7 @@ private struct IOSKeypadButton: View {
     let palette: Palette
     let metrics: IOSLayoutMetrics
     let buttonHeight: CGFloat
-    let pressFeedback: () -> Void
+    let pressFeedback: (IOSCalcButton.Kind) -> Void
     let action: () -> Void
     var operatorRevealProgress: Double = 0.0
     var operatorAnimFadeOpacity: Double = 1.0
@@ -3029,7 +3054,7 @@ private struct IOSKeypadButton: View {
     }
 
     private func handleTap() {
-        pressFeedback()
+        pressFeedback(button.kind)
         action()
         guard isEqualsButton else { return }
         shimmerProgress = 0
