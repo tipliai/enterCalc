@@ -47,23 +47,23 @@ struct CalculatorWindowView: View {
     @State private var flashCopy: Bool = false
     @State private var currentWidth: CGFloat = 0
     @State private var appliedStoredSize: Bool = false
-    @State private var widthBeforeHistory: CGFloat? = nil
-    @State private var lockCalculatorWidth: Bool = false
-    @State private var lockedCalculatorWidth: CGFloat? = nil
     @State private var menuHover: Bool = false
     @State private var newWindowHover: Bool = false
     @State private var historyHover: Bool = false
     @State private var activeOverlay: OverlayPane? = nil
     @State private var historyTrashHover: Bool = false
+    @State private var historyResizeHover: Bool = false
     @State private var displayHover: Bool = false
     @State private var windowReference: NSWindow? = nil
     @State private var operatorRevealProgress: Double = 0.0
     @State private var operatorAnimFadeOpacity: Double = 1.0
+    @State private var historyOverlayHeight: CGFloat? = nil
+    @State private var historyOverlayResizeStartHeight: CGFloat = 0
+    @State private var isResizingHistoryOverlay: Bool = false
     private let minimumWindowWidthPoints: CGFloat = 280
     private let minimumWindowHeightPoints: CGFloat = 452
     private let fallbackBackingScaleFactor: CGFloat = 2
     private let outerHorizontalPadding: CGFloat = 8 * 2
-    private let compactHistoryWidthThreshold: CGFloat = 350
     private let historyPanelWidth: CGFloat = 240
     private let historySpacing: CGFloat = 6
     private let calculatorContentCoordinateSpace = "calculatorContent"
@@ -115,13 +115,12 @@ struct CalculatorWindowView: View {
         Array(repeating: GridItem(.flexible(), spacing: 4), count: 4)
     }
 
-    private var calculatorContentWidth: CGFloat? {
-        guard lockCalculatorWidth, let locked = lockedCalculatorWidth else { return nil }
-        return max(minimumCalculatorPaneWidth, locked - outerHorizontalPadding)
+    private var compactHistoryWidthThreshold: CGFloat {
+        minimumCalculatorPaneWidth + historyPanelWidth + historySpacing + outerHorizontalPadding
     }
 
     private var minimumCalculatorPaneWidth: CGFloat {
-        let minimumContentWidth = minimumContentSize(showingHistory: false, window: currentWindow()).width
+        let minimumContentWidth = minimumContentSize(window: currentWindow()).width
         return max(280, minimumContentWidth - outerHorizontalPadding)
     }
 
@@ -178,7 +177,7 @@ struct CalculatorWindowView: View {
                 DispatchQueue.main.async {
                     updateWindowMinSize()
                     applyStoredWindowSizeIfNeeded()
-                    updateHistoryVisibility(for: currentWidth, fromUser: false)
+                    updateHistoryVisibility(for: currentWidth)
                 }
                 startOperatorIntroAnimation()
             }
@@ -205,9 +204,14 @@ struct CalculatorWindowView: View {
 
                 applyCurrentWindowSettings()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .enterCalcToggleHistoryPanel)) { _ in
+                let isFocusedWindow = windowReference?.isKeyWindow == true || windowReference?.isMainWindow == true
+                guard isFocusedWindow else { return }
+                toggleHistoryVisibility()
+            }
             .onChange(of: geo.size.width) { _, width in
                 currentWidth = width
-                updateHistoryVisibility(for: width, fromUser: false)
+                updateHistoryVisibility(for: width)
             }
             .background(
                 KeyCaptureView { event in
@@ -242,9 +246,7 @@ struct CalculatorWindowView: View {
             keypadArea
         }
         .frame(
-            minWidth: calculatorContentWidth,
-            idealWidth: calculatorContentWidth,
-            maxWidth: calculatorContentWidth ?? .infinity,
+            maxWidth: .infinity,
             maxHeight: .infinity,
             alignment: .top
         )
@@ -256,9 +258,14 @@ struct CalculatorWindowView: View {
                     let overlayTop = showSettingsOverlay
                         ? CGFloat.zero
                         : max(0, min(controlsRect.maxY, geo.size.height))
+                    let defaultHistoryHeight = max(0, geo.size.height - overlayTop)
                     let overlayHeight = showSettingsOverlay
                         ? geo.size.height
                         : max(0, geo.size.height - overlayTop)
+                    let historyHeight = resolvedHistoryOverlayHeight(
+                        defaultHeight: defaultHistoryHeight,
+                        windowHeight: geo.size.height
+                    )
 
                     ZStack(alignment: .top) {
                         Color.black.opacity(activeOverlay == nil ? 0 : overlayScrimOpacity)
@@ -275,9 +282,10 @@ struct CalculatorWindowView: View {
                             .padding(.bottom, -8)
 
                         if showHistoryOverlay {
-                            historyOverlay
-                                .frame(width: geo.size.width, height: overlayHeight, alignment: .top)
-                                .offset(y: overlayTop)
+                            historyOverlay(defaultHeight: defaultHistoryHeight, windowHeight: geo.size.height, panelHeight: historyHeight)
+                                .frame(width: geo.size.width, alignment: .top)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                                .allowsHitTesting(activeOverlay == .history)
                                 .transition(.opacity)
                         } else if showSettingsOverlay {
                             settingsOverlay
@@ -286,6 +294,7 @@ struct CalculatorWindowView: View {
                                 .transition(.opacity)
                         }
                     }
+                    .allowsHitTesting(activeOverlay != nil)
                 }
             }
         }
@@ -342,17 +351,7 @@ struct CalculatorWindowView: View {
             Spacer()
 
             Button {
-                withAnimation {
-                    userToggledHistory = true
-                    logUI("History toggle tapped (before) showHistory=\(showHistory) keyWindow#\(NSApp.keyWindow?.windowNumber ?? -1)")
-                    if usesCompactHistoryOverlay {
-                        toggleHistoryOverlay()
-                    } else {
-                        handleHistoryToggle(atWidth: currentWidth)
-                    }
-                    storeWindowSize()
-                    logUI("History toggle tapped (after) showHistory=\(showHistory) keyWindow#\(NSApp.keyWindow?.windowNumber ?? -1)")
-                }
+                toggleHistoryVisibility()
             } label: {
                 Image(systemName: "clock.arrow.circlepath")
                     .frame(width: 18, height: 18, alignment: .center)
@@ -522,13 +521,16 @@ struct CalculatorWindowView: View {
         }
     }
 
-    private var historyOverlay: some View {
+    private func historyOverlay(defaultHeight: CGFloat, windowHeight: CGFloat, panelHeight: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 12) {
+            historyOverlayResizeHandle(defaultHeight: defaultHeight, windowHeight: windowHeight)
+
             if viewModel.history.isEmpty {
                 Text(macLocalized("history.empty", bundle: currentLocalizationBundle))
                     .font(EnterCalcFont.subheadline)
                     .foregroundStyle(fadedForeground)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
@@ -549,37 +551,9 @@ struct CalculatorWindowView: View {
                         }
                     }
                     .padding(.top, 2)
-                }
-            }
-            Spacer(minLength: 0)
-            HStack {
-                Spacer()
-                Button {
-                    if viewModel.history.isEmpty {
-                        withAnimation {
-                            if usesCompactHistoryOverlay {
-                                toggleHistoryOverlay()
-                            } else {
-                                handleHistoryToggle(atWidth: currentWidth)
-                            }
-                            storeWindowSize()
-                        }
-                    } else {
-                        viewModel.clearHistory()
-                    }
-                } label: {
-                    Image(systemName: "trash")
-                        .frame(width: 16, height: 16, alignment: .center)
-                        .padding(6)
-                        .background(historyTrashHover ? palette.headerHover : Color.clear)
-                        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-                }
-                .buttonStyle(.borderless)
-                .foregroundStyle(palette.textSecondary)
-                .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-                .help(macLocalized("history.clear", bundle: currentLocalizationBundle))
-                .onHover { hovering in
-                    historyTrashHover = hovering
+                    .padding(.leading, 12)
+                    .padding(.trailing, 12)
+                    .padding(.bottom, floatingHistoryActionInset)
                 }
             }
         }
@@ -598,6 +572,116 @@ struct CalculatorWindowView: View {
         )
         .padding(.horizontal, -8)
         .padding(.bottom, -8)
+        .overlay(alignment: .bottomLeading) {
+            floatingHistoryActionButton
+                .padding(.leading, 5)
+                .padding(.bottom, 8)
+        }
+            .frame(height: panelHeight, alignment: .top)
+    }
+
+    private var floatingHistoryActionInset: CGFloat {
+        44
+    }
+
+    private var floatingHistoryActionButton: some View {
+        Button {
+            if viewModel.history.isEmpty {
+                withAnimation {
+                    if usesCompactHistoryOverlay {
+                        toggleHistoryOverlay()
+                    } else {
+                        handleHistoryToggle()
+                    }
+                    storeWindowSize()
+                }
+            } else {
+                viewModel.clearHistory()
+            }
+        } label: {
+            Image(systemName: "trash")
+                .frame(width: 16, height: 16, alignment: .center)
+                .padding(8)
+                .background(historyTrashHover ? palette.headerHover : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(palette.textSecondary)
+        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .help(macLocalized("history.clear", bundle: currentLocalizationBundle))
+        .onHover { hovering in
+            historyTrashHover = hovering
+            if hovering {
+                NSCursor.disappearingItem.set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
+    }
+
+    private func historyOverlayResizeHandle(defaultHeight: CGFloat, windowHeight: CGFloat) -> some View {
+        let accentColor = palette.accent
+        let handleColor = isResizingHistoryOverlay ? accentColor : palette.textSecondary.opacity(colorScheme == .dark ? 0.7 : 0.42)
+        let lineColor = handleColor
+        let handleBackground = memoryOverlayBackgroundColor
+        let dragGesture = DragGesture(minimumDistance: 0, coordinateSpace: .local)
+            .onChanged { value in
+                let maximumHeight = maximumHistoryOverlayHeight(windowHeight: windowHeight)
+                let minimumHeight = minimumHistoryOverlayHeight(defaultHeight: defaultHeight, maximumHeight: maximumHeight)
+
+                if !isResizingHistoryOverlay {
+                    historyOverlayResizeStartHeight = resolvedHistoryOverlayHeight(defaultHeight: defaultHeight, windowHeight: windowHeight)
+                    isResizingHistoryOverlay = true
+                }
+
+                let proposedHeight = historyOverlayResizeStartHeight - value.translation.height
+                historyOverlayHeight = roundedHistoryOverlayHeight(min(max(proposedHeight, minimumHeight), maximumHeight))
+            }
+            .onEnded { _ in
+                let resolvedHeight = resolvedHistoryOverlayHeight(defaultHeight: defaultHeight, windowHeight: windowHeight)
+                if abs(resolvedHeight - defaultHeight) < 1 {
+                    historyOverlayHeight = nil
+                }
+                isResizingHistoryOverlay = false
+            }
+
+        return ZStack {
+            RoundedRectangle(cornerRadius: 0.5, style: .continuous)
+                .fill(lineColor)
+                .frame(width: 116)
+                .frame(height: isResizingHistoryOverlay ? 2 : 1)
+
+            Image(systemName: "arrow.up.arrow.down")
+                .font(EnterCalcFont.appFont(size: 9))
+                .foregroundStyle(handleColor)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(handleBackground)
+                )
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 32)
+        .contentShape(Rectangle())
+        .simultaneousGesture(dragGesture)
+        .onHover { hovering in
+            historyResizeHover = hovering
+            if hovering || isResizingHistoryOverlay {
+                NSCursor.resizeUpDown.set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
+        .onChange(of: isResizingHistoryOverlay) { _, isResizing in
+            if isResizing || historyResizeHover {
+                NSCursor.resizeUpDown.set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
+        .accessibilityLabel(Text("Resize history"))
+        .accessibilityHint(Text("Drag up or down to resize the history overlay"))
     }
 
     private var settingsOverlay: some View {
@@ -621,9 +705,33 @@ struct CalculatorWindowView: View {
             activeOverlay = overlay
         }
         if overlay != .history {
+            isResizingHistoryOverlay = false
+            historyResizeHover = false
             historyTrashHover = false
             storedHistoryOpen = showHistory
         }
+    }
+
+    private func resolvedHistoryOverlayHeight(defaultHeight: CGFloat, windowHeight: CGFloat) -> CGFloat {
+        let maximumHeight = maximumHistoryOverlayHeight(windowHeight: windowHeight)
+        let minimumHeight = minimumHistoryOverlayHeight(defaultHeight: defaultHeight, maximumHeight: maximumHeight)
+        guard let historyOverlayHeight else {
+            return min(defaultHeight, maximumHeight)
+        }
+
+        return min(max(historyOverlayHeight, minimumHeight), maximumHeight)
+    }
+
+    private func minimumHistoryOverlayHeight(defaultHeight: CGFloat, maximumHeight: CGFloat) -> CGFloat {
+        min(maximumHeight, max(160, defaultHeight * 0.66))
+    }
+
+    private func maximumHistoryOverlayHeight(windowHeight: CGFloat) -> CGFloat {
+        max(0, windowHeight * 0.8)
+    }
+
+    private func roundedHistoryOverlayHeight(_ height: CGFloat) -> CGFloat {
+        height.rounded(.toNearestOrAwayFromZero)
     }
 
     private func setHistoryOverlayVisible(_ visible: Bool) {
@@ -637,6 +745,20 @@ struct CalculatorWindowView: View {
 
     private func closeHistoryOverlay() {
         setHistoryOverlayVisible(false)
+    }
+
+    private func toggleHistoryVisibility() {
+        withAnimation {
+            userToggledHistory = true
+            logUI("History toggle tapped (before) showHistory=\(showHistory) keyWindow#\(NSApp.keyWindow?.windowNumber ?? -1)")
+            if usesCompactHistoryOverlay {
+                toggleHistoryOverlay()
+            } else {
+                handleHistoryToggle()
+            }
+            storeWindowSize()
+            logUI("History toggle tapped (after) showHistory=\(showHistory) keyWindow#\(NSApp.keyWindow?.windowNumber ?? -1)")
+        }
     }
 
     private func setSettingsOverlayVisible(_ visible: Bool) {
@@ -1141,7 +1263,8 @@ private struct HistoryPanel: View {
                 Text(macLocalized("history.empty", bundle: localizationBundle))
                     .font(EnterCalcFont.subheadline)
                     .foregroundStyle(fadedForeground)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
@@ -1158,6 +1281,8 @@ private struct HistoryPanel: View {
                             )
                         }
                     }
+                    .padding(.leading, 12)
+                    .padding(.trailing, 12)
                 }
             }
         }
@@ -1527,16 +1652,15 @@ private extension CalculatorWindowView {
         return max(scale, 1)
     }
 
-    func minimumWindowFrameSize(showingHistory: Bool, window: NSWindow?) -> CGSize {
-        let extraWidth = showingHistory ? historyPanelWidth + historySpacing : 0
-        return CGSize(
-            width: minimumWindowWidthPoints + extraWidth,
+    func minimumWindowFrameSize() -> CGSize {
+        CGSize(
+            width: minimumWindowWidthPoints,
             height: minimumWindowHeightPoints
         )
     }
 
-    func minimumContentSize(showingHistory: Bool, window: NSWindow?) -> CGSize {
-        let minimumFrameSize = minimumWindowFrameSize(showingHistory: showingHistory, window: window)
+    func minimumContentSize(window: NSWindow?) -> CGSize {
+        let minimumFrameSize = minimumWindowFrameSize()
         guard let window else { return minimumFrameSize }
         return window.contentRect(forFrameRect: NSRect(origin: .zero, size: minimumFrameSize)).size
     }
@@ -1559,11 +1683,12 @@ private extension CalculatorWindowView {
         }
     }
 
-    func updateHistoryVisibility(for width: CGFloat, fromUser: Bool) {
-        if usesCompactHistoryOverlay {
+    func updateHistoryVisibility(for width: CGFloat) {
+        let shouldUseCompactOverlay = width <= compactHistoryWidthThreshold
+
+        if shouldUseCompactOverlay {
             if showHistory {
                 showHistory = false
-                widthBeforeHistory = nil
                 setHistoryOverlayVisible(true)
             }
             return
@@ -1573,64 +1698,20 @@ private extension CalculatorWindowView {
             showHistory = true
             setHistoryOverlayVisible(false)
         }
-
-        if showHistory {
-            expandWindowWidthIfNeeded(currentWidth: width)
-        }
     }
 
-    func handleHistoryToggle(atWidth width: CGFloat) {
-        logUI("handleHistoryToggle start showHistory=\(showHistory) width=\(width) keyWindow#\(NSApp.keyWindow?.windowNumber ?? -1)")
+    func handleHistoryToggle() {
+        logUI("handleHistoryToggle start showHistory=\(showHistory) width=\(currentWidth) keyWindow#\(NSApp.keyWindow?.windowNumber ?? -1)")
         if showHistory {
             showHistory = false
             storedHistoryOpen = showHistory
-            lockCalculatorWidth = true
-            lockedCalculatorWidth = currentWidth
-            collapseWindowWidthIfNeeded(currentWidth: width)
-            widthBeforeHistory = nil
-            unlockCalculatorWidthAfterAnimation()
             logUI("handleHistoryToggle closing history; frame=\(NSApp.keyWindow?.frame.debugDescription ?? "<nil>")")
             return
         }
 
-        // Opening history
-        lockCalculatorWidth = true
-        lockedCalculatorWidth = currentWidth
-        widthBeforeHistory = currentWidth
         showHistory = true
         storedHistoryOpen = showHistory
-        expandWindowWidthIfNeeded(currentWidth: width)
-        unlockCalculatorWidthAfterAnimation()
         logUI("handleHistoryToggle opening history; frame=\(NSApp.keyWindow?.frame.debugDescription ?? "<nil>")")
-    }
-
-    func expandWindowWidthIfNeeded(currentWidth: CGFloat) {
-        guard let window = currentWindow() else { return }
-        let baseWidth = widthBeforeHistory ?? currentWidth
-        let targetWidth = max(window.frame.width, baseWidth + historyPanelWidth + historySpacing)
-        if window.frame.width < targetWidth {
-            var frame = window.frame
-            frame.size.width = targetWidth
-            window.setFrame(frame, display: true, animate: true)
-            logUI("expandWindowWidthIfNeeded to \(targetWidth) (base \(baseWidth)) for window#\(window.windowNumber)")
-        }
-        storedWindowWidth = Double(window.frame.width)
-        storedWindowHeight = Double(window.frame.height)
-    }
-
-    func collapseWindowWidthIfNeeded(currentWidth: CGFloat) {
-        guard let window = currentWindow() else { return }
-        let minimumWidth = minimumContentSize(showingHistory: false, window: window).width
-        let targetWidth = max(minimumWidth, min(window.frame.width, widthBeforeHistory ?? (window.frame.width - 200)))
-        if window.frame.width != targetWidth {
-            var frame = window.frame
-            frame.size.width = targetWidth
-            window.setFrame(frame, display: true, animate: true)
-            self.currentWidth = frame.size.width
-            logUI("collapseWindowWidthIfNeeded to \(targetWidth) for window#\(window.windowNumber)")
-        }
-        storedWindowWidth = Double(window.frame.width)
-        storedWindowHeight = Double(window.frame.height)
     }
 
     func storeWindowSize() {
@@ -1643,7 +1724,7 @@ private extension CalculatorWindowView {
     func applyStoredWindowSizeIfNeeded() {
         guard let window = currentWindow() else { return }
         guard !appliedStoredSize else { return }
-        let minimumFrameSize = minimumWindowFrameSize(showingHistory: storedHistoryOpen, window: window)
+        let minimumFrameSize = minimumWindowFrameSize()
         if storedWindowWidth > 0 && storedWindowHeight > 0 {
             var frame = window.frame
             frame.size.width = max(CGFloat(storedWindowWidth), minimumFrameSize.width)
@@ -1652,7 +1733,7 @@ private extension CalculatorWindowView {
             currentWidth = frame.size.width
         } else {
             var frame = window.frame
-            let targetSize = minimumWindowFrameSize(showingHistory: showHistory, window: window)
+            let targetSize = minimumWindowFrameSize()
             if frame.size.width != targetSize.width || frame.size.height != targetSize.height {
                 frame.size.width = targetSize.width
                 frame.size.height = targetSize.height
@@ -1661,26 +1742,14 @@ private extension CalculatorWindowView {
             }
         }
         showHistory = storedHistoryOpen
-        widthBeforeHistory = showHistory ? currentWidth : nil
         userToggledHistory = storedHistoryOpen
-        if showHistory && currentWidth < 700 {
-            expandWindowWidthIfNeeded(currentWidth: currentWidth)
-        }
         appliedStoredSize = true
-    }
-
-    func unlockCalculatorWidthAfterAnimation() {
-        let delay: TimeInterval = 0
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            self.lockCalculatorWidth = false
-            self.lockedCalculatorWidth = nil
-        }
     }
 
     func updateWindowMinSize() {
         guard let window = currentWindow() else { return }
-        let minimumFrameSize = minimumWindowFrameSize(showingHistory: showHistory, window: window)
-        let minimumContentSize = minimumContentSize(showingHistory: showHistory, window: window)
+        let minimumFrameSize = minimumWindowFrameSize()
+        let minimumContentSize = minimumContentSize(window: window)
 
         window.contentMinSize = minimumContentSize
 

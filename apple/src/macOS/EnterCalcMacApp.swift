@@ -3,6 +3,10 @@ import SwiftUI
 import AppKit
 import EnterCalcCore
 
+extension Notification.Name {
+    static let enterCalcToggleHistoryPanel = Notification.Name("EnterCalc.ToggleHistoryPanel")
+}
+
 @main
 struct EnterCalcMacApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -96,6 +100,15 @@ struct EnterCalcMacApp: App {
                 }
                 .keyboardShortcut(.delete, modifiers: [.command])
                 .disabled(actionContext == nil)
+            }
+
+            CommandGroup(after: .toolbar) {
+                Button {
+                    NotificationCenter.default.post(name: .enterCalcToggleHistoryPanel, object: nil)
+                } label: {
+                    Label(localized("history.toggle"), systemImage: "clock.arrow.circlepath")
+                }
+                .keyboardShortcut("h", modifiers: [.command, .shift])
             }
         }
     }
