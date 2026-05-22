@@ -2785,10 +2785,9 @@ private struct IOSKeypadButton: View {
     }
 
     private func contains(location: CGPoint, in size: CGSize) -> Bool {
-        location.x >= 0
-            && location.y >= 0
-            && location.x <= size.width
-            && location.y <= size.height
+        let bounds = CGRect(origin: .zero, size: size)
+        let hitShape = RoundedRectangle(cornerRadius: scaledCornerRadius, style: .continuous)
+        return hitShape.path(in: bounds).contains(location)
     }
 
     private func isTapEligible(translation: CGSize) -> Bool {
