@@ -294,6 +294,7 @@ struct CalculatorWindowView: View {
                                 .transition(.opacity)
                         }
                     }
+                    .allowsHitTesting(activeOverlay != nil)
                 }
             }
         }
