@@ -33,6 +33,10 @@
 "history.copyOperation" = "Copy Operation";
 "copy" = "Copy";
 "paste" = "Paste";
+"undo" = "Undo";
+"redo" = "Redo";
+"clear" = "Clear";
+"clear.commandBackspace" = "Clear (Cmd+Backspace)";
 "screen.new" = "New Screen";
 "screen.close" = "Close Screen";
 "screen.pageStatus" = "Screen %1$@ of %2$@";

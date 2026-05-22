@@ -33,6 +33,8 @@ import EnterCalcCore
 
 @main
 struct EnterCalcIOSApp: App {
+    @FocusedValue(\.calculatorActions) private var actionContext
+
     init() {
     EnterCalcFont.registerIfNeeded()
     }
@@ -47,6 +49,56 @@ struct EnterCalcIOSApp: App {
             height: IOSLayoutMetrics.defaultPadWindowSize.height
         )
         .windowResizability(.contentSize)
+        .commands {
+            CommandGroup(replacing: .pasteboard) {
+                Button(localized("copy")) {
+                    actionContext?.copy()
+                }
+                .keyboardShortcut("c", modifiers: [.command])
+                .disabled(actionContext == nil)
+
+                Button(localized("paste")) {
+                    actionContext?.paste()
+                }
+                .keyboardShortcut("v", modifiers: [.command])
+                .disabled(actionContext == nil)
+            }
+
+            CommandGroup(after: .pasteboard) {
+                Button(localized("history.copyOperation")) {
+                    actionContext?.copyOperation()
+                }
+                .disabled(actionContext?.canCopyOperation != true)
+            }
+
+            CommandGroup(replacing: .undoRedo) {
+                Button(localized("undo")) {
+                    actionContext?.undo()
+                }
+                .keyboardShortcut("z", modifiers: [.command])
+                .disabled(actionContext?.canUndo != true)
+
+                Button(localized("redo")) {
+                    actionContext?.redo()
+                }
+                .keyboardShortcut("z", modifiers: [.command, .shift])
+                .disabled(actionContext?.canRedo != true)
+            }
+
+            CommandGroup(after: .undoRedo) {
+                Button(localized("clear")) {
+                    actionContext?.clear()
+                }
+                .keyboardShortcut(.escape, modifiers: [])
+                .disabled(actionContext == nil)
+
+                Button(localized("clear.commandBackspace")) {
+                    actionContext?.clear()
+                }
+                .keyboardShortcut(.delete, modifiers: [.command])
+                .disabled(actionContext == nil)
+            }
+        }
     }
 }
 
@@ -124,6 +176,20 @@ struct EnterCalcIOSView: View {
         activeTheme.palette(using: colorScheme)
     }
 
+    private var actionContext: CalculatorActionContext {
+        CalculatorActionContext(
+            copy: { viewModel.copyToPasteboard() },
+            copyOperation: { viewModel.copyOperationToPasteboard() },
+            canCopyOperation: viewModel.hasOperationToCopy,
+            paste: { viewModel.pasteFromPasteboard() },
+            undo: { viewModel.undo() },
+            redo: { viewModel.redo() },
+            canUndo: viewModel.canUndo,
+            canRedo: viewModel.canRedo,
+            clear: { viewModel.clearAll() }
+        )
+    }
+
     private var activeSettingsTitleKey: String {
         activeScreen.isHomeScreen ? "settings.title" : "settings.screen.title"
     }
@@ -194,6 +260,7 @@ struct EnterCalcIOSView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .preferredColorScheme(activeTheme.preferredColorScheme)
+            .focusedSceneValue(\.calculatorActions, actionContext)
             .onAppear {
                 syncSystemSettingsMetadata()
                 normalizePreferredLanguageIfNeeded()

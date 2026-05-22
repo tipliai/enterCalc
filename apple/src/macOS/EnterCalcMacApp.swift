@@ -3,29 +3,6 @@ import SwiftUI
 import AppKit
 import EnterCalcCore
 
-struct CalculatorActionContext {
-    let copy: () -> Void
-    let copyOperation: () -> Void
-    let canCopyOperation: Bool
-    let paste: () -> Void
-    let undo: () -> Void
-    let redo: () -> Void
-    let canUndo: Bool
-    let canRedo: Bool
-    let clear: () -> Void
-}
-
-struct CalculatorActionContextKey: FocusedValueKey {
-    typealias Value = CalculatorActionContext
-}
-
-extension FocusedValues {
-    var calculatorActions: CalculatorActionContext? {
-        get { self[CalculatorActionContextKey.self] }
-        set { self[CalculatorActionContextKey.self] = newValue }
-    }
-}
-
 @main
 struct EnterCalcMacApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -94,27 +71,27 @@ struct EnterCalcMacApp: App {
             }
 
             CommandGroup(replacing: .undoRedo) {
-                Button("Undo") {
+                Button(localized("undo")) {
                     actionContext?.undo()
                 }
                 .keyboardShortcut("z", modifiers: [.command])
                 .disabled(actionContext?.canUndo != true)
 
-                Button("Redo") {
+                Button(localized("redo")) {
                     actionContext?.redo()
                 }
-                .keyboardShortcut("Z", modifiers: [.command, .shift])
+                .keyboardShortcut("z", modifiers: [.command, .shift])
                 .disabled(actionContext?.canRedo != true)
             }
 
             CommandGroup(after: .undoRedo) {
-                Button("Clear") {
+                Button(localized("clear")) {
                     actionContext?.clear()
                 }
                 .keyboardShortcut(.escape, modifiers: [])
                 .disabled(actionContext == nil)
 
-                Button("Clear (Cmd+Backspace)") {
+                Button(localized("clear.commandBackspace")) {
                     actionContext?.clear()
                 }
                 .keyboardShortcut(.delete, modifiers: [.command])
