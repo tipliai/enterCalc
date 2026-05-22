@@ -1253,9 +1253,9 @@ struct MacAboutView: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(MacAboutContent.appName)
-                        .font(EnterCalcFont.title2)
+                        .font(.system(size: 22))
                     Text(MacAboutContent.appVersionText(bundle: localizationBundle))
-                        .font(EnterCalcFont.subheadline)
+                        .font(.system(size: 15))
                         .foregroundStyle(.secondary)
                 }
 
@@ -1266,9 +1266,9 @@ struct MacAboutView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text(macLocalized("settings.credits", bundle: localizationBundle))
-                    .font(EnterCalcFont.headline)
+                    .font(.system(size: 17))
                 Text(MacAboutContent.creditAttributedString(bundle: localizationBundle))
-                    .font(EnterCalcFont.subheadline)
+                    .font(.system(size: 15))
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -1300,13 +1300,13 @@ private struct SettingsSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(macLocalized("settings.title", bundle: localizationBundle))
-                    .font(EnterCalcFont.appFont(size: settingsTitleSize))
+                    .font(.system(size: settingsTitleSize))
                 Spacer()
                 Button {
                     onClose()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(EnterCalcFont.appFont(size: settingsBodySize))
+                        .font(.system(size: settingsBodySize))
                 }
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
@@ -1320,36 +1320,36 @@ private struct SettingsSheet: View {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 10) {
                         Text(macLocalized("settings.appearance", bundle: localizationBundle))
-                            .font(EnterCalcFont.appFont(size: settingsSectionSize))
+                            .font(.system(size: settingsSectionSize))
                         Picker(macLocalized("settings.appearance.label", bundle: localizationBundle), selection: $selectedTheme) {
                             ForEach(AppTheme.allCases, id: \.self) { theme in
                                 Text(theme.label(using: localizationBundle)).tag(theme)
                             }
                         }
                         .pickerStyle(.radioGroup)
-                        .font(EnterCalcFont.normalAppFont(size: settingsBodySize))
+                        .font(.system(size: settingsBodySize))
                         .id(selectedLanguage) // force refresh of localized labels on change
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
                         Text(macLocalized("settings.language", bundle: localizationBundle))
-                            .font(EnterCalcFont.appFont(size: settingsSectionSize))
+                            .font(.system(size: settingsSectionSize))
                         Picker(macLocalized("settings.language.label", bundle: localizationBundle), selection: $selectedLanguage) {
                             ForEach(availableLanguages, id: \.code) { lang in
                                 Text(lang.displayName).tag(lang.code)
                             }
                         }
                         .pickerStyle(.menu)
-                        .font(EnterCalcFont.normalAppFont(size: settingsBodySize))
+                        .font(.system(size: settingsBodySize))
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
                         Text(macLocalized("settings.userInterface", bundle: localizationBundle))
-                            .font(EnterCalcFont.appFont(size: settingsSectionSize))
+                            .font(.system(size: settingsSectionSize))
                         Toggle(macLocalized("settings.numberFormat.scientific", bundle: localizationBundle), isOn: $usesScientificNotation)
-                            .font(EnterCalcFont.normalAppFont(size: settingsBodySize))
+                            .font(.system(size: settingsBodySize))
                         Toggle(macLocalized("settings.percent.classicBehavior", bundle: localizationBundle), isOn: $usesClassicPercentBehavior)
-                            .font(EnterCalcFont.normalAppFont(size: settingsBodySize))
+                            .font(.system(size: settingsBodySize))
                         Toggle(
                             macLocalized("settings.equals.enterKeySymbol", bundle: localizationBundle),
                             isOn: Binding(
@@ -1357,14 +1357,14 @@ private struct SettingsSheet: View {
                                 set: { usesEnterKeySymbol = !$0 }
                             )
                         )
-                        .font(EnterCalcFont.normalAppFont(size: settingsBodySize))
+                        .font(.system(size: settingsBodySize))
                         Picker(macLocalized("settings.numberFormat.style", bundle: localizationBundle), selection: $selectedNumberFormat) {
                             ForEach(NumberFormatStyle.allCases, id: \.self) { style in
                                 Text(style.example).tag(style)
                             }
                         }
                         .pickerStyle(.menu)
-                        .font(EnterCalcFont.normalAppFont(size: settingsBodySize))
+                        .font(.system(size: settingsBodySize))
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)

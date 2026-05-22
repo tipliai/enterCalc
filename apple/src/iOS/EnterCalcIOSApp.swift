@@ -1746,9 +1746,9 @@ private struct IOSSettingsSheet: View {
 
                     Section(localized("settings.credits")) {
                         Text(creditAttributedString())
-                            .font(EnterCalcFont.subheadline)
+                            .font(.system(size: 15))
                         Text(String(format: localized("settings.credits.version"), versionString))
-                            .font(EnterCalcFont.subheadline)
+                            .font(.system(size: 15))
                             .foregroundStyle(.secondary)
                     }
                 }

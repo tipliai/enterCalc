@@ -519,7 +519,7 @@ final class CalculatorViewModelTests: XCTestCase {
         languageOverrideBundle = bundle
 
         XCTAssertEqual(localized("settings.language"), "Sprache")
-        XCTAssertEqual(localized("settings.credit.linkText"), "Open-Source-Software")
+        XCTAssertEqual(localized("settings.credit.linkText"), "GitHub")
     }
 
     func testRefreshLocalizationUpdatesActiveErrorMessage() throws {
@@ -581,6 +581,29 @@ final class CalculatorViewModelTests: XCTestCase {
 
         XCTAssertTrue(englishCredit.contains("MIT License"))
         XCTAssertTrue(englishCredit.contains("Tipli AI"))
+    }
+
+    func testAboutAndCreditStringsStayAlignedAcrossSupportedBundles() throws {
+        let localeCodes = ["Base", "en", "de", "es", "fr", "ja", "zh-Hans"]
+
+        for localeCode in localeCodes {
+            let strings = try localizedStrings(named: localeCode)
+
+            let aboutLabel = try XCTUnwrap(strings["settings.credits"] as? String, "Missing settings.credits in \(localeCode).lproj")
+            XCTAssertFalse(aboutLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, "Empty settings.credits in \(localeCode).lproj")
+
+            let versionLabel = try XCTUnwrap(strings["settings.credits.version"] as? String, "Missing settings.credits.version in \(localeCode).lproj")
+            XCTAssertTrue(versionLabel.contains("%@"), "settings.credits.version should keep its placeholder in \(localeCode).lproj")
+
+            let aboutWindowTitle = try XCTUnwrap(strings["mac.about.windowTitle"] as? String, "Missing mac.about.windowTitle in \(localeCode).lproj")
+            XCTAssertTrue(aboutWindowTitle.contains("%@"), "mac.about.windowTitle should keep its placeholder in \(localeCode).lproj")
+
+            let creditPart1 = try XCTUnwrap(strings["settings.credit.part1"] as? String, "Missing settings.credit.part1 in \(localeCode).lproj")
+            XCTAssertTrue(creditPart1.contains("EnterCalc"), "settings.credit.part1 should mention EnterCalc in \(localeCode).lproj")
+
+            let creditLinkText = try XCTUnwrap(strings["settings.credit.linkText"] as? String, "Missing settings.credit.linkText in \(localeCode).lproj")
+            XCTAssertEqual(creditLinkText, "GitHub", "settings.credit.linkText should stay consistent in \(localeCode).lproj")
+        }
     }
 
     func testScreenStoreStartsWithOneHomeScreen() {
