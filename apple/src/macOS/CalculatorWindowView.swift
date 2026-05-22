@@ -285,6 +285,7 @@ struct CalculatorWindowView: View {
                             historyOverlay(defaultHeight: defaultHistoryHeight, windowHeight: geo.size.height, panelHeight: historyHeight)
                                 .frame(width: geo.size.width, alignment: .top)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                                .allowsHitTesting(activeOverlay == .history)
                                 .transition(.opacity)
                         } else if showSettingsOverlay {
                             settingsOverlay
