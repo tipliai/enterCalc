@@ -13,6 +13,7 @@ public enum CalculatorScreenSettingsPersistence {
             numberFormatStyleRawValue: defaults.string(forKey: "settings.numberFormat.style") ?? NumberFormatStyle.detected().rawValue,
             usesClassicPercentBehavior: defaults.object(forKey: "settings.percent.classic") as? Bool ?? false,
             usesEnterKeySymbol: defaults.object(forKey: "settings.equals.enterKeySymbol") as? Bool ?? true,
+            disablesButtonSound: defaults.object(forKey: "settings.buttonSound.disabled") as? Bool ?? false,
             keypadHeightMultiplier: min(max(storedKeypadHeightMultiplier, 0.5), 1.0)
         )
     }
@@ -24,6 +25,7 @@ public enum CalculatorScreenSettingsPersistence {
         defaults.set(settings.numberFormatStyleRawValue, forKey: "settings.numberFormat.style")
         defaults.set(settings.usesClassicPercentBehavior, forKey: "settings.percent.classic")
         defaults.set(settings.usesEnterKeySymbol, forKey: "settings.equals.enterKeySymbol")
+        defaults.set(settings.disablesButtonSound, forKey: "settings.buttonSound.disabled")
         defaults.set(settings.keypadHeightMultiplier, forKey: "settings.keypadHeightMultiplier")
     }
 

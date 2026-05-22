@@ -19,6 +19,7 @@
 "settings.numberFormat.style" = "数字样式";
 "settings.numberFormat.scientific" = "使用科学计数法";
 "settings.percent.classicBehavior" = "使用经典 % 按钮";
+"settings.buttonSound.disabled" = "禁用按钮声音";
 "settings.credits" = "关于";
 "settings.credits.version" = "版本 %@";
 "mac.about.windowTitle" = "关于%@";

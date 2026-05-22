@@ -3,6 +3,35 @@ import SwiftUI
 import AppKit
 import EnterCalcCore
 
+@MainActor
+private enum MacButtonSoundFeedback {
+    static func playIfNeeded(disabled: Bool, isEnterKey: Bool = false) {
+        guard !disabled else { return }
+        guard let eventType = NSApp.currentEvent?.type, eventType.isButtonSoundMouseInteraction else {
+            return
+        }
+
+        if isEnterKey {
+            CalculatorButtonSound.playEnterClick()
+        } else {
+            CalculatorButtonSound.playClick()
+        }
+    }
+}
+
+private extension NSEvent.EventType {
+    var isButtonSoundMouseInteraction: Bool {
+        switch self {
+        case .leftMouseDown, .leftMouseUp,
+             .rightMouseDown, .rightMouseUp,
+             .otherMouseDown, .otherMouseUp:
+            return true
+        default:
+            return false
+        }
+    }
+}
+
 struct CalculatorWindowView: View {
     private enum OverlayPane {
         case history
@@ -487,7 +516,7 @@ struct CalculatorWindowView: View {
             LazyVGrid(columns: keypadColumns, spacing: spacing) {
                 ForEach(buttons.indices, id: \.self) { index in
                     let button = buttons[index]
-                    CalculatorButton(title: button.title, kind: button.kind, height: cellHeight, action: button.action, enabled: button.enabled, palette: palette, operatorRevealProgress: operatorRevealProgress, operatorAnimFadeOpacity: operatorAnimFadeOpacity)
+                    CalculatorButton(title: button.title, kind: button.kind, height: cellHeight, disablesButtonSound: windowSettings.disablesButtonSound, action: button.action, enabled: button.enabled, palette: palette, operatorRevealProgress: operatorRevealProgress, operatorAnimFadeOpacity: operatorAnimFadeOpacity)
                 }
             }
         }
@@ -816,6 +845,7 @@ private struct MemoryControlsBoundsKey: PreferenceKey {
         let title: String
         let kind: Kind
         let height: CGFloat
+        let disablesButtonSound: Bool
         let action: () -> Void
         let enabled: Bool
         let palette: Palette
@@ -891,6 +921,7 @@ private struct MemoryControlsBoundsKey: PreferenceKey {
         }
 
         private func handleTap() {
+            MacButtonSoundFeedback.playIfNeeded(disabled: disablesButtonSound, isEnterKey: kind == .accent)
             action()
             guard kind == .accent else { return }
             shimmerProgress = 0
@@ -1287,6 +1318,7 @@ private struct SettingsSheet: View {
     @Binding var selectedNumberFormat: NumberFormatStyle
     @Binding var usesClassicPercentBehavior: Bool
     @Binding var usesEnterKeySymbol: Bool
+    @Binding var disablesButtonSound: Bool
     let availableLanguages: [LanguageOption]
     let onClose: () -> Void
     @Environment(\.macLocalizationBundle) private var localizationBundle
@@ -1319,8 +1351,6 @@ private struct SettingsSheet: View {
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text(macLocalized("settings.appearance", bundle: localizationBundle))
-                            .font(.system(size: settingsSectionSize))
                         Picker(macLocalized("settings.appearance.label", bundle: localizationBundle), selection: $selectedTheme) {
                             ForEach(AppTheme.allCases, id: \.self) { theme in
                                 Text(theme.label(using: localizationBundle)).tag(theme)
@@ -1332,11 +1362,17 @@ private struct SettingsSheet: View {
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
-                        Text(macLocalized("settings.language", bundle: localizationBundle))
-                            .font(.system(size: settingsSectionSize))
                         Picker(macLocalized("settings.language.label", bundle: localizationBundle), selection: $selectedLanguage) {
                             ForEach(availableLanguages, id: \.code) { lang in
                                 Text(lang.displayName).tag(lang.code)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .font(.system(size: settingsBodySize))
+
+                        Picker(macLocalized("settings.numberFormat.style", bundle: localizationBundle), selection: $selectedNumberFormat) {
+                            ForEach(NumberFormatStyle.allCases, id: \.self) { style in
+                                Text(style.example).tag(style)
                             }
                         }
                         .pickerStyle(.menu)
@@ -1358,13 +1394,8 @@ private struct SettingsSheet: View {
                             )
                         )
                         .font(.system(size: settingsBodySize))
-                        Picker(macLocalized("settings.numberFormat.style", bundle: localizationBundle), selection: $selectedNumberFormat) {
-                            ForEach(NumberFormatStyle.allCases, id: \.self) { style in
-                                Text(style.example).tag(style)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .font(.system(size: settingsBodySize))
+                        Toggle(macLocalized("settings.buttonSound.disabled", bundle: localizationBundle), isOn: $disablesButtonSound)
+                            .font(.system(size: settingsBodySize))
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -1476,6 +1507,12 @@ private extension CalculatorWindowView {
                 get: { windowSettings.usesEnterKeySymbol },
                 set: { newValue in
                     updateWindowSettings { $0.usesEnterKeySymbol = newValue }
+                }
+            ),
+            disablesButtonSound: Binding(
+                get: { windowSettings.disablesButtonSound },
+                set: { newValue in
+                    updateWindowSettings { $0.disablesButtonSound = newValue }
                 }
             ),
             availableLanguages: availableLanguageOptions(),
