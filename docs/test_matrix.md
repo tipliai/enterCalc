@@ -20,6 +20,10 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Area | Test Value | Expected Result | Method |
 | --- | --- | --- | --- |
 | Arithmetic | Enter `97`, apply square root, `+ 8 =` | Display `17.848857801796`, expression `√(97) + 8 =`, history entry `√(97) + 8 -> 17.848857801796` | `testSquareRootPlusAdditionProducesExpectedResultAndHistory` |
+| Arithmetic | Enter `4`, apply square root, then enter `(2 + 2)` and evaluate | Display `8`; expression and history use implicit multiplication `√(4) × ( 2 + 2 )` | `testSquareRootThenParenthesizedExpressionImplicitlyMultiplies` |
+| Arithmetic | Enter `4`, apply reciprocal, then enter `(2 + 2)` and evaluate | Display `1`; expression and history use implicit multiplication `1/(4) × ( 2 + 2 )` | `testReciprocalThenParenthesizedExpressionImplicitlyMultiplies` |
+| Arithmetic | Enter `3`, apply square, then enter `(2 + 1)` and evaluate | Display `27`; expression and history use implicit multiplication `3² × ( 2 + 1 )` | `testSquareThenParenthesizedExpressionImplicitlyMultiplies` |
+| Arithmetic | Evaluate `(2 + 3)(√(4) + 1)` | Display `15`; grouped expressions preserve precedence and implicit multiplication between adjacent parentheses | `testNestedParenthesesWithSquareRootEvaluatesWithExpectedPrecedence` |
 | Arithmetic | Enter `1234567891234567 × 9999999999999999 =` with scientific notation enabled | Display `1.234567891234567e+31` | `testLargeResultUsesScientificNotationByDefault` |
 | Arithmetic | Run the same multiplication, then disable scientific notation | Display `12,345,678,912,345,670,000,000,000,000,000` | `testScientificNotationCanBeDisabledToShowExpandedValue` |
 | Number format | Enter `1234567.89`, switch number format style to European | Display `1.234.567,89` | `testNumberFormatStyleCanDisplayEuropeanSeparators` |
