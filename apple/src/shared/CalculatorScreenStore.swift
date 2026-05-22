@@ -42,6 +42,7 @@ public final class CalculatorScreenSession: ObservableObject, Identifiable {
     public let viewModel: CalculatorViewModel
 
     @Published public private(set) var settings: CalculatorScreenSettings
+    @Published public private(set) var historyOverlayHeight: Double?
 
     private var cancellables: Set<AnyCancellable> = []
 
@@ -72,6 +73,12 @@ public final class CalculatorScreenSession: ObservableObject, Identifiable {
         var updated = settings
         update(&updated)
         replaceSettings(updated)
+    }
+
+    public func updateHistoryOverlayHeight(_ height: Double?) {
+        let normalizedHeight = height.map { max(0, $0) }
+        guard historyOverlayHeight != normalizedHeight else { return }
+        historyOverlayHeight = normalizedHeight
     }
 
     public func applyCalculatorSettings() {
