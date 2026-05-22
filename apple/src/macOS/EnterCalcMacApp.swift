@@ -3,29 +3,6 @@ import SwiftUI
 import AppKit
 import EnterCalcCore
 
-struct CalculatorActionContext {
-    let copy: () -> Void
-    let copyOperation: () -> Void
-    let canCopyOperation: Bool
-    let paste: () -> Void
-    let undo: () -> Void
-    let redo: () -> Void
-    let canUndo: Bool
-    let canRedo: Bool
-    let clear: () -> Void
-}
-
-struct CalculatorActionContextKey: FocusedValueKey {
-    typealias Value = CalculatorActionContext
-}
-
-extension FocusedValues {
-    var calculatorActions: CalculatorActionContext? {
-        get { self[CalculatorActionContextKey.self] }
-        set { self[CalculatorActionContextKey.self] = newValue }
-    }
-}
-
 @main
 struct EnterCalcMacApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
