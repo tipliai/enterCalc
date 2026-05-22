@@ -464,7 +464,7 @@ struct EnterCalcIOSView: View {
             }
             .onIOSDeviceOrientationChange {
                 isResizingKeypadHeight = false
-                isResizingHistoryOverlay = false
+                resetHistoryOverlayResizeState()
                 syncPhoneUpsideDownPresentation()
                 updateDisplayShimmerParallax()
             }
@@ -725,10 +725,10 @@ private extension EnterCalcIOSView {
                         },
                         onSelect: { entry in
                             activeScreen.viewModel.reuse(entry)
-                            activeOverlay = nil
+                            dismissHistoryOverlay()
                         },
                         onClear: { activeScreen.viewModel.clearHistory() },
-                        onDismiss: { activeOverlay = nil },
+                        onDismiss: { dismissHistoryOverlay() },
                         onCopyEntry: { entry in copyHistoryEntryResultToPasteboard(entry, from: activeScreen.viewModel) },
                         onCopyOperationEntry: { entry in copyHistoryEntryOperationToPasteboard(entry, from: activeScreen.viewModel) }
                     )
@@ -1836,14 +1836,25 @@ private extension EnterCalcIOSView {
         min(max(value, range.lowerBound), range.upperBound)
     }
 
+    func resetHistoryOverlayResizeState() {
+        isResizingHistoryOverlay = false
+        liveHistoryOverlayHeight = nil
+        liveHistoryOverlayScreenID = nil
+    }
+
+    func dismissHistoryOverlay() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            activeOverlay = nil
+        }
+        resetHistoryOverlayResizeState()
+    }
+
     func toggleOverlay(_ overlay: IOSOverlayPane) {
         withAnimation(.easeInOut(duration: 0.2)) {
             activeOverlay = activeOverlay == overlay ? nil : overlay
         }
         if activeOverlay != .history {
-            isResizingHistoryOverlay = false
-            liveHistoryOverlayHeight = nil
-            liveHistoryOverlayScreenID = nil
+            resetHistoryOverlayResizeState()
         }
     }
 
@@ -1851,12 +1862,7 @@ private extension EnterCalcIOSView {
         Color.black.opacity(metrics.mode == .padWide ? 0.22 : 0.4)
             .ignoresSafeArea()
             .onTapGesture {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    activeOverlay = nil
-                }
-                isResizingHistoryOverlay = false
-                liveHistoryOverlayHeight = nil
-                liveHistoryOverlayScreenID = nil
+                dismissHistoryOverlay()
             }
     }
 

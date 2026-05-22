@@ -116,11 +116,11 @@ struct CalculatorWindowView: View {
     }
 
     private var compactHistoryWidthThreshold: CGFloat {
-        minimumWindowWidthPoints + historyPanelWidth + historySpacing
+        minimumCalculatorPaneWidth + historyPanelWidth + historySpacing + outerHorizontalPadding
     }
 
     private var minimumCalculatorPaneWidth: CGFloat {
-        let minimumContentWidth = minimumContentSize(showingHistory: false, window: currentWindow()).width
+        let minimumContentWidth = minimumContentSize(window: currentWindow()).width
         return max(280, minimumContentWidth - outerHorizontalPadding)
     }
 
@@ -177,7 +177,7 @@ struct CalculatorWindowView: View {
                 DispatchQueue.main.async {
                     updateWindowMinSize()
                     applyStoredWindowSizeIfNeeded()
-                    updateHistoryVisibility(for: currentWidth, fromUser: false)
+                    updateHistoryVisibility(for: currentWidth)
                 }
                 startOperatorIntroAnimation()
             }
@@ -211,7 +211,7 @@ struct CalculatorWindowView: View {
             }
             .onChange(of: geo.size.width) { _, width in
                 currentWidth = width
-                updateHistoryVisibility(for: width, fromUser: false)
+                updateHistoryVisibility(for: width)
             }
             .background(
                 KeyCaptureView { event in
@@ -589,7 +589,7 @@ struct CalculatorWindowView: View {
                     if usesCompactHistoryOverlay {
                         toggleHistoryOverlay()
                     } else {
-                        handleHistoryToggle(atWidth: currentWidth)
+                        handleHistoryToggle()
                     }
                     storeWindowSize()
                 }
@@ -752,7 +752,7 @@ struct CalculatorWindowView: View {
             if usesCompactHistoryOverlay {
                 toggleHistoryOverlay()
             } else {
-                handleHistoryToggle(atWidth: currentWidth)
+                handleHistoryToggle()
             }
             storeWindowSize()
             logUI("History toggle tapped (after) showHistory=\(showHistory) keyWindow#\(NSApp.keyWindow?.windowNumber ?? -1)")
@@ -1650,17 +1650,15 @@ private extension CalculatorWindowView {
         return max(scale, 1)
     }
 
-    func minimumWindowFrameSize(showingHistory: Bool, window: NSWindow?) -> CGSize {
-        let _ = showingHistory
-        let _ = window
-        return CGSize(
+    func minimumWindowFrameSize() -> CGSize {
+        CGSize(
             width: minimumWindowWidthPoints,
             height: minimumWindowHeightPoints
         )
     }
 
-    func minimumContentSize(showingHistory: Bool, window: NSWindow?) -> CGSize {
-        let minimumFrameSize = minimumWindowFrameSize(showingHistory: showingHistory, window: window)
+    func minimumContentSize(window: NSWindow?) -> CGSize {
+        let minimumFrameSize = minimumWindowFrameSize()
         guard let window else { return minimumFrameSize }
         return window.contentRect(forFrameRect: NSRect(origin: .zero, size: minimumFrameSize)).size
     }
@@ -1683,8 +1681,7 @@ private extension CalculatorWindowView {
         }
     }
 
-    func updateHistoryVisibility(for width: CGFloat, fromUser: Bool) {
-        let _ = fromUser
+    func updateHistoryVisibility(for width: CGFloat) {
         let shouldUseCompactOverlay = width <= compactHistoryWidthThreshold
 
         if shouldUseCompactOverlay {
@@ -1701,9 +1698,8 @@ private extension CalculatorWindowView {
         }
     }
 
-    func handleHistoryToggle(atWidth width: CGFloat) {
-        logUI("handleHistoryToggle start showHistory=\(showHistory) width=\(width) keyWindow#\(NSApp.keyWindow?.windowNumber ?? -1)")
-        let _ = width
+    func handleHistoryToggle() {
+        logUI("handleHistoryToggle start showHistory=\(showHistory) width=\(currentWidth) keyWindow#\(NSApp.keyWindow?.windowNumber ?? -1)")
         if showHistory {
             showHistory = false
             storedHistoryOpen = showHistory
@@ -1726,7 +1722,7 @@ private extension CalculatorWindowView {
     func applyStoredWindowSizeIfNeeded() {
         guard let window = currentWindow() else { return }
         guard !appliedStoredSize else { return }
-        let minimumFrameSize = minimumWindowFrameSize(showingHistory: storedHistoryOpen, window: window)
+        let minimumFrameSize = minimumWindowFrameSize()
         if storedWindowWidth > 0 && storedWindowHeight > 0 {
             var frame = window.frame
             frame.size.width = max(CGFloat(storedWindowWidth), minimumFrameSize.width)
@@ -1735,7 +1731,7 @@ private extension CalculatorWindowView {
             currentWidth = frame.size.width
         } else {
             var frame = window.frame
-            let targetSize = minimumWindowFrameSize(showingHistory: showHistory, window: window)
+            let targetSize = minimumWindowFrameSize()
             if frame.size.width != targetSize.width || frame.size.height != targetSize.height {
                 frame.size.width = targetSize.width
                 frame.size.height = targetSize.height
@@ -1750,8 +1746,8 @@ private extension CalculatorWindowView {
 
     func updateWindowMinSize() {
         guard let window = currentWindow() else { return }
-        let minimumFrameSize = minimumWindowFrameSize(showingHistory: showHistory, window: window)
-        let minimumContentSize = minimumContentSize(showingHistory: showHistory, window: window)
+        let minimumFrameSize = minimumWindowFrameSize()
+        let minimumContentSize = minimumContentSize(window: window)
 
         window.contentMinSize = minimumContentSize
 
