@@ -8,6 +8,7 @@ public struct CalculatorScreenSettings: Equatable {
     public var numberFormatStyleRawValue: String
     public var usesClassicPercentBehavior: Bool
     public var usesEnterKeySymbol: Bool
+    public var disablesSwipeDownToRound: Bool
     public var disablesButtonSound: Bool
     public var keypadHeightMultiplier: Double
 
@@ -18,6 +19,7 @@ public struct CalculatorScreenSettings: Equatable {
         numberFormatStyleRawValue: String,
         usesClassicPercentBehavior: Bool,
         usesEnterKeySymbol: Bool = true,
+        disablesSwipeDownToRound: Bool = false,
         disablesButtonSound: Bool = false,
         keypadHeightMultiplier: Double = 1.0
     ) {
@@ -27,6 +29,7 @@ public struct CalculatorScreenSettings: Equatable {
         self.numberFormatStyleRawValue = numberFormatStyleRawValue
         self.usesClassicPercentBehavior = usesClassicPercentBehavior
         self.usesEnterKeySymbol = usesEnterKeySymbol
+        self.disablesSwipeDownToRound = disablesSwipeDownToRound
         self.disablesButtonSound = disablesButtonSound
         self.keypadHeightMultiplier = keypadHeightMultiplier
     }

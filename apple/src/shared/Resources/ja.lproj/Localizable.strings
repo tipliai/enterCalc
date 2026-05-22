@@ -31,6 +31,10 @@
 "history.empty" = "歴史の判断はまだ先だ。";
 "history.clear" = "履歴をクリア";
 "history.copyOperation" = "式をコピー";
+"settings.rounding.disableSwipeDown" = "下スワイプで丸める操作を無効にする";
+"rounding.toggle" = "丸めパネルを表示/非表示";
+"rounding.title" = "結果を丸める";
+"rounding.remove" = "丸めを解除";
 "copy" = "コピー";
 "paste" = "貼り付け";
 "undo" = "取り消す";

@@ -3,12 +3,133 @@ import XCTest
 
 #if os(macOS)
 import AppKit
+#elseif os(iOS)
+import UIKit
 #endif
 
 final class CalculatorViewModelTests: XCTestCase {
     override func tearDown() {
         languageOverrideBundle = nil
         super.tearDown()
+    }
+
+    private let supportedLanguageCodes = ["en", "de", "es", "fr", "ja", "zh-Hans"]
+
+    private struct StyleFixture {
+        let style: NumberFormatStyle
+        let firstOperand: String
+        let secondOperand: String
+        let expectedExpressionDisplay: String
+        let expectedDisplay: String
+        let roundingInput: String
+        let roundingPrecision: Int
+        let expectedRoundedDisplay: String
+        let expectedRoundedOperation: String
+        let expectedRoundedCopyResult: String
+    }
+
+    private func withLanguageOverride<T>(code: String, _ body: () throws -> T) throws -> T {
+        let previousBundle = languageOverrideBundle
+        defer { languageOverrideBundle = previousBundle }
+        languageOverrideBundle = try localizedBundle(named: code)
+        return try body()
+    }
+
+    private func withLanguageOverrides(_ body: (String) throws -> Void) throws {
+        for code in supportedLanguageCodes {
+            try withLanguageOverride(code: code) {
+                try body(code)
+            }
+        }
+    }
+
+    private func styleFixtures() -> [StyleFixture] {
+        [
+            StyleFixture(
+                style: .western,
+                firstOperand: "2.333",
+                secondOperand: "1.555",
+                expectedExpressionDisplay: "2.333 + 1.555 =",
+                expectedDisplay: "3.888",
+                roundingInput: "3.005",
+                roundingPrecision: 2,
+                expectedRoundedDisplay: "3.01",
+                expectedRoundedOperation: "round(3.005, 2) ≈ 3.01",
+                expectedRoundedCopyResult: "3.01"
+            ),
+            StyleFixture(
+                style: .european,
+                firstOperand: "2,333",
+                secondOperand: "1,555",
+                expectedExpressionDisplay: "2,333 + 1,555 =",
+                expectedDisplay: "3,888",
+                roundingInput: "3,005",
+                roundingPrecision: 2,
+                expectedRoundedDisplay: "3,01",
+                expectedRoundedOperation: "round(3,005; 2) ≈ 3,01",
+                expectedRoundedCopyResult: "3,01"
+            ),
+            StyleFixture(
+                style: .french,
+                firstOperand: "2,333",
+                secondOperand: "1,555",
+                expectedExpressionDisplay: "2,333 + 1,555 =",
+                expectedDisplay: "3,888",
+                roundingInput: "3,005",
+                roundingPrecision: 2,
+                expectedRoundedDisplay: "3,01",
+                expectedRoundedOperation: "round(3,005; 2) ≈ 3,01",
+                expectedRoundedCopyResult: "3,01"
+            ),
+            StyleFixture(
+                style: .swiss,
+                firstOperand: "1'234.5",
+                secondOperand: "2'000.1",
+                expectedExpressionDisplay: "1'234.5 + 2'000.1 =",
+                expectedDisplay: "3'234.6",
+                roundingInput: "3.005",
+                roundingPrecision: 2,
+                expectedRoundedDisplay: "3.01",
+                expectedRoundedOperation: "round(3.005, 2) ≈ 3.01",
+                expectedRoundedCopyResult: "3.01"
+            ),
+            StyleFixture(
+                style: .indian,
+                firstOperand: "12,34,567.89",
+                secondOperand: "1.11",
+                expectedExpressionDisplay: "12,34,567.89 + 1.11 =",
+                expectedDisplay: "12,34,569",
+                roundingInput: "12,34,567.8912",
+                roundingPrecision: 3,
+                expectedRoundedDisplay: "12,34,567.891",
+                expectedRoundedOperation: "round(12,34,567.8912, 3) ≈ 12,34,567.891",
+                expectedRoundedCopyResult: "12,34,567.891"
+            )
+        ]
+    }
+
+#if canImport(AppKit)
+    private func setClipboardString(_ string: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(string, forType: .string)
+    }
+
+    private func clipboardString() -> String? {
+        NSPasteboard.general.string(forType: .string)
+    }
+#elseif canImport(UIKit)
+    private func setClipboardString(_ string: String) {
+        UIPasteboard.general.string = string
+    }
+
+    private func clipboardString() -> String? {
+        UIPasteboard.general.string
+    }
+#endif
+
+    private func pasteString(_ string: String, into viewModel: CalculatorViewModel) {
+        setClipboardString(string)
+        viewModel.pasteFromPasteboard()
     }
 
     func testSquareRootPlusAdditionProducesExpectedResultAndHistory() {
@@ -174,6 +295,89 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(NumberFormatStyle.detected(from: Locale(identifier: "fr_FR")), .french)
         XCTAssertEqual(NumberFormatStyle.detected(from: Locale(identifier: "hi_IN")), .indian)
         XCTAssertEqual(NumberFormatStyle.detected(from: Locale(identifier: "de_CH")), .swiss)
+    }
+
+    func testOperationRenderingUsesTheActiveNumberStyleAcrossAllLanguages() throws {
+        try withLanguageOverrides { _ in
+            for fixture in styleFixtures() {
+                let viewModel = CalculatorViewModel(numberFormatStyle: fixture.style)
+
+                pasteString(fixture.firstOperand, into: viewModel)
+                viewModel.setOperator(.add)
+                pasteString(fixture.secondOperand, into: viewModel)
+                viewModel.evaluate()
+
+                XCTAssertEqual(viewModel.expressionDisplay, fixture.expectedExpressionDisplay)
+                XCTAssertEqual(viewModel.display, fixture.expectedDisplay)
+                XCTAssertEqual(viewModel.history.first?.expression, "\(fixture.firstOperand) + \(fixture.secondOperand)")
+                XCTAssertEqual(viewModel.history.first?.displayExpression, "\(fixture.firstOperand) + \(fixture.secondOperand)")
+                XCTAssertEqual(viewModel.history.first?.displayResult, fixture.expectedDisplay)
+            }
+        }
+    }
+
+    func testParserTreatsCommaAndDecimalSeparatorsAccordingToActiveNumberStyleAcrossAllLanguages() throws {
+        try withLanguageOverrides { _ in
+            let western = CalculatorViewModel(numberFormatStyle: .western)
+            pasteString("2,333", into: western)
+            western.setOperator(.add)
+            western.inputDigit("1")
+            western.evaluate()
+            XCTAssertEqual(western.display, "2,334")
+
+            let european = CalculatorViewModel(numberFormatStyle: .european)
+            pasteString("2,333", into: european)
+            european.setOperator(.add)
+            european.inputDigit("1")
+            european.evaluate()
+            XCTAssertEqual(european.display, "3,333")
+
+            let french = CalculatorViewModel(numberFormatStyle: .french)
+            pasteString("2,333", into: french)
+            french.setOperator(.add)
+            french.inputDigit("1")
+            french.evaluate()
+            XCTAssertEqual(french.display, "3,333")
+        }
+    }
+
+    func testRoundRenderingCopyPasteAndHistoryRestorationUseNumberStyleAcrossAllLanguages() throws {
+        try withLanguageOverrides { _ in
+            for fixture in styleFixtures() {
+                let viewModel = CalculatorViewModel(numberFormatStyle: fixture.style)
+
+                pasteString(fixture.roundingInput, into: viewModel)
+                viewModel.beginResultRounding(defaultPrecision: fixture.roundingPrecision)
+
+                XCTAssertEqual(viewModel.display, fixture.expectedRoundedDisplay)
+                XCTAssertEqual(viewModel.expressionDisplay, fixture.expectedRoundedOperation)
+
+                viewModel.copyOperationToPasteboard()
+                XCTAssertEqual(clipboardString(), fixture.expectedRoundedOperation)
+
+                viewModel.commitResultRoundingInteraction()
+
+                let savedEntry = try XCTUnwrap(viewModel.history.first)
+                XCTAssertEqual(savedEntry.expression, fixture.expectedRoundedOperation.components(separatedBy: " ≈ ").first! + " ≈")
+                XCTAssertEqual(savedEntry.displayExpression, fixture.expectedRoundedOperation.components(separatedBy: " ≈ ").first! + " ≈")
+                XCTAssertEqual(savedEntry.result, fixture.expectedRoundedDisplay)
+                XCTAssertEqual(savedEntry.displayResult, fixture.expectedRoundedDisplay)
+
+                viewModel.copyResultToPasteboard(savedEntry)
+                XCTAssertEqual(clipboardString(), fixture.expectedRoundedCopyResult)
+
+                viewModel.copyOperationToPasteboard(savedEntry)
+                XCTAssertEqual(clipboardString(), fixture.expectedRoundedOperation)
+
+                let restored = CalculatorViewModel(numberFormatStyle: fixture.style)
+                pasteString(fixture.expectedRoundedOperation, into: restored)
+
+                XCTAssertEqual(restored.display, fixture.expectedRoundedDisplay)
+                XCTAssertEqual(restored.expressionDisplay, fixture.expectedRoundedOperation)
+                XCTAssertEqual(restored.resultRoundingPrecision, fixture.roundingPrecision)
+                XCTAssertTrue(restored.isResultRoundingEnabled)
+            }
+        }
     }
 
     func testDivideByZeroSetsLocalizedErrorState() {
@@ -890,6 +1094,27 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(NSPasteboard.general.string(forType: .string), "1234")
     }
 
+    func testCopyToPasteboardUsesLocalizedDecimalSeparatorForFrenchStyle() {
+        let viewModel = CalculatorViewModel(numberFormatStyle: .french)
+
+        pasteString("8,333", into: viewModel)
+        viewModel.copyToPasteboard()
+
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "8,333")
+    }
+
+    func testCopyToPasteboardCopiesRoundedValueWhenRoundingIsEnabled() {
+        let viewModel = CalculatorViewModel()
+
+        pasteString("9.32227", into: viewModel)
+        viewModel.beginResultRounding(defaultPrecision: 4)
+        XCTAssertEqual(viewModel.display, "9.3223")
+
+        viewModel.copyToPasteboard()
+
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "9.3223")
+    }
+
     func testCopyOperationThenPasteReplaysTheOperation() {
         let sourceViewModel = CalculatorViewModel()
         enter("12", into: sourceViewModel)
@@ -917,6 +1142,22 @@ final class CalculatorViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.display, "1,234.5")
         XCTAssertFalse(viewModel.isErrorState)
+    }
+
+    func testPasteFromPasteboardReplacesPendingOperandWithoutClearingOperation() {
+        let viewModel = CalculatorViewModel()
+
+        enter("12", into: viewModel)
+        viewModel.setOperator(.add)
+        pasteString("3", into: viewModel)
+
+        XCTAssertEqual(viewModel.expressionDisplay, "12 + 3")
+
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "15")
+        XCTAssertEqual(viewModel.history.first?.expression, "12 + 3")
+        XCTAssertEqual(viewModel.history.first?.result, "15")
     }
 
     func testPasteFromPasteboardRejectsOversizedNumericInput() {

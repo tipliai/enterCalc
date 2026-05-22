@@ -31,6 +31,10 @@
 "history.empty" = "Davon wird die Geschichte erst noch erzählen.";
 "history.clear" = "Verlauf löschen";
 "history.copyOperation" = "Operation kopieren";
+"settings.rounding.disableSwipeDown" = "Runterwischen zum Runden deaktivieren";
+"rounding.toggle" = "Rundungspanel ein-/ausblenden";
+"rounding.title" = "Ergebnis runden";
+"rounding.remove" = "Rundung entfernen";
 "copy" = "Kopieren";
 "paste" = "Einfügen";
 "undo" = "Rückgängig";

@@ -5,6 +5,7 @@ import EnterCalcCore
 
 extension Notification.Name {
     static let enterCalcToggleHistoryPanel = Notification.Name("EnterCalc.ToggleHistoryPanel")
+    static let enterCalcToggleRoundingPanel = Notification.Name("EnterCalc.ToggleRoundingPanel")
 }
 
 @main
@@ -109,6 +110,13 @@ struct EnterCalcMacApp: App {
                     Label(localized("history.toggle"), systemImage: "clock.arrow.circlepath")
                 }
                 .keyboardShortcut("h", modifiers: [.command, .shift])
+
+                Button {
+                    NotificationCenter.default.post(name: .enterCalcToggleRoundingPanel, object: nil)
+                } label: {
+                    Label(localized("rounding.toggle"), systemImage: "slider.horizontal.below.rectangle")
+                }
+                .keyboardShortcut("r", modifiers: [.command])
             }
         }
     }

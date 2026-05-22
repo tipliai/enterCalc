@@ -54,6 +54,10 @@ private enum IOSActionHaptics {
 #endif
 import EnterCalcCore
 
+extension Notification.Name {
+    static let enterCalcIOSToggleRoundingPanel = Notification.Name("EnterCalc.iOS.ToggleRoundingPanel")
+}
+
 struct IOSHardwareKeyEvent {
     let characters: String?
     let charactersIgnoringModifiers: String?
@@ -213,6 +217,15 @@ struct EnterCalcIOSApp: App {
                 .keyboardShortcut(.delete, modifiers: [.command])
                 .disabled(actionContext == nil)
             }
+
+            CommandGroup(after: .toolbar) {
+                Button {
+                    NotificationCenter.default.post(name: .enterCalcIOSToggleRoundingPanel, object: nil)
+                } label: {
+                    Label(localized("rounding.toggle"), systemImage: "slider.horizontal.below.rectangle")
+                }
+                .keyboardShortcut("r", modifiers: [.command])
+            }
         }
     }
 }
@@ -226,6 +239,7 @@ struct EnterCalcIOSView: View {
             numberFormatStyleRawValue: NumberFormatStyle.detected().rawValue,
             usesClassicPercentBehavior: false,
             usesEnterKeySymbol: true,
+            disablesSwipeDownToRound: false,
             disablesButtonSound: false,
             keypadHeightMultiplier: 1.0
         )
@@ -261,6 +275,7 @@ struct EnterCalcIOSView: View {
     @AppStorage("settings.numberFormat.style") private var preferredNumberFormatRaw: String = NumberFormatStyle.detected().rawValue
     @AppStorage("settings.percent.classic") private var preferredClassicPercentBehavior: Bool = false
     @AppStorage("settings.equals.enterKeySymbol") private var preferredUsesEnterKeySymbol: Bool = true
+    @AppStorage("settings.rounding.disableSwipeDown") private var preferredDisablesSwipeDownToRound: Bool = false
     @AppStorage("settings.keypadHeightMultiplier") private var preferredKeypadHeightMultiplier: Double = 1.0
 
     private var activeScreen: CalculatorScreenSession {
@@ -284,6 +299,7 @@ struct EnterCalcIOSView: View {
             numberFormatStyleRawValue: preferredNumberFormatRaw,
             usesClassicPercentBehavior: preferredClassicPercentBehavior,
             usesEnterKeySymbol: preferredUsesEnterKeySymbol,
+            disablesSwipeDownToRound: preferredDisablesSwipeDownToRound,
             disablesButtonSound: false,
             keypadHeightMultiplier: keypadHeightMultiplier
         )
@@ -458,6 +474,7 @@ struct EnterCalcIOSView: View {
                     selectedNumberFormat: activeNumberFormatBinding,
                     usesClassicPercentBehavior: activeClassicPercentBinding,
                     usesEnterKeySymbol: activeEnterKeySymbolBinding,
+                    disablesSwipeDownToRound: activeDisableSwipeDownToRoundBinding,
                     availableLanguages: availableLanguageOptions(),
                     counterRotatesForUpsideDownPortrait: counterRotatesForUpsideDownPortrait
                 )
@@ -467,6 +484,12 @@ struct EnterCalcIOSView: View {
                 resetHistoryOverlayResizeState()
                 syncPhoneUpsideDownPresentation()
                 updateDisplayShimmerParallax()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .enterCalcIOSToggleRoundingPanel)) { _ in
+                #if canImport(UIKit)
+                guard UIDevice.current.userInterfaceIdiom == .pad else { return }
+                #endif
+                toggleOverlay(.rounding)
             }
         }
     }
@@ -524,6 +547,15 @@ private extension EnterCalcIOSView {
             get: { activeScreen.settings.usesEnterKeySymbol },
             set: { newValue in
                 updateActiveScreenSettings { $0.usesEnterKeySymbol = newValue }
+            }
+        )
+    }
+
+    var activeDisableSwipeDownToRoundBinding: Binding<Bool> {
+        Binding(
+            get: { activeScreen.settings.disablesSwipeDownToRound },
+            set: { newValue in
+                updateActiveScreenSettings { $0.disablesSwipeDownToRound = newValue }
             }
         )
     }
@@ -650,6 +682,7 @@ private extension EnterCalcIOSView {
             preferredNumberFormatRaw = updated.numberFormatStyleRawValue
             preferredClassicPercentBehavior = updated.usesClassicPercentBehavior
             preferredUsesEnterKeySymbol = updated.usesEnterKeySymbol
+            preferredDisablesSwipeDownToRound = updated.disablesSwipeDownToRound
             preferredKeypadHeightMultiplier = updated.keypadHeightMultiplier
             screenStore.syncHomeScreenSettings(updated)
         } else {
@@ -733,12 +766,58 @@ private extension EnterCalcIOSView {
                         onCopyOperationEntry: { entry in copyHistoryEntryOperationToPasteboard(entry, from: activeScreen.viewModel) }
                     )
                 }
+            } else if activeOverlay == .rounding {
+                roundingOverlayPanel(metrics: metrics) {
+                    IOSRoundingPanel(
+                        palette: palette,
+                        metrics: metrics,
+                        precision: activeScreen.viewModel.resultRoundingPrecision,
+                        maxPrecision: activeScreen.viewModel.maxResultRoundingPrecision,
+                        onPrecisionChanged: { newPrecision in
+                            activeScreen.viewModel.setResultRoundingPrecision(newPrecision)
+                        },
+                        onPrecisionCommit: {
+                            dismissActiveOverlay()
+                        },
+                        onRemove: {
+                            activeScreen.viewModel.removeResultRounding()
+                            dismissActiveOverlay()
+                        }
+                    )
+                }
             }
         }
     }
 
+    @ViewBuilder
+    func roundingOverlayPanel<Content: View>(metrics: IOSLayoutMetrics, @ViewBuilder content: () -> Content) -> some View {
+        if metrics.usesBottomOverlaySheet {
+            if metrics.mode == .phoneLandscape {
+                content()
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, metrics.overlayBottomPadding)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else {
+                content()
+                    .frame(width: metrics.overlayPanelWidth)
+                    .padding(.bottom, metrics.overlayBottomPadding)
+                    .padding(.horizontal, metrics.mode == .phonePortrait ? metrics.outerPadding : 0)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        } else {
+            content()
+                .frame(width: metrics.overlayPanelWidth)
+                .padding(.bottom, metrics.overlayBottomPadding)
+                .padding(.trailing, metrics.outerPadding)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+        }
+    }
+
     func showsOverlayScrim(metrics: IOSLayoutMetrics) -> Bool {
-        metrics.usesOverlayHistory && activeOverlay == .history
+        activeOverlay != nil && (activeOverlay != .history || metrics.usesOverlayHistory)
     }
 
     func startDeviceOrientationObservation() {
@@ -1086,6 +1165,15 @@ private extension EnterCalcIOSView {
             .padding(.top, 5)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
+            if screen.settings.disablesSwipeDownToRound {
+                roundingButton(
+                    metrics: metrics,
+                    buttonSize: metrics.headerButtonSize + 4,
+                    iconSize: metrics.headerIconFontSize + 2
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             Spacer(minLength: metrics.sectionSpacing)
 
             if showsPaginationIndicator {
@@ -1304,6 +1392,19 @@ private extension EnterCalcIOSView {
             .background(palette.surface)
             .scaleEffect(scale, anchor: .top)
             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
+            .contentShape(Rectangle())
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 18, coordinateSpace: .local)
+                    .onEnded { value in
+                        guard !screen.settings.disablesSwipeDownToRound else { return }
+                        guard !showSettingsSheet else { return }
+                        guard activeOverlay == nil else { return }
+                        guard !isResizingKeypadHeight else { return }
+                        guard value.translation.height > 36 else { return }
+                        guard abs(value.translation.height) > abs(value.translation.width) * 1.1 else { return }
+                        toggleOverlay(.rounding)
+                    }
+            )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
@@ -1326,15 +1427,38 @@ private extension EnterCalcIOSView {
         .accessibilityLabel(Text(localized("history.toggle")))
     }
 
+    func roundingButton(
+        metrics: IOSLayoutMetrics,
+        buttonSize: CGFloat? = nil,
+        iconSize: CGFloat? = nil
+    ) -> some View {
+        Button {
+            toggleOverlay(.rounding)
+        } label: {
+            Image(systemName: "slider.horizontal.below.rectangle")
+                .font(EnterCalcFont.appFont(size: iconSize ?? metrics.headerIconFontSize))
+                .frame(width: buttonSize ?? metrics.headerButtonSize, height: buttonSize ?? metrics.headerButtonSize)
+                .foregroundStyle(palette.textPrimary)
+        }
+        .buttonStyle(.plain)
+        .buttonStyle(IOSPressedButtonStyle(cornerRadius: metrics.headerCornerRadius, overlayColor: palette.headerHover))
+        .accessibilityLabel(Text(localized("rounding.title")))
+    }
+
     @ViewBuilder
     func trailingHeaderButtons(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession) -> some View {
         Spacer(minLength: 0)
+
+        settingsButton(metrics: metrics, screen: screen)
 
         if metrics.showsHistoryButton {
             historyButton(metrics: metrics)
         }
 
-        settingsButton(metrics: metrics, screen: screen)
+        if screen.settings.disablesSwipeDownToRound {
+            roundingButton(metrics: metrics)
+        }
+
         pageActionButton(metrics: metrics, screen: screen)
     }
 
@@ -1350,6 +1474,10 @@ private extension EnterCalcIOSView {
 
                 if metrics.showsHistoryButton {
                     historyButton(metrics: metrics)
+                }
+
+                if screen.settings.disablesSwipeDownToRound {
+                    roundingButton(metrics: metrics)
                 }
 
                 pageActionButton(metrics: metrics, screen: screen)
@@ -1404,6 +1532,10 @@ private extension EnterCalcIOSView {
 
                 if metrics.showsHistoryButton {
                     historyButton(metrics: metrics)
+                }
+
+                if screen.settings.disablesSwipeDownToRound {
+                    roundingButton(metrics: metrics)
                 }
 
                 if !showsLandscapeRailControls {
@@ -1843,6 +1975,14 @@ private extension EnterCalcIOSView {
     }
 
     func dismissHistoryOverlay() {
+        dismissActiveOverlay()
+    }
+
+    func dismissActiveOverlay() {
+        if activeOverlay == .rounding {
+            activeScreen.viewModel.commitResultRoundingInteraction()
+        }
+
         withAnimation(.easeInOut(duration: 0.2)) {
             activeOverlay = nil
         }
@@ -1850,6 +1990,17 @@ private extension EnterCalcIOSView {
     }
 
     func toggleOverlay(_ overlay: IOSOverlayPane) {
+        let wasActiveOverlay = activeOverlay
+
+        if wasActiveOverlay == .rounding,
+           (overlay != .rounding || wasActiveOverlay == overlay) {
+            activeScreen.viewModel.commitResultRoundingInteraction()
+        }
+
+        if overlay == .rounding {
+            activeScreen.viewModel.beginResultRounding()
+        }
+
         withAnimation(.easeInOut(duration: 0.2)) {
             activeOverlay = activeOverlay == overlay ? nil : overlay
         }
@@ -1862,7 +2013,7 @@ private extension EnterCalcIOSView {
         Color.black.opacity(metrics.mode == .padWide ? 0.22 : 0.4)
             .ignoresSafeArea()
             .onTapGesture {
-                dismissHistoryOverlay()
+                dismissActiveOverlay()
             }
     }
 
@@ -2000,6 +2151,7 @@ private struct IOSSettingsSheet: View {
     @Binding var selectedNumberFormat: String
     @Binding var usesClassicPercentBehavior: Bool
     @Binding var usesEnterKeySymbol: Bool
+    @Binding var disablesSwipeDownToRound: Bool
     let availableLanguages: [LanguageOption]
     let counterRotatesForUpsideDownPortrait: Bool
     @State private var draftTheme: AppTheme
@@ -2008,6 +2160,7 @@ private struct IOSSettingsSheet: View {
     @State private var draftNumberFormat: NumberFormatStyle
     @State private var draftClassicPercentBehavior: Bool
     @State private var draftUsesEnterKeySymbol: Bool
+    @State private var draftDisablesSwipeDownToRound: Bool
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
 
@@ -2020,6 +2173,7 @@ private struct IOSSettingsSheet: View {
         selectedNumberFormat: Binding<String>,
         usesClassicPercentBehavior: Binding<Bool>,
         usesEnterKeySymbol: Binding<Bool>,
+        disablesSwipeDownToRound: Binding<Bool>,
         availableLanguages: [LanguageOption],
         counterRotatesForUpsideDownPortrait: Bool
     ) {
@@ -2031,6 +2185,7 @@ private struct IOSSettingsSheet: View {
         self._selectedNumberFormat = selectedNumberFormat
         self._usesClassicPercentBehavior = usesClassicPercentBehavior
         self._usesEnterKeySymbol = usesEnterKeySymbol
+        self._disablesSwipeDownToRound = disablesSwipeDownToRound
         self.availableLanguages = availableLanguages
         self.counterRotatesForUpsideDownPortrait = counterRotatesForUpsideDownPortrait
         _draftTheme = State(initialValue: AppTheme(rawValue: selectedTheme.wrappedValue) ?? .system)
@@ -2039,6 +2194,7 @@ private struct IOSSettingsSheet: View {
         _draftNumberFormat = State(initialValue: NumberFormatStyle(rawValue: selectedNumberFormat.wrappedValue) ?? NumberFormatStyle.detected())
         _draftClassicPercentBehavior = State(initialValue: usesClassicPercentBehavior.wrappedValue)
         _draftUsesEnterKeySymbol = State(initialValue: usesEnterKeySymbol.wrappedValue)
+        _draftDisablesSwipeDownToRound = State(initialValue: disablesSwipeDownToRound.wrappedValue)
     }
 
     private var palette: Palette {
@@ -2066,6 +2222,7 @@ private struct IOSSettingsSheet: View {
         selectedNumberFormat = draftNumberFormat.rawValue
         usesClassicPercentBehavior = draftClassicPercentBehavior
         usesEnterKeySymbol = draftUsesEnterKeySymbol
+        disablesSwipeDownToRound = draftDisablesSwipeDownToRound
     }
 
     private func creditAttributedString() -> AttributedString {
@@ -2117,6 +2274,11 @@ private struct IOSSettingsSheet: View {
                     }
 
                     Section(localized("settings.userInterface")) {
+                        Picker(localized("settings.numberFormat.style"), selection: numberFormatSelection) {
+                            ForEach(NumberFormatStyle.allCases, id: \.self) { style in
+                                Text(style.example).tag(style)
+                            }
+                        }
                         Toggle(localized("settings.numberFormat.scientific"), isOn: $draftScientificNotation)
                         Toggle(localized("settings.percent.classicBehavior"), isOn: $draftClassicPercentBehavior)
                         Toggle(
@@ -2126,11 +2288,7 @@ private struct IOSSettingsSheet: View {
                                 set: { draftUsesEnterKeySymbol = !$0 }
                             )
                         )
-                        Picker(localized("settings.numberFormat.style"), selection: numberFormatSelection) {
-                            ForEach(NumberFormatStyle.allCases, id: \.self) { style in
-                                Text(style.example).tag(style)
-                            }
-                        }
+                        Toggle(localized("settings.rounding.disableSwipeDown"), isOn: $draftDisablesSwipeDownToRound)
                     }
 
                     Section(localized("settings.credits")) {
@@ -2163,6 +2321,159 @@ private struct IOSSettingsSheet: View {
             commitDraftSettings()
         }
         .rotationEffect(.degrees(counterRotatesForUpsideDownPortrait ? 180 : 0))
+    }
+}
+
+private struct IOSRoundingPanel: View {
+    let palette: Palette
+    let metrics: IOSLayoutMetrics
+    let precision: Int
+    let maxPrecision: Int
+    let onPrecisionChanged: (Int) -> Void
+    let onPrecisionCommit: () -> Void
+    let onRemove: () -> Void
+    @State private var sliderValue: Double
+    @State private var changedDuringInteraction: Bool = false
+
+    private static let exponentialK: Double = -0.15234446585900155
+    private static let exponentialDomainMax: Double = 16
+
+    private var allPrecisions: [Int] {
+        guard maxPrecision >= 0 else { return [] }
+        return Array(0...min(maxPrecision, Int(Self.exponentialDomainMax)))
+    }
+
+    init(
+        palette: Palette,
+        metrics: IOSLayoutMetrics,
+        precision: Int,
+        maxPrecision: Int,
+        onPrecisionChanged: @escaping (Int) -> Void,
+        onPrecisionCommit: @escaping () -> Void,
+        onRemove: @escaping () -> Void
+    ) {
+        self.palette = palette
+        self.metrics = metrics
+        self.precision = precision
+        self.maxPrecision = max(0, maxPrecision)
+        self.onPrecisionChanged = onPrecisionChanged
+        self.onPrecisionCommit = onPrecisionCommit
+        self.onRemove = onRemove
+        let initialPosition = IOSRoundingPanel.sliderPosition(for: precision, maxPrecision: max(0, maxPrecision))
+        _sliderValue = State(initialValue: initialPosition)
+    }
+
+    var body: some View {
+        VStack(spacing: metrics.panelSpacing) {
+            Text(localized("rounding.title"))
+                .font(EnterCalcFont.appFont(size: metrics.panelSecondaryFontSize + 1))
+                .foregroundStyle(palette.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            VStack(spacing: 8) {
+                Slider(
+                    value: Binding(
+                        get: { sliderValue },
+                        set: { newValue in
+                            let clamped = min(max(newValue, 0), 1)
+                            let snappedPrecision = precision(for: clamped)
+                            let snappedPosition = sliderPosition(for: snappedPrecision)
+                            guard snappedPosition != sliderValue else { return }
+                            sliderValue = snappedPosition
+                            changedDuringInteraction = true
+                            onPrecisionChanged(snappedPrecision)
+                        }
+                    ),
+                    in: 0...1,
+                    onEditingChanged: { isEditing in
+                        if !isEditing, changedDuringInteraction {
+                            changedDuringInteraction = false
+                            onPrecisionCommit()
+                        }
+                    }
+                )
+
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        ForEach(allPrecisions, id: \.self) { value in
+                            Capsule(style: .continuous)
+                                .fill(palette.textSecondary.opacity(0.35))
+                                .frame(width: 2, height: 5)
+                                .offset(x: tickOffset(for: value, width: geometry.size.width))
+                        }
+                    }
+                }
+                .frame(height: 8)
+            }
+
+            Button(role: .destructive) {
+                onRemove()
+            } label: {
+                Text(localized("rounding.remove"))
+                    .font(EnterCalcFont.appFont(size: metrics.panelPrimaryFontSize))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(palette.accent)
+        }
+        .padding(.horizontal, metrics.panelHorizontalPadding)
+        .padding(.vertical, metrics.panelVerticalPadding)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .background(
+            RoundedRectangle(cornerRadius: metrics.surfaceCornerRadius, style: .continuous)
+                .fill(palette.historyBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: metrics.surfaceCornerRadius, style: .continuous)
+                .stroke(palette.buttonBorder, lineWidth: 1)
+        )
+        .onChange(of: precision) { _, newValue in
+            sliderValue = sliderPosition(for: newValue)
+        }
+    }
+
+    private func sliderPosition(for precision: Int) -> Double {
+        Self.sliderPosition(for: precision, maxPrecision: maxPrecision)
+    }
+
+    private func precision(for normalizedPosition: Double) -> Int {
+        let clamped = min(max(normalizedPosition, 0), 1)
+        if allPrecisions.isEmpty {
+            return 0
+        }
+
+        var nearestPrecision = allPrecisions[0]
+        var nearestDistance = abs(clamped - sliderPosition(for: nearestPrecision))
+
+        for candidate in allPrecisions.dropFirst() {
+            let candidateDistance = abs(clamped - sliderPosition(for: candidate))
+            if candidateDistance < nearestDistance {
+                nearestDistance = candidateDistance
+                nearestPrecision = candidate
+            }
+        }
+
+        return nearestPrecision
+    }
+
+    private func tickOffset(for precision: Int, width: CGFloat) -> CGFloat {
+        let sliderLeftPadding: CGFloat = 1
+        let sliderUsableWidth = max(0, width - sliderLeftPadding * 2)
+        let normalized = sliderPosition(for: precision)
+        return sliderLeftPadding + CGFloat(normalized) * sliderUsableWidth
+    }
+
+    private static func sliderPosition(for precision: Int, maxPrecision: Int) -> Double {
+        let boundedPrecision = min(max(precision, 0), max(0, maxPrecision))
+        let value = Double(boundedPrecision)
+        let denominator = exp(exponentialK * exponentialDomainMax) - 1
+        if denominator == 0 {
+            return 0
+        }
+
+        let normalized = (exp(exponentialK * value) - 1) / denominator
+        return min(max(normalized, 0), 1)
     }
 }
 
@@ -2246,7 +2557,7 @@ private struct IOSHistoryPanel: View {
                                     onSelect(entry)
                                 } label: {
                                     VStack(alignment: .trailing, spacing: 4) {
-                                        Text("\(entry.displayExpression) =")
+                                        Text("\(entry.displayExpression)\(entry.displayExpression.contains("≈") ? "" : " =")")
                                             .font(EnterCalcFont.appFont(size: metrics.panelSecondaryFontSize))
                                             .foregroundColor(palette.textSecondary)
                                             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -2624,6 +2935,7 @@ private enum AppTheme: String, CaseIterable {
 
 private enum IOSOverlayPane {
     case history
+    case rounding
 }
 
 private enum IOSLayoutMode {
