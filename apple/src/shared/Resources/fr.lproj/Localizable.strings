@@ -31,6 +31,10 @@
 "history.empty" = "L’histoire n’a pas encore rendu son verdict.";
 "history.clear" = "Effacer l'historique";
 "history.copyOperation" = "Copier l'opération";
+"settings.rounding.disableSwipeDown" = "Désactiver le balayage vers le bas pour arrondir";
+"rounding.toggle" = "Afficher/masquer le panneau d'arrondi";
+"rounding.title" = "Arrondir le résultat";
+"rounding.remove" = "Supprimer l'arrondi";
 "copy" = "Copier";
 "paste" = "Coller";
 "undo" = "Annuler";

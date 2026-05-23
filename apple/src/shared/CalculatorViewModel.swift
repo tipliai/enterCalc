@@ -82,6 +82,7 @@ public final class CalculatorViewModel: ObservableObject {
     private enum ParsedPasteContent {
         case value(String)
         case replay([PasteReplayStep])
+        case roundedReplay(steps: [PasteReplayStep], precision: Int)
     }
 
     private enum ExpressionEvaluationError: Error {
@@ -123,6 +124,8 @@ public final class CalculatorViewModel: ObservableObject {
         let expressionTokens: [String]
         let openParenthesisCount: Int
         let isExpressionMode: Bool
+        let isResultRoundingEnabled: Bool
+        let resultRoundingPrecision: Int
     }
 
     @Published public private(set) var display: String = "0"
@@ -135,6 +138,8 @@ public final class CalculatorViewModel: ObservableObject {
     @Published public private(set) var usesScientificNotation: Bool = true
     @Published public private(set) var numberFormatStyle: NumberFormatStyle = .western
     @Published public private(set) var usesClassicPercentBehavior: Bool = false
+    @Published public private(set) var isResultRoundingEnabled: Bool = false
+    @Published public private(set) var resultRoundingPrecision: Int = 4
     private var currentErrorKey: String? = nil
 
     private var currentInput: String = "0"
@@ -147,10 +152,65 @@ public final class CalculatorViewModel: ObservableObject {
     private var undoStack: [CalculatorSnapshot] = []
     private var redoStack: [CalculatorSnapshot] = []
     private var suppressHistoryTracking = false
+    private var roundingInteractionSnapshot: CalculatorSnapshot?
+    private var roundingInteractionInitialEnabled: Bool?
+    private var roundingInteractionInitialPrecision: Int?
 
     public init(numberFormatStyle: NumberFormatStyle = .western, usesScientificNotation: Bool = true) {
         self.numberFormatStyle = numberFormatStyle
         self.usesScientificNotation = usesScientificNotation
+    }
+
+    public var maxResultRoundingPrecision: Int {
+        Limits.maxInputDigits
+    }
+
+    public func beginResultRounding(defaultPrecision: Int = 4) {
+        if roundingInteractionSnapshot == nil {
+            roundingInteractionSnapshot = beginUndoableChange()
+            roundingInteractionInitialEnabled = isResultRoundingEnabled
+            roundingInteractionInitialPrecision = resultRoundingPrecision
+        }
+
+        if !isResultRoundingEnabled {
+            isResultRoundingEnabled = true
+            resultRoundingPrecision = normalizedRoundingPrecision(defaultPrecision)
+        }
+        updateDisplay()
+    }
+
+    public func setResultRoundingPrecision(_ precision: Int) {
+        let normalized = normalizedRoundingPrecision(precision)
+        let didChange = resultRoundingPrecision != normalized || !isResultRoundingEnabled
+        resultRoundingPrecision = normalized
+        isResultRoundingEnabled = true
+        if didChange {
+            updateDisplay()
+        }
+    }
+
+    public func removeResultRounding() {
+        guard isResultRoundingEnabled else { return }
+        isResultRoundingEnabled = false
+        updateDisplay()
+    }
+
+    public func commitResultRoundingInteraction() {
+        guard let snapshot = roundingInteractionSnapshot else { return }
+
+        let initialEnabled = roundingInteractionInitialEnabled ?? isResultRoundingEnabled
+        let initialPrecision = roundingInteractionInitialPrecision ?? resultRoundingPrecision
+        let netChanged = initialEnabled != isResultRoundingEnabled
+            || (isResultRoundingEnabled && initialPrecision != resultRoundingPrecision)
+
+        if netChanged {
+            appendRoundedHistoryEventIfNeeded()
+        }
+
+        roundingInteractionSnapshot = nil
+        roundingInteractionInitialEnabled = nil
+        roundingInteractionInitialPrecision = nil
+        completeUndoableChange(from: snapshot)
     }
 
     public var memoryValue: Double? {
@@ -183,6 +243,7 @@ public final class CalculatorViewModel: ObservableObject {
 
     private let formatter: NumberFormatter = {
         let f = NumberFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
         f.numberStyle = .decimal
         f.usesSignificantDigits = true
         f.minimumSignificantDigits = 1
@@ -209,7 +270,7 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private var currentDoubleValue: Double {
-        decimalNumber(from: currentInput)?.doubleValue ?? 0
+        parseStoredNumber(currentInput).map { NSDecimalNumber(decimal: $0).doubleValue } ?? 0
     }
 
     // Human-readable token for the current input, including unary wrappers (e.g., "√(4)").
@@ -300,8 +361,9 @@ public final class CalculatorViewModel: ObservableObject {
             shouldResetInputOnNextDigit = false
         }
         isErrorState = false
-        if !currentInput.contains("."), currentInputDigitCount < Limits.maxInputDigits {
-            currentInput.append(".")
+        let decimalSeparator = numberFormatStyle.decimalSeparator
+        if !currentInput.contains(decimalSeparator), !currentInput.contains("."), currentInputDigitCount < Limits.maxInputDigits {
+            currentInput.append(contentsOf: decimalSeparator)
         }
         setCurrentTokenToCurrentInput()
         updateDisplay()
@@ -372,6 +434,8 @@ public final class CalculatorViewModel: ObservableObject {
         expressionTokens.removeAll()
         openParenthesisCount = 0
         isExpressionMode = false
+        isResultRoundingEnabled = false
+        resultRoundingPrecision = 4
         updateDisplay()
         completeUndoableChange(from: snapshot)
     }
@@ -605,7 +669,13 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     public func copyToPasteboard() {
-        writeStringToPasteboard(currentInput)
+        let valueToClipboard: String
+        if isResultRoundingEnabled && !isErrorState {
+            valueToClipboard = roundedValueString(precision: resultRoundingPrecision)
+        } else {
+            valueToClipboard = currentInput
+        }
+        writeStringToPasteboard(clipboardNumberString(from: valueToClipboard) ?? display)
     }
 
     public func copyOperationToPasteboard() {
@@ -614,11 +684,11 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     public func copyOperationToPasteboard(_ entry: HistoryEntry) {
-        writeStringToPasteboard(operationCopyString(expression: entry.expression, result: entry.result))
+        writeStringToPasteboard(operationCopyString(expression: entry.displayExpression, result: entry.displayResult))
     }
 
     public func copyResultToPasteboard(_ entry: HistoryEntry) {
-        writeStringToPasteboard(entry.result)
+        writeStringToPasteboard(entry.displayResult)
     }
 
     public func pasteFromPasteboard() {
@@ -637,24 +707,28 @@ public final class CalculatorViewModel: ObservableObject {
         }
         switch parsePastedContent(trimmed) {
         case .value(let rawValue):
-            guard let normalized = normalizePastedNumber(rawValue), let value = parseStoredNumber(normalized) else { return }
+            guard let normalized = normalizePastedNumber(rawValue), let value = decimalValue(fromCanonicalString: normalized) else { return }
+            let isReplacingPendingOperand = pendingOperator != nil || accumulator != nil
             currentInput = format(value)
-            expression = ""
-            lastOperator = nil
-            lastOperand = nil
-            pendingOperator = nil
-            accumulator = nil
             currentToken = displayString(for: currentInput)
-            accumulatorToken = nil
-            lastOperandToken = nil
-            lastResultSummary = ""
+            if !isReplacingPendingOperand {
+                expression = ""
+                lastOperator = nil
+                lastOperand = nil
+                pendingOperator = nil
+                accumulator = nil
+                accumulatorToken = nil
+                lastOperandToken = nil
+                lastResultSummary = ""
+            }
             shouldResetInputOnNextDigit = false
             justEvaluated = false
             isErrorState = false
             currentErrorKey = nil
+            isResultRoundingEnabled = false
             updateDisplay()
         case .replay(let steps):
-            let tempModel = CalculatorViewModel()
+            let tempModel = CalculatorViewModel(numberFormatStyle: numberFormatStyle, usesScientificNotation: usesScientificNotation)
             tempModel.suppressHistoryTracking = true
             tempModel.setClassicPercentBehaviorEnabled(usesClassicPercentBehavior)
             for step in steps {
@@ -664,18 +738,39 @@ public final class CalculatorViewModel: ObservableObject {
                 }
             }
             adoptPastedState(from: tempModel)
+            isResultRoundingEnabled = false
+        case .roundedReplay(let steps, let precision):
+            let tempModel = CalculatorViewModel(numberFormatStyle: numberFormatStyle, usesScientificNotation: usesScientificNotation)
+            tempModel.suppressHistoryTracking = true
+            tempModel.setClassicPercentBehaviorEnabled(usesClassicPercentBehavior)
+            for step in steps {
+                tempModel.applyPasteReplayStep(step)
+                if tempModel.isErrorState {
+                    break
+                }
+            }
+            adoptPastedState(from: tempModel)
+            setResultRoundingPrecision(precision)
         }
         completeUndoableChange(from: snapshot)
     }
 
     public func reuse(_ entry: HistoryEntry) {
         let snapshot = beginUndoableChange()
-        currentInput = entry.result
+        if let rounded = parseRoundedOperation(entry.expression),
+           let recalculated = evaluateExpressionString(rounded.baseExpression) {
+            currentInput = recalculated
+            setResultRoundingPrecision(rounded.precision)
+            lastResultSummary = "\(rounded.baseExpression) ="
+        } else {
+            currentInput = entry.result
+            isResultRoundingEnabled = false
+            lastResultSummary = "\(entry.expression) ="
+        }
         accumulator = nil
         pendingOperator = nil
         lastOperator = nil
         lastOperand = nil
-        lastResultSummary = "\(entry.expression) ="
         expression = ""
         currentToken = entry.displayResult
         accumulatorToken = nil
@@ -998,9 +1093,14 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func formatExpressionTokenForDisplay(_ token: String) -> String {
+        let separatorCharacters = CharacterSet(charactersIn: numberFormatStyle.decimalSeparator + numberFormatStyle.groupingSeparator)
+        if token.hasSuffix("%") || token.unicodeScalars.contains(where: { separatorCharacters.contains($0) }) {
+            return token
+        }
+
         if let normalized = normalizeDisplayNumberToken(token) {
             if let value = parseStoredNumber(normalized) {
-                return displayString(for: format(value))
+                return format(value)
             }
             return displayString(for: normalized)
         }
@@ -1147,12 +1247,38 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func appendHistory(expression: String, result: String) {
-        let displayExpression = groupedExpressionString(expression)
-        let displayResult = displayString(for: result)
+        let historyExpression: String
+        let historyResult: String
+        let displayResult: String
+        if isResultRoundingEnabled {
+            let roundedResult = roundedDisplayString(fromStoredNumber: result, precision: resultRoundingPrecision)
+            let relationSymbol = roundingRelationSymbol(fromStoredNumber: result, precision: resultRoundingPrecision)
+            if relationSymbol == "≈" {
+                historyExpression = "round(\(expression)\(numberFormatStyle.spreadsheetArgumentSeparator) \(resultRoundingPrecision)) ≈"
+            } else {
+                historyExpression = "round(\(expression)\(numberFormatStyle.spreadsheetArgumentSeparator) \(resultRoundingPrecision))"
+            }
+            historyResult = roundedResult
+            displayResult = roundedResult
+        } else {
+            historyExpression = expression
+            if result.localizedCaseInsensitiveContains("e") {
+                historyResult = result
+                displayResult = result
+            } else if let value = parseStoredNumber(result) {
+                historyResult = decimalNumberString(from: value)
+                displayResult = format(value)
+            } else {
+                historyResult = result
+                displayResult = displayString(for: result)
+            }
+        }
+
+        let displayExpression = groupedExpressionString(historyExpression)
         history.insert(
             HistoryEntry(
-                expression: expression,
-                result: result,
+                expression: historyExpression,
+                result: historyResult,
                 displayExpression: displayExpression,
                 displayResult: displayResult
             ),
@@ -1216,7 +1342,9 @@ public final class CalculatorViewModel: ObservableObject {
             lastOperandToken: lastOperandToken,
             expressionTokens: expressionTokens,
             openParenthesisCount: openParenthesisCount,
-            isExpressionMode: isExpressionMode
+            isExpressionMode: isExpressionMode,
+            isResultRoundingEnabled: isResultRoundingEnabled,
+            resultRoundingPrecision: resultRoundingPrecision
         )
     }
 
@@ -1242,6 +1370,8 @@ public final class CalculatorViewModel: ObservableObject {
         expressionTokens = snapshot.expressionTokens
         openParenthesisCount = snapshot.openParenthesisCount
         isExpressionMode = snapshot.isExpressionMode
+        isResultRoundingEnabled = snapshot.isResultRoundingEnabled
+        resultRoundingPrecision = snapshot.resultRoundingPrecision
         trimToNewestEntries(&history, maxCount: Limits.maxStoredHistoryEntries)
         trimToNewestEntries(&memoryEntries, maxCount: Limits.maxStoredMemoryEntries)
         trimToRecentSnapshots(&undoStack, maxCount: Limits.maxUndoDepth)
@@ -1249,6 +1379,11 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func currentOperationCopyString() -> String? {
+        if isResultRoundingEnabled {
+            let roundedOperation = expressionDisplay.trimmingCharacters(in: .whitespacesAndNewlines)
+            return roundedOperation.isEmpty ? nil : roundedOperation
+        }
+
         let currentExpression = expressionDisplay.trimmingCharacters(in: .whitespacesAndNewlines)
         let currentResult = display.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -1265,7 +1400,13 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func operationCopyString(expression: String, result: String) -> String {
-        "\(expression) = \(result)"
+        if expression.contains("≈") {
+            if expression.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("≈") {
+                return "\(expression) \(result)"
+            }
+            return expression
+        }
+        return "\(expression) = \(result)"
     }
 
     private func writeStringToPasteboard(_ string: String) {
@@ -1321,6 +1462,8 @@ public final class CalculatorViewModel: ObservableObject {
         expressionTokens = other.expressionTokens
         openParenthesisCount = other.openParenthesisCount
         isExpressionMode = other.isExpressionMode
+        isResultRoundingEnabled = other.isResultRoundingEnabled
+        resultRoundingPrecision = other.resultRoundingPrecision
     }
 
     private func makeExpressionPreview() -> String {
@@ -1330,7 +1473,7 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func updateDisplay() {
-        display = displayString(for: currentInput)
+        let plainDisplay = displayString(for: currentInput)
         let header: String
         if isExpressionMode {
             header = expressionPreviewHeader()
@@ -1348,90 +1491,55 @@ public final class CalculatorViewModel: ObservableObject {
         } else {
             header = lastResultSummary
         }
-        expressionDisplay = groupedExpressionString(header)
+
+        guard isResultRoundingEnabled, !isErrorState else {
+            display = plainDisplay
+            expressionDisplay = groupedExpressionString(header)
+            return
+        }
+
+        let roundedDisplay = roundedDisplayString(fromStoredNumber: currentInput, precision: resultRoundingPrecision)
+        display = roundedDisplay
+        let baseExpression = baseExpressionForRounding(from: header)
+        let relationSymbol = roundingRelationSymbol(fromStoredNumber: currentInput, precision: resultRoundingPrecision)
+        expressionDisplay = groupedExpressionString("round(\(baseExpression)\(numberFormatStyle.spreadsheetArgumentSeparator) \(resultRoundingPrecision)) \(relationSymbol) \(roundedDisplay)")
     }
 
-    /// Attempt to extract a numeric string from pasted content, tolerating currency symbols and separators.
+    /// Attempt to extract a numeric string from pasted content, using the active number style.
     private func normalizePastedNumber(_ raw: String) -> String? {
-        if raw.isEmpty { return nil }
+        normalizeNumberString(stripCommonCurrencySymbols(from: raw), treatPercentAsMultiplier: true)
+    }
 
-        // Keep only digits, separators, minus signs, and optional percent.
-        let allowed = CharacterSet(charactersIn: "0123456789.,-% '\u{00A0}\u{202F}")
-        var filtered = raw.unicodeScalars
-            .filter { allowed.contains($0) }
-            .map(String.init)
-            .joined()
+    private func stripCommonCurrencySymbols(from raw: String) -> String {
+        var working = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                let currencySymbols = CharacterSet(charactersIn: "$€£¥₹₩₽¢฿₺₫₴₪₦₱₲₡")
 
-        if filtered.isEmpty { return nil }
-
-        let digitCount = filtered.unicodeScalars.filter(CharacterSet.decimalDigits.contains).count
-        guard digitCount <= Limits.maxInputDigits else { return nil }
-
-        let hasPercent = filtered.contains("%")
-        filtered = filtered.replacingOccurrences(of: "%", with: "")
-
-        // Collapse multiple minus signs to a single leading one.
-        if let firstMinus = filtered.firstIndex(of: "-") {
-            filtered = "-" + filtered[filtered.index(after: firstMinus)...].replacingOccurrences(of: "-", with: "")
-        } else {
-            filtered = filtered.replacingOccurrences(of: "-", with: "")
+        while let first = working.first,
+                            first.unicodeScalars.allSatisfy({ currencySymbols.contains($0) }) {
+            working.removeFirst()
+            working = working.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        // Decide decimal separator (last separator wins).
-        let dotCount = filtered.filter { $0 == "." }.count
-        let commaCount = filtered.filter { $0 == "," }.count
-        let lastDot = filtered.lastIndex(of: ".")
-        let lastComma = filtered.lastIndex(of: ",")
-
-        if let lastComma = lastComma, let lastDot = lastDot {
-            if lastComma > lastDot {
-                // Comma likely decimal, dots as thousands.
-                filtered = filtered.replacingOccurrences(of: ".", with: "")
-                if let idx = filtered.lastIndex(of: ",") {
-                    filtered.replaceSubrange(idx...idx, with: ".")
-                }
-            } else {
-                // Dot likely decimal, commas as thousands.
-                filtered = filtered.replacingOccurrences(of: ",", with: "")
-            }
-        } else if lastComma != nil {
-            filtered = filtered.replacingOccurrences(of: ".", with: "")
-            if commaCount > 1 || shouldTreatSingleSeparatorAsGrouping(filtered, separator: ",") {
-                filtered = filtered.replacingOccurrences(of: ",", with: "")
-            } else {
-                filtered = filtered.replacingOccurrences(of: ",", with: ".")
-            }
-        } else if lastDot != nil {
-            filtered = filtered.replacingOccurrences(of: ",", with: "")
-            if dotCount > 1 || shouldTreatSingleSeparatorAsGrouping(filtered, separator: ".") {
-                filtered = filtered.replacingOccurrences(of: ".", with: "")
-            }
-        } else {
-            // Only dots or no separators: strip stray commas.
-            filtered = filtered.replacingOccurrences(of: ",", with: "")
+        while let last = working.last,
+                            last.unicodeScalars.allSatisfy({ currencySymbols.contains($0) }) {
+            working.removeLast()
+            working = working.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        // Ensure only one decimal point remains.
-        if let firstDot = filtered.firstIndex(of: ".") {
-            let after = filtered[filtered.index(after: firstDot)...].replacingOccurrences(of: ".", with: "")
-            filtered = String(filtered[..<filtered.index(after: firstDot)]) + after
-        }
-
-        // Validate
-        guard var numericValue = parseStoredNumber(filtered) else { return nil }
-
-        // Convert percent to decimal value.
-        if hasPercent {
-            numericValue = numericValue / 100
-        }
-        return decimalNumberString(from: numericValue)
+        return working
     }
 
     private func parsePastedContent(_ raw: String) -> ParsedPasteContent {
         guard raw.count <= Limits.maxPasteCharacters else {
             return .value("")
         }
-        let parts = raw.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+        let normalizedRaw = raw.replacingOccurrences(of: "≈", with: "=")
+        if let rounded = parseRoundedOperation(normalizedRaw),
+           let steps = parseReplaySteps(rounded.baseExpression) {
+            return .roundedReplay(steps: steps + [.evaluate], precision: rounded.precision)
+        }
+
+        let parts = normalizedRaw.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
         if parts.count == 2 {
             let lhs = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
             if let steps = parseReplaySteps(lhs) {
@@ -1442,11 +1550,28 @@ public final class CalculatorViewModel: ObservableObject {
             return .value(rhs.isEmpty ? lhs : rhs)
         }
 
-        if let steps = parseReplaySteps(raw) {
+        if containsReplaySyntax(normalizedRaw), let steps = parseReplaySteps(normalizedRaw) {
             return .replay(steps)
         }
 
-        return .value(raw)
+        return .value(normalizedRaw)
+    }
+
+    private func containsReplaySyntax(_ raw: String) -> Bool {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        var working = trimmed
+        if working.hasPrefix("+") || working.hasPrefix("-") || working.hasPrefix("−") {
+            working.removeFirst()
+        }
+
+        let replayCharacters = CharacterSet(charactersIn: "+−×xX*÷/()≈=")
+        if working.unicodeScalars.contains(where: { replayCharacters.contains($0) }) {
+            return true
+        }
+
+        return working.localizedCaseInsensitiveContains("sqr") || working.contains("√")
     }
 
     private func parseReplaySteps(_ raw: String) -> [PasteReplayStep]? {
@@ -1542,8 +1667,8 @@ public final class CalculatorViewModel: ObservableObject {
         }
 
         let token = String(raw[start..<index])
-        guard let normalized = normalizePastedNumber(token),
-              let value = parseStoredNumber(normalized) else {
+          guard let normalized = normalizePastedNumber(token),
+              let value = decimalValue(fromCanonicalString: normalized) else {
             index = start
             return nil
         }
@@ -1556,9 +1681,14 @@ public final class CalculatorViewModel: ObservableObject {
             unsignedFormatted.removeFirst()
         }
 
+        let decimalSeparator = numberFormatStyle.decimalSeparator.first
+        let groupingSeparators = numberFormatStyle.groupingSeparatorCharacters
+
         for character in unsignedFormatted {
-            if character == "." {
+            if let decimalSeparator, character == decimalSeparator {
                 steps.append(.decimal)
+            } else if groupingSeparators.contains(character) {
+                continue
             } else {
                 steps.append(.digit(String(character)))
             }
@@ -1610,7 +1740,7 @@ public final class CalculatorViewModel: ObservableObject {
         if shouldUseScientificNotation(for: roundedDecimal) {
             return scientificString(fromRoundedDecimal: roundedDecimal)
         }
-        return roundedDecimal
+        return groupedNumberString(roundedDecimal)
     }
 
     private func format(_ value: Double) -> String {
@@ -1621,7 +1751,7 @@ public final class CalculatorViewModel: ObservableObject {
         if shouldUseScientificNotation(for: roundedDecimal) {
             return scientificString(fromRoundedDecimal: roundedDecimal)
         }
-        return roundedDecimal
+        return groupedNumberString(roundedDecimal)
     }
 
     private func resetStateForNewEntry() {
@@ -1689,7 +1819,11 @@ public final class CalculatorViewModel: ObservableObject {
 
     public func setNumberFormatStyle(_ style: NumberFormatStyle) {
         guard numberFormatStyle != style else { return }
+        let preservedCurrentInput = parseStoredNumber(currentInput)
         numberFormatStyle = style
+        if let preservedCurrentInput {
+            currentInput = format(preservedCurrentInput)
+        }
         refreshFormattedState()
     }
 
@@ -1761,11 +1895,17 @@ public final class CalculatorViewModel: ObservableObject {
         }
 
         history = history.map {
-            HistoryEntry(
+            let displayResult: String
+            if $0.expression.contains("round(") {
+                displayResult = $0.result
+            } else {
+                displayResult = displayString(for: $0.result)
+            }
+            return HistoryEntry(
                 expression: $0.expression,
                 result: $0.result,
                 displayExpression: groupedExpressionString($0.expression),
-                displayResult: displayString(for: $0.result)
+                displayResult: displayResult
             )
         }
 
@@ -1777,7 +1917,26 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func parseStoredNumber(_ raw: String) -> Decimal? {
-        decimalNumber(from: raw)?.decimalValue
+        guard let normalized = normalizeNumberString(raw, treatPercentAsMultiplier: false) else { return nil }
+        let decimal = NSDecimalNumber(string: normalized, locale: Locale(identifier: "en_US_POSIX"))
+        return decimal == .notANumber ? nil : decimal.decimalValue
+    }
+
+    private func canonicalNumberString(from raw: String) -> String? {
+        parseStoredNumber(raw).map(decimalNumberString(from:))
+    }
+
+    private func clipboardNumberString(from raw: String) -> String? {
+        if raw.localizedCaseInsensitiveContains("e") {
+            return raw
+        }
+
+        guard let canonical = canonicalNumberString(from: raw) else { return nil }
+        if numberFormatStyle.decimalSeparator == "." {
+            return canonical
+        }
+
+        return canonical.replacingOccurrences(of: ".", with: numberFormatStyle.decimalSeparator)
     }
 
     private func displayString(for raw: String) -> String {
@@ -1836,6 +1995,216 @@ public final class CalculatorViewModel: ObservableObject {
         return scientificString(fromRoundedDecimal: plainText)
     }
 
+    private func roundedDisplayString(fromStoredNumber raw: String, precision: Int) -> String {
+        guard !shouldUseScientificNotation(for: raw),
+              var value = parseStoredNumber(raw) else {
+            return displayString(for: raw)
+        }
+
+        var rounded = Decimal.zero
+        NSDecimalRound(&rounded, &value, normalizedRoundingPrecision(precision), .plain)
+
+        var roundedText = decimalNumberString(from: rounded)
+        if normalizedRoundingPrecision(precision) == 0 {
+            if let dotIndex = roundedText.firstIndex(of: ".") {
+                roundedText = String(roundedText[..<dotIndex])
+            }
+            return groupedNumberString(roundedText)
+        }
+
+        if !roundedText.contains(".") {
+            roundedText.append(".")
+        }
+
+        let currentFractionLength = roundedText.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false).count > 1
+            ? roundedText.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false)[1].count
+            : 0
+        if currentFractionLength < normalizedRoundingPrecision(precision) {
+            roundedText.append(String(repeating: "0", count: normalizedRoundingPrecision(precision) - currentFractionLength))
+        }
+
+        return groupedNumberString(roundedText)
+    }
+
+    private func roundedValueString(precision: Int) -> String {
+        guard !shouldUseScientificNotation(for: currentInput),
+              var value = parseStoredNumber(currentInput) else {
+            return currentInput
+        }
+
+        var rounded = Decimal.zero
+        NSDecimalRound(&rounded, &value, normalizedRoundingPrecision(precision), .plain)
+
+        var roundedText = decimalNumberString(from: rounded)
+        if normalizedRoundingPrecision(precision) == 0 {
+            if let dotIndex = roundedText.firstIndex(of: ".") {
+                roundedText = String(roundedText[..<dotIndex])
+            }
+            return roundedText
+        }
+
+        if !roundedText.contains(".") {
+            roundedText.append(".")
+        }
+
+        let currentFractionLength = roundedText.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false).count > 1
+            ? roundedText.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false)[1].count
+            : 0
+        if currentFractionLength < normalizedRoundingPrecision(precision) {
+            roundedText.append(String(repeating: "0", count: normalizedRoundingPrecision(precision) - currentFractionLength))
+        }
+
+        return roundedText
+    }
+
+    private func roundingRelationSymbol(fromStoredNumber raw: String, precision: Int) -> String {
+        isRoundingApproximate(fromStoredNumber: raw, precision: precision) ? "≈" : "="
+    }
+
+    private func isRoundingApproximate(fromStoredNumber raw: String, precision: Int) -> Bool {
+        guard var original = parseStoredNumber(raw) else { return false }
+        var rounded = Decimal.zero
+        NSDecimalRound(&rounded, &original, normalizedRoundingPrecision(precision), .plain)
+        return rounded != original
+    }
+
+    private func appendRoundedHistoryEventIfNeeded() {
+        guard isResultRoundingEnabled, !isErrorState else { return }
+
+        // Do not record rounded history while the user is still mid-expression.
+        if shouldResetInputOnNextDigit && (pendingOperator != nil || isExpressionMode) {
+            return
+        }
+
+        let header: String
+        if isExpressionMode {
+            header = expressionPreviewHeader()
+        } else if let op = pendingOperator {
+            let lhsText = accumulatorToken ?? currentToken
+            let rhsText = shouldResetInputOnNextDigit ? nil : currentToken
+            if let rhsText {
+                header = "\(lhsText) \(op.symbol) \(rhsText)"
+            } else {
+                header = "\(lhsText) \(op.symbol)"
+            }
+        } else if !expression.isEmpty {
+            header = expression
+        } else {
+            header = lastResultSummary
+        }
+
+        let baseExpression = baseExpressionForRounding(from: header)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !baseExpression.isEmpty else { return }
+
+        let roundedResult = roundedDisplayString(fromStoredNumber: currentInput, precision: resultRoundingPrecision)
+        let relationSymbol = roundingRelationSymbol(fromStoredNumber: currentInput, precision: resultRoundingPrecision)
+        let roundedExpression: String
+        if relationSymbol == "≈" {
+            roundedExpression = "round(\(baseExpression)\(numberFormatStyle.spreadsheetArgumentSeparator) \(resultRoundingPrecision)) ≈"
+        } else {
+            roundedExpression = "round(\(baseExpression)\(numberFormatStyle.spreadsheetArgumentSeparator) \(resultRoundingPrecision))"
+        }
+        if let latest = history.first,
+           latest.expression == roundedExpression,
+           latest.result == roundedResult {
+            return
+        }
+
+        appendHistory(expression: baseExpression, result: currentInput)
+        lastResultSummary = "\(baseExpression) ="
+    }
+
+    private func baseExpressionForRounding(from header: String) -> String {
+        let trimmed = header.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return currentToken
+        }
+
+        if let rounded = parseRoundedOperation(trimmed) {
+            return rounded.baseExpression
+        }
+
+        if trimmed.hasSuffix("=") {
+            return String(trimmed.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        return trimmed
+    }
+
+    private func normalizedRoundingPrecision(_ precision: Int) -> Int {
+        min(max(precision, 0), Limits.maxInputDigits)
+    }
+
+    private func parseRoundedOperation(_ raw: String) -> (baseExpression: String, precision: Int)? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("round(") else { return nil }
+
+        guard let closeIndex = roundedOperationClosingParenthesis(in: trimmed) else {
+            return nil
+        }
+
+        let argumentRange = trimmed.index(trimmed.startIndex, offsetBy: 6)..<closeIndex
+        let arguments = String(trimmed[argumentRange])
+        guard let separatorIndex = roundedOperationArgumentSeparator(in: arguments) else {
+            return nil
+        }
+
+        let expressionPart = String(arguments[..<separatorIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let precisionPart = String(arguments[arguments.index(after: separatorIndex)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !expressionPart.isEmpty, let precision = Int(precisionPart) else {
+            return nil
+        }
+
+        return (expressionPart, normalizedRoundingPrecision(precision))
+    }
+
+    private func roundedOperationClosingParenthesis(in raw: String) -> String.Index? {
+        var depth = 0
+        for index in raw.indices {
+            let character = raw[index]
+            if character == "(" {
+                depth += 1
+            } else if character == ")" {
+                depth -= 1
+                if depth == 0 {
+                    return index
+                }
+            }
+        }
+        return nil
+    }
+
+    private func roundedOperationArgumentSeparator(in raw: String) -> String.Index? {
+        guard let separator = numberFormatStyle.spreadsheetArgumentSeparator.first else { return nil }
+        var depth = 0
+        var candidate: String.Index?
+        for index in raw.indices {
+            let character = raw[index]
+            if character == "(" {
+                depth += 1
+            } else if character == ")" {
+                depth = max(0, depth - 1)
+            } else if character == separator && depth == 0 {
+                candidate = index
+            }
+        }
+        return candidate
+    }
+
+    private func evaluateExpressionString(_ expression: String) -> String? {
+        guard let steps = parseReplaySteps(expression) else { return nil }
+        let tempModel = CalculatorViewModel()
+        tempModel.suppressHistoryTracking = true
+        for step in steps + [.evaluate] {
+            tempModel.applyPasteReplayStep(step)
+            if tempModel.isErrorState {
+                return nil
+            }
+        }
+        return tempModel.currentInput
+    }
+
     private func requiresScientificNotationForSmallMagnitude(in raw: String) -> Bool {
         var working = raw
         if working.range(of: "e", options: [.caseInsensitive]) != nil {
@@ -1864,14 +2233,14 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func decimalNumber(from raw: String) -> NSDecimalNumber? {
-        let normalized = raw
-            .replacingOccurrences(of: ",", with: "")
-            .replacingOccurrences(of: " ", with: "")
-            .replacingOccurrences(of: "\u{00A0}", with: "")
-            .replacingOccurrences(of: "\u{202F}", with: "")
-
+        guard let normalized = normalizeNumberString(raw, treatPercentAsMultiplier: false) else { return nil }
         let decimal = NSDecimalNumber(string: normalized, locale: Locale(identifier: "en_US_POSIX"))
         return decimal == .notANumber ? nil : decimal
+    }
+
+    private func decimalValue(fromCanonicalString raw: String) -> Decimal? {
+        let decimal = NSDecimalNumber(string: raw, locale: Locale(identifier: "en_US_POSIX"))
+        return decimal == .notANumber ? nil : decimal.decimalValue
     }
 
     private func decimalValue(fromDisplayText raw: String) -> Decimal? {
@@ -1941,35 +2310,108 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func normalizeDisplayNumberToken(_ token: String) -> String? {
-        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        normalizeNumberString(token, treatPercentAsMultiplier: false)
+    }
+
+    private func shouldTreatSingleSeparatorAsGrouping(_ filtered: String, separator: Character) -> Bool { false }
+
+    private func normalizeNumberString(_ raw: String, treatPercentAsMultiplier: Bool) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
-        let numericTokenCharacters = CharacterSet(charactersIn: "0123456789.,-−+eE '\u{00A0}\u{202F}")
-        guard trimmed.unicodeScalars.allSatisfy({ numericTokenCharacters.contains($0) }) else {
+        let allowed = CharacterSet(charactersIn: "0123456789.,-−+eE %'\u{00A0}\u{202F}")
+        guard trimmed.unicodeScalars.allSatisfy({ allowed.contains($0) }) else {
             return nil
         }
 
-        if let exponentRange = trimmed.range(of: "e", options: [.caseInsensitive]) {
-            let mantissa = String(trimmed[..<exponentRange.lowerBound])
-            let exponent = String(trimmed[exponentRange.upperBound...])
-            guard let normalizedMantissa = normalizePastedNumber(mantissa),
-                  exponent.range(of: "^[+-]?\\d+$", options: .regularExpression) != nil else {
+        var working = trimmed
+        let hasPercent = working.contains("%")
+        if hasPercent {
+            working = working.replacingOccurrences(of: "%", with: "")
+        }
+
+        if let exponentRange = working.range(of: "e", options: [.caseInsensitive]) {
+            let mantissa = String(working[..<exponentRange.lowerBound])
+            let exponent = String(working[exponentRange.upperBound...])
+            guard exponent.range(of: "^[+-]?\\d+$", options: .regularExpression) != nil else {
+                return nil
+            }
+            guard let normalizedMantissa = normalizeNumberString(mantissa, treatPercentAsMultiplier: false) else {
                 return nil
             }
             return normalizedMantissa + "e" + exponent.lowercased()
         }
 
-        return normalizePastedNumber(trimmed)
-    }
-
-    private func shouldTreatSingleSeparatorAsGrouping(_ filtered: String, separator: Character) -> Bool {
-        guard let separatorIndex = filtered.firstIndex(of: separator), filtered.filter({ $0 == separator }).count == 1 else {
-            return false
+        var sign = ""
+        if working.hasPrefix("+") {
+            working.removeFirst()
+        } else if working.hasPrefix("-") || working.hasPrefix("−") {
+            sign = "-"
+            working.removeFirst()
         }
 
-        let digitsAfterSeparator = filtered[filtered.index(after: separatorIndex)...].unicodeScalars.filter(CharacterSet.decimalDigits.contains).count
-        let totalDigits = filtered.unicodeScalars.filter(CharacterSet.decimalDigits.contains).count
-        return digitsAfterSeparator == 3 && totalDigits > 3
+        if numberFormatStyle == .french {
+            working = working
+                .replacingOccurrences(of: "\u{00A0}", with: " ")
+                .replacingOccurrences(of: "\u{202F}", with: " ")
+        }
+
+        guard let decimalSeparator = numberFormatStyle.decimalSeparator.first else { return nil }
+        let groupingSeparators = numberFormatStyle.groupingSeparatorCharacters
+        let decimalPieces = working.split(separator: decimalSeparator, omittingEmptySubsequences: false)
+        guard decimalPieces.count <= 2 else { return nil }
+
+        let integerPart = String(decimalPieces.first ?? "")
+        let fractionPart = decimalPieces.count == 2 ? String(decimalPieces[1]) : ""
+        guard !integerPart.isEmpty || !fractionPart.isEmpty else { return nil }
+
+        guard let normalizedInteger = normalizeIntegerPart(integerPart, groupingSeparators: groupingSeparators) else {
+            return nil
+        }
+        guard fractionPart.allSatisfy({ $0.isNumber }) else { return nil }
+
+        var normalized = sign + normalizedInteger
+        if decimalPieces.count == 2 {
+            normalized.append(".")
+            normalized.append(fractionPart)
+        }
+
+        if hasPercent, treatPercentAsMultiplier {
+            guard let percentValue = NSDecimalNumber(string: normalized, locale: Locale(identifier: "en_US_POSIX")).decimalValue as Decimal? else {
+                return nil
+            }
+            return decimalNumberString(from: percentValue / 100)
+        }
+
+        return normalized
+    }
+
+    private func normalizeIntegerPart(_ integerPart: String, groupingSeparators: Set<Character>) -> String? {
+        if integerPart.isEmpty { return "" }
+
+        let hasGrouping = integerPart.contains { groupingSeparators.contains($0) }
+        if !hasGrouping {
+            return integerPart.allSatisfy({ $0.isNumber }) ? integerPart : nil
+        }
+
+        let segments = integerPart.split(omittingEmptySubsequences: false, whereSeparator: { groupingSeparators.contains($0) })
+        guard !segments.isEmpty, segments.allSatisfy({ !$0.isEmpty && $0.allSatisfy({ $0.isNumber }) }) else {
+            return nil
+        }
+
+        switch numberFormatStyle {
+        case .indian:
+            guard let last = segments.last, last.count == 3 else { return nil }
+            guard let first = segments.first, (1...3).contains(first.count) else { return nil }
+            if segments.count > 2 {
+                guard segments.dropFirst().dropLast().allSatisfy({ $0.count == 2 }) else { return nil }
+            }
+        default:
+            guard let first = segments.first, (1...3).contains(first.count) else { return nil }
+            guard segments.dropFirst().allSatisfy({ $0.count == 3 }) else { return nil }
+        }
+
+        return segments.joined()
     }
 
     private func trimToNewestEntries<T>(_ entries: inout [T], maxCount: Int) {

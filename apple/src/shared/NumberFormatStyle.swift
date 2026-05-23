@@ -33,6 +33,23 @@ public enum NumberFormatStyle: String, CaseIterable {
         }
     }
 
+    var spreadsheetArgumentSeparator: String {
+        decimalSeparator == "," ? ";" : ","
+    }
+
+    var groupingSeparatorCharacters: Set<Character> {
+        switch self {
+        case .western, .indian:
+            return [","]
+        case .european:
+            return ["."]
+        case .french:
+            return [" ", "\u{00A0}", "\u{202F}"]
+        case .swiss:
+            return ["'"]
+        }
+    }
+
     var usesIndianGrouping: Bool {
         self == .indian
     }

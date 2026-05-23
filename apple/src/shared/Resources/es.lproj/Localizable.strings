@@ -31,6 +31,10 @@
 "history.empty" = "Los libros de historia aún no hablan de ello.";
 "history.clear" = "Borrar historial";
 "history.copyOperation" = "Copiar operación";
+"settings.rounding.disableSwipeDown" = "Desactivar deslizamiento hacia abajo para redondear";
+"rounding.toggle" = "Mostrar/ocultar panel de redondeo";
+"rounding.title" = "Redondear el resultado";
+"rounding.remove" = "Eliminar redondeo";
 "copy" = "Copiar";
 "paste" = "Pegar";
 "undo" = "Deshacer";

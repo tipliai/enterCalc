@@ -35,6 +35,7 @@ private extension NSEvent.EventType {
 struct CalculatorWindowView: View {
     private enum OverlayPane {
         case history
+        case rounding
         case settings
     }
 
@@ -50,6 +51,7 @@ struct CalculatorWindowView: View {
     @State private var menuHover: Bool = false
     @State private var newWindowHover: Bool = false
     @State private var historyHover: Bool = false
+    @State private var roundingHover: Bool = false
     @State private var activeOverlay: OverlayPane? = nil
     @State private var historyTrashHover: Bool = false
     @State private var historyResizeHover: Bool = false
@@ -137,6 +139,10 @@ struct CalculatorWindowView: View {
         activeOverlay == .history
     }
 
+    private var showRoundingOverlay: Bool {
+        activeOverlay == .rounding
+    }
+
     private var showSettingsOverlay: Bool {
         activeOverlay == .settings
     }
@@ -208,6 +214,11 @@ struct CalculatorWindowView: View {
                 let isFocusedWindow = windowReference?.isKeyWindow == true || windowReference?.isMainWindow == true
                 guard isFocusedWindow else { return }
                 toggleHistoryVisibility()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .enterCalcToggleRoundingPanel)) { _ in
+                let isFocusedWindow = windowReference?.isKeyWindow == true || windowReference?.isMainWindow == true
+                guard isFocusedWindow else { return }
+                toggleRoundingOverlay()
             }
             .onChange(of: geo.size.width) { _, width in
                 currentWidth = width
@@ -286,6 +297,12 @@ struct CalculatorWindowView: View {
                                 .frame(width: geo.size.width, alignment: .top)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                                 .allowsHitTesting(activeOverlay == .history)
+                                .transition(.opacity)
+                        } else if showRoundingOverlay {
+                            roundingOverlay()
+                                .frame(width: geo.size.width, alignment: .top)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                                .allowsHitTesting(activeOverlay == .rounding)
                                 .transition(.opacity)
                         } else if showSettingsOverlay {
                             settingsOverlay
@@ -368,6 +385,25 @@ struct CalculatorWindowView: View {
                 hovering ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
             }
             .help(macLocalized("history.toggle", bundle: currentLocalizationBundle))
+
+            Button {
+                toggleRoundingOverlay()
+            } label: {
+                Image(systemName: "slider.horizontal.below.rectangle")
+                    .frame(width: 18, height: 18, alignment: .center)
+                    .padding(6)
+                    .background(headerHoverBackground(roundingHover))
+                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(primaryForeground)
+            .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .onHover { hovering in
+                roundingHover = hovering
+                hovering ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
+            }
+            .help(macLocalized("rounding.title", bundle: currentLocalizationBundle))
 
             Button {
                 storeWindowSize()
@@ -700,7 +736,32 @@ struct CalculatorWindowView: View {
             .padding(.bottom, -8)
     }
 
+    private func roundingOverlay() -> some View {
+        MacRoundingPanel(
+            palette: palette,
+            precision: viewModel.resultRoundingPrecision,
+            maxPrecision: viewModel.maxResultRoundingPrecision,
+            localizationBundle: currentLocalizationBundle,
+            onPrecisionChanged: { precision in
+                viewModel.setResultRoundingPrecision(precision)
+            },
+            onPrecisionCommit: {
+                closeRoundingOverlay()
+            },
+            onRemove: {
+                viewModel.removeResultRounding()
+                closeRoundingOverlay()
+            }
+        )
+        .padding(.bottom, -8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private func setActiveOverlay(_ overlay: OverlayPane?) {
+        if activeOverlay == .rounding, overlay != .rounding {
+            viewModel.commitResultRoundingInteraction()
+        }
+
         withAnimation(.easeInOut) {
             activeOverlay = overlay
         }
@@ -739,12 +800,29 @@ struct CalculatorWindowView: View {
         setActiveOverlay(visible ? .history : nil)
     }
 
+    private func setRoundingOverlayVisible(_ visible: Bool) {
+        if visible {
+            viewModel.beginResultRounding()
+        } else {
+            viewModel.commitResultRoundingInteraction()
+        }
+        setActiveOverlay(visible ? .rounding : nil)
+    }
+
     private func toggleHistoryOverlay() {
         setHistoryOverlayVisible(!showHistoryOverlay)
     }
 
     private func closeHistoryOverlay() {
         setHistoryOverlayVisible(false)
+    }
+
+    private func toggleRoundingOverlay() {
+        setRoundingOverlayVisible(!showRoundingOverlay)
+    }
+
+    private func closeRoundingOverlay() {
+        setRoundingOverlayVisible(false)
     }
 
     private func toggleHistoryVisibility() {
@@ -777,6 +855,8 @@ struct CalculatorWindowView: View {
         switch activeOverlay {
         case .history:
             closeHistoryOverlay()
+        case .rounding:
+            closeRoundingOverlay()
         case .settings:
             closeSettingsOverlay()
         case nil:
@@ -1317,7 +1397,7 @@ private struct HistoryEntryRow: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 3) {
-            Text("\(entry.displayExpression) =")
+            Text("\(entry.displayExpression)\(entry.displayExpression.contains("≈") ? "" : " =")")
                 .font(EnterCalcFont.appFont(size: 12))
                 .foregroundStyle(fadedForeground)
                 .frame(maxWidth: .infinity, alignment: .trailing)
@@ -1443,6 +1523,7 @@ private struct SettingsSheet: View {
     @Binding var selectedNumberFormat: NumberFormatStyle
     @Binding var usesClassicPercentBehavior: Bool
     @Binding var usesEnterKeySymbol: Bool
+    @Binding var disablesSwipeDownToRound: Bool
     @Binding var disablesButtonSound: Bool
     let availableLanguages: [LanguageOption]
     let onClose: () -> Void
@@ -1521,6 +1602,8 @@ private struct SettingsSheet: View {
                         .font(.system(size: settingsBodySize))
                         Toggle(macLocalized("settings.buttonSound.disabled", bundle: localizationBundle), isOn: $disablesButtonSound)
                             .font(.system(size: settingsBodySize))
+                        Toggle(macLocalized("settings.rounding.disableSwipeDown", bundle: localizationBundle), isOn: $disablesSwipeDownToRound)
+                            .font(.system(size: settingsBodySize))
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -1532,6 +1615,150 @@ private struct SettingsSheet: View {
         .padding(.horizontal, 20)
         .padding(.top, 20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+private struct MacRoundingPanel: View {
+    let palette: Palette
+    let precision: Int
+    let maxPrecision: Int
+    let localizationBundle: Bundle?
+    let onPrecisionChanged: (Int) -> Void
+    let onPrecisionCommit: () -> Void
+    let onRemove: () -> Void
+    @State private var sliderValue: Double
+    @State private var changedDuringInteraction: Bool = false
+
+    private static let exponentialK: Double = -0.15234446585900155
+    private static let exponentialDomainMax: Double = 16
+
+    private var allPrecisions: [Int] {
+        guard maxPrecision >= 0 else { return [] }
+        return Array(0...min(maxPrecision, Int(Self.exponentialDomainMax)))
+    }
+
+    init(
+        palette: Palette,
+        precision: Int,
+        maxPrecision: Int,
+        localizationBundle: Bundle?,
+        onPrecisionChanged: @escaping (Int) -> Void,
+        onPrecisionCommit: @escaping () -> Void,
+        onRemove: @escaping () -> Void
+    ) {
+        self.palette = palette
+        self.precision = precision
+        self.maxPrecision = max(0, maxPrecision)
+        self.localizationBundle = localizationBundle
+        self.onPrecisionChanged = onPrecisionChanged
+        self.onPrecisionCommit = onPrecisionCommit
+        self.onRemove = onRemove
+        let initialPosition = MacRoundingPanel.sliderPosition(for: precision, maxPrecision: max(0, maxPrecision))
+        _sliderValue = State(initialValue: initialPosition)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(macLocalized("rounding.title", bundle: localizationBundle))
+                .font(EnterCalcFont.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            Slider(
+                value: Binding(
+                    get: { sliderValue },
+                    set: { newValue in
+                        let clamped = min(max(newValue, 0), 1)
+                        let snappedPrecision = precision(for: clamped)
+                        let snappedPosition = sliderPosition(for: snappedPrecision)
+                        guard snappedPosition != sliderValue else { return }
+                        sliderValue = snappedPosition
+                        changedDuringInteraction = true
+                        onPrecisionChanged(snappedPrecision)
+                    }
+                ),
+                in: 0...1,
+                onEditingChanged: { isEditing in
+                    if !isEditing, changedDuringInteraction {
+                        changedDuringInteraction = false
+                        onPrecisionCommit()
+                    }
+                }
+            )
+
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    ForEach(allPrecisions, id: \.self) { value in
+                        Capsule(style: .continuous)
+                            .fill(Color.secondary.opacity(0.35))
+                            .frame(width: 2, height: 5)
+                            .offset(x: tickOffset(for: value, width: geometry.size.width))
+                    }
+                }
+            }
+            .frame(height: 8)
+
+            Button(role: .destructive) {
+                onRemove()
+            } label: {
+                Text(macLocalized("rounding.remove", bundle: localizationBundle))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(palette.accent)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(palette.historyBackground)
+        )
+        .onChange(of: precision) { _, newValue in
+            sliderValue = sliderPosition(for: newValue)
+        }
+    }
+
+    private func sliderPosition(for precision: Int) -> Double {
+        Self.sliderPosition(for: precision, maxPrecision: maxPrecision)
+    }
+
+    private func precision(for normalizedPosition: Double) -> Int {
+        let clamped = min(max(normalizedPosition, 0), 1)
+        if allPrecisions.isEmpty {
+            return 0
+        }
+
+        var nearestPrecision = allPrecisions[0]
+        var nearestDistance = abs(clamped - sliderPosition(for: nearestPrecision))
+
+        for candidate in allPrecisions.dropFirst() {
+            let candidateDistance = abs(clamped - sliderPosition(for: candidate))
+            if candidateDistance < nearestDistance {
+                nearestDistance = candidateDistance
+                nearestPrecision = candidate
+            }
+        }
+
+        return nearestPrecision
+    }
+
+    private func tickOffset(for precision: Int, width: CGFloat) -> CGFloat {
+        let sliderLeftPadding: CGFloat = 1
+        let sliderUsableWidth = max(0, width - sliderLeftPadding * 2)
+        let normalized = sliderPosition(for: precision)
+        return sliderLeftPadding + CGFloat(normalized) * sliderUsableWidth
+    }
+
+    private static func sliderPosition(for precision: Int, maxPrecision: Int) -> Double {
+        let boundedPrecision = min(max(precision, 0), max(0, maxPrecision))
+        let value = Double(boundedPrecision)
+        let denominator = exp(exponentialK * exponentialDomainMax) - 1
+        if denominator == 0 {
+            return 0
+        }
+
+        let normalized = (exp(exponentialK * value) - 1) / denominator
+        return min(max(normalized, 0), 1)
     }
 }
 
@@ -1632,6 +1859,12 @@ private extension CalculatorWindowView {
                 get: { windowSettings.usesEnterKeySymbol },
                 set: { newValue in
                     updateWindowSettings { $0.usesEnterKeySymbol = newValue }
+                }
+            ),
+            disablesSwipeDownToRound: Binding(
+                get: { windowSettings.disablesSwipeDownToRound },
+                set: { newValue in
+                    updateWindowSettings { $0.disablesSwipeDownToRound = newValue }
                 }
             ),
             disablesButtonSound: Binding(
