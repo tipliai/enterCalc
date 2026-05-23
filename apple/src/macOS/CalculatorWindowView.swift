@@ -286,6 +286,7 @@ struct CalculatorWindowView: View {
             maxHeight: .infinity,
             alignment: .top
         )
+        .padding(.bottom, 5)
         .coordinateSpace(name: calculatorContentCoordinateSpace)
         .overlayPreferenceValue(MemoryControlsBoundsKey.self) { anchor in
             GeometryReader { geo in
