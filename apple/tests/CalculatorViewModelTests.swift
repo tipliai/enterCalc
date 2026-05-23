@@ -1115,6 +1115,49 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(NSPasteboard.general.string(forType: .string), "9.3223")
     }
 
+    func testCommitResultRoundingDoesNotAppendHistoryForIncompletePendingOperation() {
+        let viewModel = CalculatorViewModel()
+
+        enter("12", into: viewModel)
+        viewModel.setOperator(.add)
+        viewModel.beginResultRounding(defaultPrecision: 4)
+        viewModel.commitResultRoundingInteraction()
+
+        XCTAssertTrue(viewModel.history.isEmpty)
+    }
+
+    func testOpenThenRemoveResultRoundingDoesNotAppendHistory() {
+        let viewModel = CalculatorViewModel()
+
+        pasteString("9.32227", into: viewModel)
+        viewModel.beginResultRounding(defaultPrecision: 4)
+        viewModel.removeResultRounding()
+        viewModel.commitResultRoundingInteraction()
+
+        XCTAssertTrue(viewModel.history.isEmpty)
+        XCTAssertEqual(viewModel.display, "9.32227")
+    }
+
+    func testExactRoundingUsesEqualsAndPreservesZeroPadding() throws {
+        let viewModel = CalculatorViewModel()
+
+        pasteString("5", into: viewModel)
+        viewModel.beginResultRounding(defaultPrecision: 3)
+
+        XCTAssertEqual(viewModel.display, "5.000")
+        XCTAssertEqual(viewModel.expressionDisplay, "round(5, 3) = 5.000")
+
+        viewModel.commitResultRoundingInteraction()
+
+        let entry = try XCTUnwrap(viewModel.history.first)
+        XCTAssertEqual(entry.expression, "round(5, 3)")
+        XCTAssertEqual(entry.result, "5.000")
+        XCTAssertEqual(entry.displayResult, "5.000")
+
+        viewModel.copyOperationToPasteboard(entry)
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "round(5, 3) = 5.000")
+    }
+
     func testCopyOperationThenPasteReplaysTheOperation() {
         let sourceViewModel = CalculatorViewModel()
         enter("12", into: sourceViewModel)

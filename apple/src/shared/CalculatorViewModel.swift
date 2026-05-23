@@ -1252,7 +1252,12 @@ public final class CalculatorViewModel: ObservableObject {
         let displayResult: String
         if isResultRoundingEnabled {
             let roundedResult = roundedDisplayString(fromStoredNumber: result, precision: resultRoundingPrecision)
-            historyExpression = "round(\(expression)\(numberFormatStyle.spreadsheetArgumentSeparator) \(resultRoundingPrecision)) ≈"
+            let relationSymbol = roundingRelationSymbol(fromStoredNumber: result, precision: resultRoundingPrecision)
+            if relationSymbol == "≈" {
+                historyExpression = "round(\(expression)\(numberFormatStyle.spreadsheetArgumentSeparator) \(resultRoundingPrecision)) ≈"
+            } else {
+                historyExpression = "round(\(expression)\(numberFormatStyle.spreadsheetArgumentSeparator) \(resultRoundingPrecision))"
+            }
             historyResult = roundedResult
             displayResult = roundedResult
         } else {
@@ -1496,7 +1501,8 @@ public final class CalculatorViewModel: ObservableObject {
         let roundedDisplay = roundedDisplayString(fromStoredNumber: currentInput, precision: resultRoundingPrecision)
         display = roundedDisplay
         let baseExpression = baseExpressionForRounding(from: header)
-        expressionDisplay = groupedExpressionString("round(\(baseExpression)\(numberFormatStyle.spreadsheetArgumentSeparator) \(resultRoundingPrecision)) ≈ \(roundedDisplay)")
+        let relationSymbol = roundingRelationSymbol(fromStoredNumber: currentInput, precision: resultRoundingPrecision)
+        expressionDisplay = groupedExpressionString("round(\(baseExpression)\(numberFormatStyle.spreadsheetArgumentSeparator) \(resultRoundingPrecision)) \(relationSymbol) \(roundedDisplay)")
     }
 
     /// Attempt to extract a numeric string from pasted content, using the active number style.
@@ -1890,7 +1896,7 @@ public final class CalculatorViewModel: ObservableObject {
 
         history = history.map {
             let displayResult: String
-            if $0.expression.contains("round(") && $0.expression.contains("≈") {
+            if $0.expression.contains("round(") {
                 displayResult = $0.result
             } else {
                 displayResult = displayString(for: $0.result)
@@ -2051,8 +2057,24 @@ public final class CalculatorViewModel: ObservableObject {
         return roundedText
     }
 
+    private func roundingRelationSymbol(fromStoredNumber raw: String, precision: Int) -> String {
+        isRoundingApproximate(fromStoredNumber: raw, precision: precision) ? "≈" : "="
+    }
+
+    private func isRoundingApproximate(fromStoredNumber raw: String, precision: Int) -> Bool {
+        guard var original = parseStoredNumber(raw) else { return false }
+        var rounded = Decimal.zero
+        NSDecimalRound(&rounded, &original, normalizedRoundingPrecision(precision), .plain)
+        return rounded != original
+    }
+
     private func appendRoundedHistoryEventIfNeeded() {
         guard isResultRoundingEnabled, !isErrorState else { return }
+
+        // Do not record rounded history while the user is still mid-expression.
+        if shouldResetInputOnNextDigit && (pendingOperator != nil || isExpressionMode) {
+            return
+        }
 
         let header: String
         if isExpressionMode {
@@ -2076,7 +2098,13 @@ public final class CalculatorViewModel: ObservableObject {
         guard !baseExpression.isEmpty else { return }
 
         let roundedResult = roundedDisplayString(fromStoredNumber: currentInput, precision: resultRoundingPrecision)
-        let roundedExpression = "round(\(baseExpression), \(resultRoundingPrecision)) ≈"
+        let relationSymbol = roundingRelationSymbol(fromStoredNumber: currentInput, precision: resultRoundingPrecision)
+        let roundedExpression: String
+        if relationSymbol == "≈" {
+            roundedExpression = "round(\(baseExpression)\(numberFormatStyle.spreadsheetArgumentSeparator) \(resultRoundingPrecision)) ≈"
+        } else {
+            roundedExpression = "round(\(baseExpression)\(numberFormatStyle.spreadsheetArgumentSeparator) \(resultRoundingPrecision))"
+        }
         if let latest = history.first,
            latest.expression == roundedExpression,
            latest.result == roundedResult {
