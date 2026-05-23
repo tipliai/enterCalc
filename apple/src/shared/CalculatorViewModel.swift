@@ -2381,7 +2381,11 @@ public final class CalculatorViewModel: ObservableObject {
             guard exponent.range(of: "^[+-]?\\d+$", options: .regularExpression) != nil else {
                 return nil
             }
-            guard let normalizedMantissa = normalizeNumberString(mantissa, treatPercentAsMultiplier: false) else {
+            guard let normalizedMantissa = normalizeNumberString(
+                mantissa,
+                treatPercentAsMultiplier: false,
+                style: activeStyle
+            ) else {
                 return nil
             }
             return normalizedMantissa + "e" + exponent.lowercased()
