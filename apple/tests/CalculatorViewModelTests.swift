@@ -380,6 +380,36 @@ final class CalculatorViewModelTests: XCTestCase {
         }
     }
 
+    func testChangingNumberFormatRefreshesDisplayExpressionHistoryMemoryAndClipboard() {
+        let viewModel = CalculatorViewModel(numberFormatStyle: .western)
+
+        pasteString("1234.5", into: viewModel)
+        viewModel.storeMemory()
+        viewModel.setOperator(.add)
+        pasteString("5.67", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "1,240.17")
+        XCTAssertEqual(viewModel.expressionDisplay, "1,234.5 + 5.67 =")
+        XCTAssertEqual(viewModel.history.first?.displayExpression, "1,234.5 + 5.67")
+        XCTAssertEqual(viewModel.history.first?.displayResult, "1,240.17")
+        XCTAssertEqual(viewModel.memoryDisplay, "1,234.5")
+
+        viewModel.setNumberFormatStyle(.french)
+
+        XCTAssertEqual(viewModel.display, "1 240,17")
+        XCTAssertEqual(viewModel.expressionDisplay, "1 234,5 + 5,67 =")
+        XCTAssertEqual(viewModel.history.first?.displayExpression, "1 234,5 + 5,67")
+        XCTAssertEqual(viewModel.history.first?.displayResult, "1 240,17")
+        XCTAssertEqual(viewModel.memoryDisplay, "1 234,5")
+
+        viewModel.copyToPasteboard()
+        XCTAssertEqual(clipboardString(), "1240,17")
+
+        pasteString("2,5", into: viewModel)
+        XCTAssertEqual(viewModel.display, "2,5")
+    }
+
     func testDivideByZeroSetsLocalizedErrorState() {
         let viewModel = CalculatorViewModel()
 
@@ -1183,7 +1213,25 @@ final class CalculatorViewModelTests: XCTestCase {
         let viewModel = CalculatorViewModel()
         viewModel.pasteFromPasteboard()
 
-        XCTAssertEqual(viewModel.display, "1,234.5")
+        XCTAssertEqual(viewModel.display, "1,234.50")
+        XCTAssertFalse(viewModel.isErrorState)
+    }
+
+    func testPasteFromPasteboardConvertsFrenchNumberToWesternActiveFormat() {
+        let viewModel = CalculatorViewModel(numberFormatStyle: .western)
+
+        pasteString("1 000,00", into: viewModel)
+
+        XCTAssertEqual(viewModel.display, "1,000.00")
+        XCTAssertFalse(viewModel.isErrorState)
+    }
+
+    func testPasteFromPasteboardConvertsWesternNumberToFrenchActiveFormat() {
+        let viewModel = CalculatorViewModel(numberFormatStyle: .french)
+
+        pasteString("1,000.00", into: viewModel)
+
+        XCTAssertEqual(viewModel.display, "1 000,00")
         XCTAssertFalse(viewModel.isErrorState)
     }
 

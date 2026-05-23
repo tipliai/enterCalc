@@ -709,7 +709,7 @@ public final class CalculatorViewModel: ObservableObject {
         case .value(let rawValue):
             guard let normalized = normalizePastedNumber(rawValue), let value = decimalValue(fromCanonicalString: normalized) else { return }
             let isReplacingPendingOperand = pendingOperator != nil || accumulator != nil
-            currentInput = format(value)
+            currentInput = formattedPastedInput(fromCanonical: normalized, value: value)
             currentToken = displayString(for: currentInput)
             if !isReplacingPendingOperand {
                 expression = ""
@@ -1054,7 +1054,7 @@ public final class CalculatorViewModel: ObservableObject {
 
     private func expressionTokenValue(_ token: String) -> Result<Decimal, ExpressionEvaluationError> {
         if let normalized = normalizeDisplayNumberToken(token),
-           let value = parseStoredNumber(normalized) {
+           let value = decimalValue(fromCanonicalString: normalized) {
             return .success(value)
         }
 
@@ -1093,15 +1093,11 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func formatExpressionTokenForDisplay(_ token: String) -> String {
-        let separatorCharacters = CharacterSet(charactersIn: numberFormatStyle.decimalSeparator + numberFormatStyle.groupingSeparator)
-        if token.hasSuffix("%") || token.unicodeScalars.contains(where: { separatorCharacters.contains($0) }) {
+        if token.hasSuffix("%") {
             return token
         }
 
         if let normalized = normalizeDisplayNumberToken(token) {
-            if let value = parseStoredNumber(normalized) {
-                return format(value)
-            }
             return displayString(for: normalized)
         }
 
@@ -1505,9 +1501,12 @@ public final class CalculatorViewModel: ObservableObject {
         expressionDisplay = groupedExpressionString("round(\(baseExpression)\(numberFormatStyle.spreadsheetArgumentSeparator) \(resultRoundingPrecision)) \(relationSymbol) \(roundedDisplay)")
     }
 
-    /// Attempt to extract a numeric string from pasted content, using the active number style.
+    /// Attempt to extract a numeric string from pasted content, preferring the active style and
+    /// falling back to other supported styles when the pasted format differs.
     private func normalizePastedNumber(_ raw: String) -> String? {
-        normalizeNumberString(stripCommonCurrencySymbols(from: raw), treatPercentAsMultiplier: true)
+        let stripped = stripCommonCurrencySymbols(from: raw)
+        return normalizeNumberString(stripped, treatPercentAsMultiplier: true)
+            ?? normalizeNumberStringUsingAnyStyle(stripped, treatPercentAsMultiplier: true, excluding: numberFormatStyle)
     }
 
     private func stripCommonCurrencySymbols(from raw: String) -> String {
@@ -1917,7 +1916,19 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func parseStoredNumber(_ raw: String) -> Decimal? {
-        guard let normalized = normalizeNumberString(raw, treatPercentAsMultiplier: false) else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.range(of: "^[+-]?\\d+(\\.\\d+)?([eE][+-]?\\d+)?$", options: .regularExpression) != nil {
+            let decimal = NSDecimalNumber(string: trimmed, locale: Locale(identifier: "en_US_POSIX"))
+            if decimal != .notANumber {
+                return decimal.decimalValue
+            }
+        }
+
+        guard let normalized = normalizeNumberString(raw, treatPercentAsMultiplier: false)
+            ?? normalizeNumberStringUsingAnyStyle(raw, treatPercentAsMultiplier: false, excluding: numberFormatStyle)
+        else {
+            return nil
+        }
         let decimal = NSDecimalNumber(string: normalized, locale: Locale(identifier: "en_US_POSIX"))
         return decimal == .notANumber ? nil : decimal.decimalValue
     }
@@ -2146,12 +2157,10 @@ public final class CalculatorViewModel: ObservableObject {
 
         let argumentRange = trimmed.index(trimmed.startIndex, offsetBy: 6)..<closeIndex
         let arguments = String(trimmed[argumentRange])
-        guard let separatorIndex = roundedOperationArgumentSeparator(in: arguments) else {
+        guard let (expressionPart, precisionPart) = splitRoundedOperationArguments(arguments) else {
             return nil
         }
 
-        let expressionPart = String(arguments[..<separatorIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
-        let precisionPart = String(arguments[arguments.index(after: separatorIndex)...]).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !expressionPart.isEmpty, let precision = Int(precisionPart) else {
             return nil
         }
@@ -2175,21 +2184,29 @@ public final class CalculatorViewModel: ObservableObject {
         return nil
     }
 
-    private func roundedOperationArgumentSeparator(in raw: String) -> String.Index? {
-        guard let separator = numberFormatStyle.spreadsheetArgumentSeparator.first else { return nil }
+    private func splitRoundedOperationArguments(_ raw: String) -> (String, String)? {
         var depth = 0
-        var candidate: String.Index?
+        var separatorCandidates: [String.Index] = []
         for index in raw.indices {
             let character = raw[index]
             if character == "(" {
                 depth += 1
             } else if character == ")" {
                 depth = max(0, depth - 1)
-            } else if character == separator && depth == 0 {
-                candidate = index
+            } else if depth == 0 && (character == "," || character == ";") {
+                separatorCandidates.append(index)
             }
         }
-        return candidate
+
+        for candidate in separatorCandidates.reversed() {
+            let expressionPart = String(raw[..<candidate]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let precisionPart = String(raw[raw.index(after: candidate)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !expressionPart.isEmpty, Int(precisionPart) != nil {
+                return (expressionPart, precisionPart)
+            }
+        }
+
+        return nil
     }
 
     private func evaluateExpressionString(_ expression: String) -> String? {
@@ -2245,7 +2262,33 @@ public final class CalculatorViewModel: ObservableObject {
 
     private func decimalValue(fromDisplayText raw: String) -> Decimal? {
         guard let normalized = normalizeDisplayNumberToken(raw) else { return nil }
-        return parseStoredNumber(normalized)
+        return decimalValue(fromCanonicalString: normalized)
+    }
+
+    private func formattedPastedInput(fromCanonical canonical: String, value: Decimal) -> String {
+        var formatted = format(value)
+
+        let split = canonical.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false)
+        guard split.count == 2 else { return formatted }
+        let desiredFractionLength = split[1].count
+        guard desiredFractionLength > 0 else { return formatted }
+
+        let decimalSeparator = numberFormatStyle.decimalSeparator
+        let parts = formatted.components(separatedBy: decimalSeparator)
+        if parts.count == 1 {
+            formatted.append(contentsOf: decimalSeparator)
+            formatted.append(String(repeating: "0", count: desiredFractionLength))
+            return formatted
+        }
+
+        if parts.count == 2 {
+            let currentFractionLength = parts[1].count
+            if currentFractionLength < desiredFractionLength {
+                formatted.append(String(repeating: "0", count: desiredFractionLength - currentFractionLength))
+            }
+        }
+
+        return formatted
     }
 
     private func decimalNumberString(from value: Decimal) -> String {
@@ -2311,11 +2354,13 @@ public final class CalculatorViewModel: ObservableObject {
 
     private func normalizeDisplayNumberToken(_ token: String) -> String? {
         normalizeNumberString(token, treatPercentAsMultiplier: false)
+            ?? normalizeNumberStringUsingAnyStyle(token, treatPercentAsMultiplier: false, excluding: numberFormatStyle)
     }
 
     private func shouldTreatSingleSeparatorAsGrouping(_ filtered: String, separator: Character) -> Bool { false }
 
-    private func normalizeNumberString(_ raw: String, treatPercentAsMultiplier: Bool) -> String? {
+    private func normalizeNumberString(_ raw: String, treatPercentAsMultiplier: Bool, style: NumberFormatStyle? = nil) -> String? {
+        let activeStyle = style ?? numberFormatStyle
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
@@ -2336,7 +2381,11 @@ public final class CalculatorViewModel: ObservableObject {
             guard exponent.range(of: "^[+-]?\\d+$", options: .regularExpression) != nil else {
                 return nil
             }
-            guard let normalizedMantissa = normalizeNumberString(mantissa, treatPercentAsMultiplier: false) else {
+            guard let normalizedMantissa = normalizeNumberString(
+                mantissa,
+                treatPercentAsMultiplier: false,
+                style: activeStyle
+            ) else {
                 return nil
             }
             return normalizedMantissa + "e" + exponent.lowercased()
@@ -2350,14 +2399,14 @@ public final class CalculatorViewModel: ObservableObject {
             working.removeFirst()
         }
 
-        if numberFormatStyle == .french {
+        if activeStyle == .french {
             working = working
                 .replacingOccurrences(of: "\u{00A0}", with: " ")
                 .replacingOccurrences(of: "\u{202F}", with: " ")
         }
 
-        guard let decimalSeparator = numberFormatStyle.decimalSeparator.first else { return nil }
-        let groupingSeparators = numberFormatStyle.groupingSeparatorCharacters
+        guard let decimalSeparator = activeStyle.decimalSeparator.first else { return nil }
+        let groupingSeparators = activeStyle.groupingSeparatorCharacters
         let decimalPieces = working.split(separator: decimalSeparator, omittingEmptySubsequences: false)
         guard decimalPieces.count <= 2 else { return nil }
 
@@ -2365,7 +2414,7 @@ public final class CalculatorViewModel: ObservableObject {
         let fractionPart = decimalPieces.count == 2 ? String(decimalPieces[1]) : ""
         guard !integerPart.isEmpty || !fractionPart.isEmpty else { return nil }
 
-        guard let normalizedInteger = normalizeIntegerPart(integerPart, groupingSeparators: groupingSeparators) else {
+        guard let normalizedInteger = normalizeIntegerPart(integerPart, groupingSeparators: groupingSeparators, style: activeStyle) else {
             return nil
         }
         guard fractionPart.allSatisfy({ $0.isNumber }) else { return nil }
@@ -2386,7 +2435,20 @@ public final class CalculatorViewModel: ObservableObject {
         return normalized
     }
 
-    private func normalizeIntegerPart(_ integerPart: String, groupingSeparators: Set<Character>) -> String? {
+    private func normalizeNumberStringUsingAnyStyle(
+        _ raw: String,
+        treatPercentAsMultiplier: Bool,
+        excluding excludedStyle: NumberFormatStyle? = nil
+    ) -> String? {
+        for style in NumberFormatStyle.allCases where style != excludedStyle {
+            if let normalized = normalizeNumberString(raw, treatPercentAsMultiplier: treatPercentAsMultiplier, style: style) {
+                return normalized
+            }
+        }
+        return nil
+    }
+
+    private func normalizeIntegerPart(_ integerPart: String, groupingSeparators: Set<Character>, style: NumberFormatStyle) -> String? {
         if integerPart.isEmpty { return "" }
 
         let hasGrouping = integerPart.contains { groupingSeparators.contains($0) }
@@ -2399,7 +2461,7 @@ public final class CalculatorViewModel: ObservableObject {
             return nil
         }
 
-        switch numberFormatStyle {
+        switch style {
         case .indian:
             guard let last = segments.last, last.count == 3 else { return nil }
             guard let first = segments.first, (1...3).contains(first.count) else { return nil }
