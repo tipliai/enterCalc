@@ -1394,19 +1394,28 @@ private extension EnterCalcIOSView {
             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
             .contentShape(Rectangle())
             .simultaneousGesture(
-                DragGesture(minimumDistance: 18, coordinateSpace: .local)
+                DragGesture(minimumDistance: 18, coordinateSpace: .global)
                     .onEnded { value in
-                        guard !screen.settings.disablesSwipeDownToRound else { return }
-                        guard !showSettingsSheet else { return }
-                        guard activeOverlay == nil else { return }
-                        guard !isResizingKeypadHeight else { return }
-                        guard value.translation.height > 36 else { return }
-                        guard abs(value.translation.height) > abs(value.translation.width) * 1.1 else { return }
+                        guard shouldOpenRoundingOverlayForSwipe(screen: screen, translation: value.translation) else { return }
                         toggleOverlay(.rounding)
                     }
             )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    func shouldOpenRoundingOverlayForSwipe(screen: CalculatorScreenSession, translation: CGSize) -> Bool {
+        guard !screen.settings.disablesSwipeDownToRound else { return false }
+        guard !showSettingsSheet else { return false }
+        guard activeOverlay == nil else { return false }
+        guard !isResizingKeypadHeight else { return false }
+
+        // Use screen-space movement so direction checks stay consistent in iPad landscape.
+        let verticalTravel = translation.height
+        let horizontalTravel = translation.width
+        guard verticalTravel > 36 else { return false }
+        guard abs(verticalTravel) > abs(horizontalTravel) * 1.1 else { return false }
+        return true
     }
 
     func historyButton(
