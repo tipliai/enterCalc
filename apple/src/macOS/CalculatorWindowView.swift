@@ -62,6 +62,10 @@ struct CalculatorWindowView: View {
     @State private var historyOverlayHeight: CGFloat? = nil
     @State private var historyOverlayResizeStartHeight: CGFloat = 0
     @State private var isResizingHistoryOverlay: Bool = false
+    @State private var keypadResizeHover: Bool = false
+    @State private var isResizingKeypadHeight: Bool = false
+    @State private var keypadResizeGestureStartMultiplier: Double = 1.0
+    @State private var liveKeypadHeightMultiplier: Double? = nil
     private let minimumWindowWidthPoints: CGFloat = 280
     private let minimumWindowHeightPoints: CGFloat = 452
     private let fallbackBackingScaleFactor: CGFloat = 2
@@ -73,6 +77,7 @@ struct CalculatorWindowView: View {
     @AppStorage("window.width") private var storedWindowWidth: Double = 0
     @AppStorage("window.height") private var storedWindowHeight: Double = 0
     @AppStorage("window.historyOpen") private var storedHistoryOpen: Bool = false
+    @AppStorage("window.historyOverlayHeight") private var storedHistoryOverlayHeight: Double = 0
 
     init(viewModel: CalculatorViewModel) {
         _viewModel = ObservedObject(wrappedValue: viewModel)
@@ -180,6 +185,7 @@ struct CalculatorWindowView: View {
                 normalizeWindowLanguageIfNeeded()
                 applyCurrentWindowSettings()
                 currentWidth = geo.size.width
+                historyOverlayHeight = loadStoredHistoryOverlayHeight()
                 DispatchQueue.main.async {
                     updateWindowMinSize()
                     applyStoredWindowSizeIfNeeded()
@@ -243,7 +249,9 @@ struct CalculatorWindowView: View {
 
     private var calculatorPane: some View {
         let headerToDisplaySpacing: CGFloat = 8
-        let displayToKeypadSpacing: CGFloat = 36
+        let separatorHeight: CGFloat = 32
+        let minimumDisplayHeight: CGFloat = 100
+        let minimumKeypadHeight: CGFloat = 140
 
         return VStack(alignment: .trailing, spacing: 0) {
             HStack(spacing: 6) {
@@ -252,15 +260,33 @@ struct CalculatorWindowView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, headerToDisplaySpacing)
 
-            display
-                .padding(.bottom, displayToKeypadSpacing)
-            keypadArea
+            GeometryReader { geo in
+                let availableHeight = max(geo.size.height, 1)
+                let maximumKeypadHeight = max(minimumKeypadHeight, availableHeight - minimumDisplayHeight - separatorHeight)
+                let defaultKeypadHeight = maximumKeypadHeight
+                let multiplier = activeKeypadHeightMultiplier()
+                let proposedKeypadHeight = defaultKeypadHeight * CGFloat(multiplier)
+                let keypadHeight = min(max(proposedKeypadHeight, minimumKeypadHeight), maximumKeypadHeight)
+                let displayHeight = max(minimumDisplayHeight, availableHeight - separatorHeight - keypadHeight)
+
+                VStack(spacing: 0) {
+                    display
+                        .frame(maxWidth: .infinity, minHeight: displayHeight, maxHeight: displayHeight, alignment: .top)
+
+                    keypadResizeHandle(defaultKeypadHeight: defaultKeypadHeight, height: separatorHeight)
+
+                    keypadArea
+                        .frame(maxWidth: .infinity, minHeight: keypadHeight, maxHeight: keypadHeight, alignment: .top)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
         }
         .frame(
             maxWidth: .infinity,
             maxHeight: .infinity,
             alignment: .top
         )
+        .padding(.bottom, 5)
         .coordinateSpace(name: calculatorContentCoordinateSpace)
         .overlayPreferenceValue(MemoryControlsBoundsKey.self) { anchor in
             GeometryReader { geo in
@@ -461,7 +487,6 @@ struct CalculatorWindowView: View {
         .padding(.top, 8)
         .padding(.horizontal, 8)
         .padding(.bottom, 3)
-        .frame(maxWidth: .infinity, minHeight: 100, maxHeight: 100, alignment: .top)
         .background(displayHover ? panelColor : surfaceColor)
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         .overlay(
@@ -555,6 +580,68 @@ struct CalculatorWindowView: View {
                 }
             }
         }
+    }
+
+    private func keypadResizeHandle(defaultKeypadHeight: CGFloat, height: CGFloat) -> some View {
+        let accentColor = palette.accent
+        let handleColor = isResizingKeypadHeight ? accentColor : palette.textSecondary.opacity(colorScheme == .dark ? 0.7 : 0.42)
+        let lineColor = handleColor
+        let dragGesture = DragGesture(minimumDistance: 0, coordinateSpace: .local)
+            .onChanged { value in
+                if !isResizingKeypadHeight {
+                    keypadResizeGestureStartMultiplier = activeKeypadHeightMultiplier()
+                    isResizingKeypadHeight = true
+                }
+
+                let delta = Double(value.translation.height / max(defaultKeypadHeight, 1))
+                let newMultiplier = min(max(keypadResizeGestureStartMultiplier - delta, 0.5), 1.0)
+                liveKeypadHeightMultiplier = newMultiplier
+            }
+            .onEnded { _ in
+                let finalMultiplier = activeKeypadHeightMultiplier()
+                updateWindowSettings { $0.keypadHeightMultiplier = finalMultiplier }
+                isResizingKeypadHeight = false
+                liveKeypadHeightMultiplier = nil
+            }
+
+        return ZStack {
+            RoundedRectangle(cornerRadius: 0.5, style: .continuous)
+                .fill(lineColor)
+                .frame(height: isResizingKeypadHeight ? 2 : 1)
+                .padding(.horizontal, outerHorizontalPadding + 24)
+
+            Image(systemName: "arrow.up.arrow.down")
+                .font(EnterCalcFont.appFont(size: 9))
+                .foregroundStyle(handleColor)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(surfaceColor)
+                )
+        }
+        .offset(y: -2)
+        .frame(maxWidth: .infinity)
+        .frame(height: max(height, 36))
+        .contentShape(Rectangle())
+        .simultaneousGesture(dragGesture)
+        .onHover { hovering in
+            keypadResizeHover = hovering
+            if hovering || isResizingKeypadHeight {
+                NSCursor.resizeUpDown.set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
+        .onChange(of: isResizingKeypadHeight) { _, isResizing in
+            if isResizing || keypadResizeHover {
+                NSCursor.resizeUpDown.set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
+        .accessibilityLabel(Text("Resize keypad"))
+        .accessibilityHint(Text("Drag up or down to resize the keypad"))
     }
 
     private func historyOverlay(defaultHeight: CGFloat, windowHeight: CGFloat, panelHeight: CGFloat) -> some View {
@@ -677,6 +764,9 @@ struct CalculatorWindowView: View {
                 let resolvedHeight = resolvedHistoryOverlayHeight(defaultHeight: defaultHeight, windowHeight: windowHeight)
                 if abs(resolvedHeight - defaultHeight) < 1 {
                     historyOverlayHeight = nil
+                    persistHistoryOverlayHeight(nil)
+                } else {
+                    persistHistoryOverlayHeight(resolvedHeight)
                 }
                 isResizingHistoryOverlay = false
             }
@@ -1952,6 +2042,7 @@ private extension CalculatorWindowView {
         storedWindowWidth = Double(window.frame.width)
         storedWindowHeight = Double(window.frame.height)
         storedHistoryOpen = showHistory
+        storedHistoryOverlayHeight = historyOverlayHeight.map(Double.init) ?? 0
     }
 
     func applyStoredWindowSizeIfNeeded() {
@@ -1976,7 +2067,17 @@ private extension CalculatorWindowView {
         }
         showHistory = storedHistoryOpen
         userToggledHistory = storedHistoryOpen
+        historyOverlayHeight = loadStoredHistoryOverlayHeight()
         appliedStoredSize = true
+    }
+
+    func loadStoredHistoryOverlayHeight() -> CGFloat? {
+        guard storedHistoryOverlayHeight > 0 else { return nil }
+        return CGFloat(storedHistoryOverlayHeight)
+    }
+
+    func persistHistoryOverlayHeight(_ height: CGFloat?) {
+        storedHistoryOverlayHeight = height.map(Double.init) ?? 0
     }
 
     func updateWindowMinSize() {
@@ -2021,6 +2122,11 @@ private extension CalculatorWindowView {
         guard updated != windowSettings else { return }
         windowSettings = updated
         persistWindowSettings(updated)
+    }
+
+    func activeKeypadHeightMultiplier() -> Double {
+        let liveOrStored = liveKeypadHeightMultiplier ?? windowSettings.keypadHeightMultiplier
+        return min(max(liveOrStored, 0.5), 1.0)
     }
 
     func persistWindowSettings(_ settings: CalculatorScreenSettings) {
