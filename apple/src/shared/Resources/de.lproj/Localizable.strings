@@ -29,6 +29,7 @@
 "calculator.mode.standard" = "Classic";
 "history.title" = "Verlauf";
 "history.empty" = "Davon wird die Geschichte erst noch erzählen.";
+"history.emptyAfterClear" = "";
 "history.clear" = "Verlauf löschen";
 "history.copyOperation" = "Operation kopieren";
 "settings.rounding.disableSwipeDown" = "Runterwischen zum Runden deaktivieren";

@@ -29,6 +29,7 @@
 "calculator.mode.standard" = "Classic";
 "history.title" = "履歴";
 "history.empty" = "歴史の判断はまだ先だ。";
+"history.emptyAfterClear" = "";
 "history.clear" = "履歴をクリア";
 "history.copyOperation" = "式をコピー";
 "settings.rounding.disableSwipeDown" = "下スワイプで丸める操作を無効にする";

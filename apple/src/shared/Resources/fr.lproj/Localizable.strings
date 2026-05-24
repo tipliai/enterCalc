@@ -29,6 +29,7 @@
 "calculator.mode.standard" = "Classic";
 "history.title" = "Historique";
 "history.empty" = "L’histoire n’a pas encore rendu son verdict.";
+"history.emptyAfterClear" = "";
 "history.clear" = "Effacer l'historique";
 "history.copyOperation" = "Copier l'opération";
 "settings.rounding.disableSwipeDown" = "Désactiver le balayage vers le bas pour arrondir";

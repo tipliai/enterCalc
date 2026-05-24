@@ -30,6 +30,7 @@
 "calculator.mode.standard" = "Classic";
 "history.title" = "History";
 "history.empty" = "History has yet to be written.";
+"history.emptyAfterClear" = "";
 "history.clear" = "Clear history";
 "history.copyOperation" = "Copy Operation";
 "rounding.toggle" = "Toggle Rounding Panel";
