@@ -651,11 +651,17 @@ struct CalculatorWindowView: View {
             historyOverlayHeader(defaultHeight: defaultHeight, windowHeight: windowHeight)
 
             if viewModel.history.isEmpty {
-                Text(macLocalized(didClearHistoryOverlay ? "history.emptyAfterClear" : "history.empty", bundle: currentLocalizationBundle))
-                    .font(EnterCalcFont.subheadline)
-                    .foregroundStyle(fadedForeground)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                let emptyHistoryMessage = macLocalized(didClearHistoryOverlay ? "history.emptyAfterClear" : "history.empty", bundle: currentLocalizationBundle)
+                if emptyHistoryMessage.isEmpty {
+                    Color.clear
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    Text(emptyHistoryMessage)
+                        .font(EnterCalcFont.subheadline)
+                        .foregroundStyle(fadedForeground)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                }
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
@@ -740,7 +746,8 @@ struct CalculatorWindowView: View {
         .buttonStyle(.borderless)
         .foregroundStyle(palette.textSecondary)
         .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        .help("Close")
+        .help(macLocalized("close", bundle: currentLocalizationBundle))
+        .accessibilityLabel(Text(macLocalized("close", bundle: currentLocalizationBundle)))
         .onHover { hovering in
             historyCloseHover = hovering
         }
@@ -778,6 +785,7 @@ struct CalculatorWindowView: View {
         .foregroundStyle(palette.textSecondary)
         .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         .help(macLocalized("history.clear", bundle: currentLocalizationBundle))
+        .accessibilityLabel(Text(macLocalized("history.clear", bundle: currentLocalizationBundle)))
         .onHover { hovering in
             historyTrashHover = hovering
             if hovering {
@@ -1484,12 +1492,18 @@ private struct HistoryPanel: View {
             }
 
             if entries.isEmpty {
-                Text(macLocalized(didClearHistoryInPanel ? "history.emptyAfterClear" : "history.empty", bundle: localizationBundle))
-                    .font(EnterCalcFont.subheadline)
-                    .foregroundStyle(fadedForeground)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: didClearHistoryInPanel ? .top : .center)
-                    .padding(.top, didClearHistoryInPanel ? 6 : 0)
+                let emptyHistoryMessage = macLocalized(didClearHistoryInPanel ? "history.emptyAfterClear" : "history.empty", bundle: localizationBundle)
+                if emptyHistoryMessage.isEmpty {
+                    Color.clear
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    Text(emptyHistoryMessage)
+                        .font(EnterCalcFont.subheadline)
+                        .foregroundStyle(fadedForeground)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: didClearHistoryInPanel ? .top : .center)
+                        .padding(.top, didClearHistoryInPanel ? 6 : 0)
+                }
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {

@@ -723,12 +723,15 @@ private extension EnterCalcIOSView {
 
     func closeActiveScreen() {
         guard screenStore.canCloseActiveScreen else { return }
+        let closingScreenID = activeScreen.id
         withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.88, blendDuration: 0.2)) {
             activeOverlay = nil
             isResizingHistoryOverlay = false
             liveHistoryOverlayHeight = nil
             liveHistoryOverlayScreenID = nil
-            _ = screenStore.closeActiveScreen()
+            if screenStore.closeActiveScreen() {
+                historyClearFeedbackVersionByScreen.removeValue(forKey: closingScreenID)
+            }
         }
         applyActiveScreenConfiguration()
     }
@@ -2587,6 +2590,10 @@ private struct IOSHistoryPanel: View {
         metrics.mode != .phonePortrait
     }
 
+    private var emptyHistoryMessage: String {
+        localized(didClearHistoryInOverlay ? "history.emptyAfterClear" : "history.empty")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: metrics.panelSpacing) {
             if let onResizeChanged {
@@ -2594,13 +2601,18 @@ private struct IOSHistoryPanel: View {
             }
 
             if entries.isEmpty {
-                Text(localized(didClearHistoryInOverlay ? "history.emptyAfterClear" : "history.empty"))
-                    .font(EnterCalcFont.appFont(size: metrics.panelSecondaryFontSize + 2))
-                    .foregroundColor(palette.textSecondary)
-                    .multilineTextAlignment(alignsEmptyStateToTop ? .leading : .center)
-                    .padding(.top, alignsEmptyStateToTop ? 100 : 0)
-                    .padding(.leading, alignsEmptyStateToTop ? metrics.panelHorizontalPadding : 0)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignsEmptyStateToTop ? .topLeading : .center)
+                if emptyHistoryMessage.isEmpty {
+                    Color.clear
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    Text(emptyHistoryMessage)
+                        .font(EnterCalcFont.appFont(size: metrics.panelSecondaryFontSize + 2))
+                        .foregroundColor(palette.textSecondary)
+                        .multilineTextAlignment(alignsEmptyStateToTop ? .leading : .center)
+                        .padding(.top, alignsEmptyStateToTop ? 100 : 0)
+                        .padding(.leading, alignsEmptyStateToTop ? metrics.panelHorizontalPadding : 0)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignsEmptyStateToTop ? .topLeading : .center)
+                }
             } else {
                 ScrollView(.vertical) {
                     LazyVStack(alignment: .leading, spacing: metrics.panelItemSpacing) {
@@ -2720,6 +2732,7 @@ private struct IOSHistoryPanel: View {
         .frame(width: hitTargetSize, height: hitTargetSize, alignment: .center)
         .contentShape(Rectangle())
         .buttonStyle(.plain)
+        .accessibilityLabel(Text(localized("close")))
     }
 
     private var floatingHistoryActionButton: some View {
@@ -2740,6 +2753,7 @@ private struct IOSHistoryPanel: View {
         .frame(width: hitTargetSize, height: hitTargetSize, alignment: .center)
         .contentShape(Rectangle())
         .buttonStyle(.plain)
+        .accessibilityLabel(Text(localized("history.clear")))
     }
 
     private func historyResizeHandle(onResizeChanged: @escaping (DragGesture.Value) -> Void, rowHeight: CGFloat) -> some View {
