@@ -27,7 +27,7 @@
 "settings.credit.part1" = "© 2026 Tipli AI, LLC. EnterCalc is open source and released under the MIT License. Help contribute to the project on ";
 "settings.credit.linkText" = "GitHub";
 "settings.credit.middle" = ".";
-"calculator.mode.standard" = "Classic";
+"calculator.mode.basic" = "Basic";
 "history.title" = "History";
 "history.empty" = "History has yet to be written.";
 "history.emptyAfterClear" = "";

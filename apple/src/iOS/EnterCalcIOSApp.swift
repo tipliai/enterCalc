@@ -1128,7 +1128,6 @@ private extension EnterCalcIOSView {
                     .frame(width: buttonSize ?? metrics.headerButtonSize, height: buttonSize ?? metrics.headerButtonSize)
                     .foregroundStyle(palette.textPrimary)
             }
-            .buttonStyle(.plain)
             .buttonStyle(IOSPressedButtonStyle(cornerRadius: metrics.headerCornerRadius, overlayColor: palette.headerHover))
             .accessibilityLabel(Text(localized(settingsTitleKey(for: screen))))
         }
@@ -1150,7 +1149,6 @@ private extension EnterCalcIOSView {
                 .frame(width: buttonSize ?? metrics.headerButtonSize, height: buttonSize ?? metrics.headerButtonSize)
                 .foregroundStyle(palette.textPrimary)
         }
-        .buttonStyle(.plain)
         .buttonStyle(IOSPressedButtonStyle(cornerRadius: metrics.headerCornerRadius, overlayColor: palette.headerHover))
         .disabled(screen.isHomeScreen && !screenStore.canCreateScreen)
         .opacity(screen.isHomeScreen && !screenStore.canCreateScreen ? 0.5 : 1)
@@ -1228,7 +1226,6 @@ private extension EnterCalcIOSView {
                 .frame(width: buttonSize, height: buttonSize)
                 .foregroundStyle(palette.textPrimary)
         }
-        .buttonStyle(.plain)
         .buttonStyle(IOSPressedButtonStyle(cornerRadius: metrics.headerCornerRadius, overlayColor: palette.headerHover))
         .accessibilityLabel(Text(localized("history.clear")))
     }
@@ -1478,7 +1475,6 @@ private extension EnterCalcIOSView {
                 .frame(width: buttonSize ?? metrics.headerButtonSize, height: buttonSize ?? metrics.headerButtonSize)
                 .foregroundStyle(palette.textPrimary)
         }
-        .buttonStyle(.plain)
         .buttonStyle(IOSPressedButtonStyle(cornerRadius: metrics.headerCornerRadius, overlayColor: palette.headerHover))
         .accessibilityLabel(Text(localized("history.toggle")))
     }
@@ -1496,7 +1492,6 @@ private extension EnterCalcIOSView {
                 .frame(width: buttonSize ?? metrics.headerButtonSize, height: buttonSize ?? metrics.headerButtonSize)
                 .foregroundStyle(palette.textPrimary)
         }
-        .buttonStyle(.plain)
         .buttonStyle(IOSPressedButtonStyle(cornerRadius: metrics.headerCornerRadius, overlayColor: palette.headerHover))
         .accessibilityLabel(Text(localized("rounding.title")))
     }
