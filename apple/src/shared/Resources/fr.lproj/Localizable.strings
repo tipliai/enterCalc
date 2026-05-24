@@ -26,9 +26,10 @@
 "settings.credit.part1" = "© 2026 Tipli AI, LLC. EnterCalc est open source et publié sous licence MIT. Aidez à contribuer au projet sur ";
 "settings.credit.linkText" = "GitHub";
 "settings.credit.middle" = ".";
-"calculator.mode.standard" = "Classic";
+"calculator.mode.basic" = "Basic";
 "history.title" = "Historique";
 "history.empty" = "L’histoire n’a pas encore rendu son verdict.";
+"history.emptyAfterClear" = "";
 "history.clear" = "Effacer l'historique";
 "history.copyOperation" = "Copier l'opération";
 "settings.rounding.disableSwipeDown" = "Désactiver le balayage vers le bas pour arrondir";

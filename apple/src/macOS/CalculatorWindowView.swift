@@ -54,7 +54,9 @@ struct CalculatorWindowView: View {
     @State private var roundingHover: Bool = false
     @State private var activeOverlay: OverlayPane? = nil
     @State private var historyTrashHover: Bool = false
+    @State private var historyCloseHover: Bool = false
     @State private var historyResizeHover: Bool = false
+    @State private var didClearHistoryOverlay: Bool = false
     @State private var displayHover: Bool = false
     @State private var windowReference: NSWindow? = nil
     @State private var operatorRevealProgress: Double = 0.0
@@ -645,15 +647,21 @@ struct CalculatorWindowView: View {
     }
 
     private func historyOverlay(defaultHeight: CGFloat, windowHeight: CGFloat, panelHeight: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            historyOverlayResizeHandle(defaultHeight: defaultHeight, windowHeight: windowHeight)
+        VStack(alignment: .leading, spacing: 8) {
+            historyOverlayHeader(defaultHeight: defaultHeight, windowHeight: windowHeight)
 
             if viewModel.history.isEmpty {
-                Text(macLocalized("history.empty", bundle: currentLocalizationBundle))
-                    .font(EnterCalcFont.subheadline)
-                    .foregroundStyle(fadedForeground)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                let emptyHistoryMessage = macLocalized(didClearHistoryOverlay ? "history.emptyAfterClear" : "history.empty", bundle: currentLocalizationBundle)
+                if emptyHistoryMessage.isEmpty {
+                    Color.clear
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    Text(emptyHistoryMessage)
+                        .font(EnterCalcFont.subheadline)
+                        .foregroundStyle(fadedForeground)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                }
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
@@ -676,12 +684,13 @@ struct CalculatorWindowView: View {
                     .padding(.top, 2)
                     .padding(.leading, 12)
                     .padding(.trailing, 12)
-                    .padding(.bottom, floatingHistoryActionInset)
+                    .padding(.bottom, 8)
                 }
             }
         }
         .padding(.horizontal, 5)
-        .padding(.vertical, 8)
+        .padding(.top, 0)
+        .padding(.bottom, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(memoryOverlayBackgroundColor)
         .clipShape(
@@ -695,16 +704,53 @@ struct CalculatorWindowView: View {
         )
         .padding(.horizontal, -8)
         .padding(.bottom, -8)
-        .overlay(alignment: .bottomLeading) {
-            floatingHistoryActionButton
-                .padding(.leading, 5)
-                .padding(.bottom, 8)
+        .onChange(of: viewModel.history.isEmpty) { _, isEmpty in
+            if !isEmpty {
+                didClearHistoryOverlay = false
+            }
         }
-            .frame(height: panelHeight, alignment: .top)
+        .frame(height: panelHeight, alignment: .top)
     }
 
-    private var floatingHistoryActionInset: CGFloat {
-        44
+    private func historyOverlayHeader(defaultHeight: CGFloat, windowHeight: CGFloat) -> some View {
+        let headerControlSize: CGFloat = 32
+
+        return ZStack {
+            historyOverlayResizeHandle(defaultHeight: defaultHeight, windowHeight: windowHeight)
+
+            HStack(spacing: 0) {
+                if !viewModel.history.isEmpty {
+                    floatingHistoryActionButton
+                } else {
+                    Color.clear
+                        .frame(width: headerControlSize, height: headerControlSize)
+                }
+
+                Spacer(minLength: 0)
+                floatingHistoryCloseButton
+            }
+        }
+        .frame(height: headerControlSize)
+    }
+
+    private var floatingHistoryCloseButton: some View {
+        Button {
+            closeHistoryOverlay()
+        } label: {
+            Image(systemName: "xmark")
+                .frame(width: 16, height: 16, alignment: .center)
+                .padding(8)
+                .background(historyCloseHover ? palette.headerHover : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(palette.textSecondary)
+        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .help(macLocalized("close", bundle: currentLocalizationBundle))
+        .accessibilityLabel(Text(macLocalized("close", bundle: currentLocalizationBundle)))
+        .onHover { hovering in
+            historyCloseHover = hovering
+        }
     }
 
     private var floatingHistoryActionButton: some View {
@@ -719,7 +765,14 @@ struct CalculatorWindowView: View {
                     storeWindowSize()
                 }
             } else {
-                viewModel.clearHistory()
+                if usesCompactHistoryOverlay {
+                    didClearHistoryOverlay = false
+                    closeHistoryOverlay()
+                    viewModel.clearHistory()
+                } else {
+                    didClearHistoryOverlay = true
+                    viewModel.clearHistory()
+                }
             }
         } label: {
             Image(systemName: "trash")
@@ -732,6 +785,7 @@ struct CalculatorWindowView: View {
         .foregroundStyle(palette.textSecondary)
         .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         .help(macLocalized("history.clear", bundle: currentLocalizationBundle))
+        .accessibilityLabel(Text(macLocalized("history.clear", bundle: currentLocalizationBundle)))
         .onHover { hovering in
             historyTrashHover = hovering
             if hovering {
@@ -746,11 +800,10 @@ struct CalculatorWindowView: View {
         let accentColor = palette.accent
         let handleColor = isResizingHistoryOverlay ? accentColor : palette.textSecondary.opacity(colorScheme == .dark ? 0.7 : 0.42)
         let lineColor = handleColor
-        let handleBackground = memoryOverlayBackgroundColor
         let dragGesture = DragGesture(minimumDistance: 0, coordinateSpace: .local)
             .onChanged { value in
                 let maximumHeight = maximumHistoryOverlayHeight(windowHeight: windowHeight)
-                let minimumHeight = minimumHistoryOverlayHeight(defaultHeight: defaultHeight, maximumHeight: maximumHeight)
+                let minimumHeight = minimumHistoryOverlayHeight(maximumHeight: maximumHeight)
 
                 if !isResizingHistoryOverlay {
                     historyOverlayResizeStartHeight = resolvedHistoryOverlayHeight(defaultHeight: defaultHeight, windowHeight: windowHeight)
@@ -761,8 +814,10 @@ struct CalculatorWindowView: View {
                 historyOverlayHeight = roundedHistoryOverlayHeight(min(max(proposedHeight, minimumHeight), maximumHeight))
             }
             .onEnded { _ in
+                let maximumHeight = maximumHistoryOverlayHeight(windowHeight: windowHeight)
+                let minimumHeight = minimumHistoryOverlayHeight(maximumHeight: maximumHeight)
                 let resolvedHeight = resolvedHistoryOverlayHeight(defaultHeight: defaultHeight, windowHeight: windowHeight)
-                if abs(resolvedHeight - defaultHeight) < 1 {
+                if abs(resolvedHeight - minimumHeight) < 1 {
                     historyOverlayHeight = nil
                     persistHistoryOverlayHeight(nil)
                 } else {
@@ -771,10 +826,13 @@ struct CalculatorWindowView: View {
                 isResizingHistoryOverlay = false
             }
 
-        return ZStack {
+        let handleBackground = memoryOverlayBackgroundColor
+        let handleWidth: CGFloat = 116
+
+        let handle = ZStack {
             RoundedRectangle(cornerRadius: 0.5, style: .continuous)
                 .fill(lineColor)
-                .frame(width: 116)
+                .frame(width: handleWidth)
                 .frame(height: isResizingHistoryOverlay ? 2 : 1)
 
             Image(systemName: "arrow.up.arrow.down")
@@ -787,8 +845,7 @@ struct CalculatorWindowView: View {
                         .fill(handleBackground)
                 )
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 32)
+        .frame(width: handleWidth, height: 32)
         .contentShape(Rectangle())
         .simultaneousGesture(dragGesture)
         .onHover { hovering in
@@ -808,6 +865,8 @@ struct CalculatorWindowView: View {
         }
         .accessibilityLabel(Text("Resize history"))
         .accessibilityHint(Text("Drag up or down to resize the history overlay"))
+
+        return handle
     }
 
     private var settingsOverlay: some View {
@@ -859,22 +918,23 @@ struct CalculatorWindowView: View {
             isResizingHistoryOverlay = false
             historyResizeHover = false
             historyTrashHover = false
+            historyCloseHover = false
             storedHistoryOpen = showHistory
         }
     }
 
     private func resolvedHistoryOverlayHeight(defaultHeight: CGFloat, windowHeight: CGFloat) -> CGFloat {
         let maximumHeight = maximumHistoryOverlayHeight(windowHeight: windowHeight)
-        let minimumHeight = minimumHistoryOverlayHeight(defaultHeight: defaultHeight, maximumHeight: maximumHeight)
+        let minimumHeight = minimumHistoryOverlayHeight(maximumHeight: maximumHeight)
         guard let historyOverlayHeight else {
-            return min(defaultHeight, maximumHeight)
+            return minimumHeight
         }
 
         return min(max(historyOverlayHeight, minimumHeight), maximumHeight)
     }
 
-    private func minimumHistoryOverlayHeight(defaultHeight: CGFloat, maximumHeight: CGFloat) -> CGFloat {
-        min(maximumHeight, max(160, defaultHeight * 0.66))
+    private func minimumHistoryOverlayHeight(maximumHeight: CGFloat) -> CGFloat {
+        min(maximumHeight, 160)
     }
 
     private func maximumHistoryOverlayHeight(windowHeight: CGFloat) -> CGFloat {
@@ -1397,6 +1457,7 @@ private struct HistoryPanel: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.macLocalizationBundle) private var localizationBundle
     @State private var hoverState: Bool = false
+    @State private var didClearHistoryInPanel: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -1408,6 +1469,7 @@ private struct HistoryPanel: View {
                 if !entries.isEmpty {
                     Button {
                         DebugLog.emit("UI", "History clear tapped")
+                        didClearHistoryInPanel = true
                         onClear()
                     } label: {
                         Image(systemName: "trash")
@@ -1418,7 +1480,7 @@ private struct HistoryPanel: View {
                             .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                     }
                     .buttonStyle(.borderless)
-                    .foregroundStyle(accentColor)
+                    .foregroundStyle(primaryForeground)
                     .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                     .onHover { hovering in
                         hoverState = hovering
@@ -1430,11 +1492,18 @@ private struct HistoryPanel: View {
             }
 
             if entries.isEmpty {
-                Text(macLocalized("history.empty", bundle: localizationBundle))
-                    .font(EnterCalcFont.subheadline)
-                    .foregroundStyle(fadedForeground)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                let emptyHistoryMessage = macLocalized(didClearHistoryInPanel ? "history.emptyAfterClear" : "history.empty", bundle: localizationBundle)
+                if emptyHistoryMessage.isEmpty {
+                    Color.clear
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    Text(emptyHistoryMessage)
+                        .font(EnterCalcFont.subheadline)
+                        .foregroundStyle(fadedForeground)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: didClearHistoryInPanel ? .top : .center)
+                        .padding(.top, didClearHistoryInPanel ? 6 : 0)
+                }
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
@@ -1456,6 +1525,11 @@ private struct HistoryPanel: View {
                 }
             }
         }
+        .onChange(of: entries.count) { _, count in
+            if count > 0 {
+                didClearHistoryInPanel = false
+            }
+        }
         .padding(6)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(historyBackground)
@@ -1465,8 +1539,6 @@ private struct HistoryPanel: View {
     private var primaryForeground: Color { palette.textPrimary }
 
     private var fadedForeground: Color { palette.textSecondary }
-
-    private var accentColor: Color { palette.accent }
 
     private var historyBackground: Color { palette.historyBackground }
 

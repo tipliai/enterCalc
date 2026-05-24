@@ -26,9 +26,10 @@
 "settings.credit.part1" = "© 2026 Tipli AI, LLC. EnterCalc はオープンソースで、MIT ライセンスのもとで公開されています。プロジェクトへの貢献は ";
 "settings.credit.linkText" = "GitHub";
 "settings.credit.middle" = " からお願いします。";
-"calculator.mode.standard" = "Classic";
+"calculator.mode.basic" = "Basic";
 "history.title" = "履歴";
 "history.empty" = "歴史の判断はまだ先だ。";
+"history.emptyAfterClear" = "";
 "history.clear" = "履歴をクリア";
 "history.copyOperation" = "式をコピー";
 "settings.rounding.disableSwipeDown" = "下スワイプで丸める操作を無効にする";

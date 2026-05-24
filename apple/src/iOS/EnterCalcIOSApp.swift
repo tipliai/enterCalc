@@ -269,6 +269,7 @@ struct EnterCalcIOSView: View {
     @State private var isResizingHistoryOverlay: Bool = false
     @State private var liveHistoryOverlayHeight: CGFloat? = nil
     @State private var liveHistoryOverlayScreenID: UUID? = nil
+    @State private var historyClearFeedbackVersionByScreen: [UUID: Int] = [:]
     @AppStorage("settings.theme") private var preferredThemeRaw: String = AppTheme.system.rawValue
     @AppStorage("settings.language") private var preferredLanguage: String = defaultLocalizationSelectionCode
     @AppStorage("settings.numberFormat.scientific") private var preferredScientificNotation: Bool = true
@@ -722,12 +723,15 @@ private extension EnterCalcIOSView {
 
     func closeActiveScreen() {
         guard screenStore.canCloseActiveScreen else { return }
+        let closingScreenID = activeScreen.id
         withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.88, blendDuration: 0.2)) {
             activeOverlay = nil
             isResizingHistoryOverlay = false
             liveHistoryOverlayHeight = nil
             liveHistoryOverlayScreenID = nil
-            _ = screenStore.closeActiveScreen()
+            if screenStore.closeActiveScreen() {
+                historyClearFeedbackVersionByScreen.removeValue(forKey: closingScreenID)
+            }
         }
         applyActiveScreenConfiguration()
     }
@@ -749,6 +753,7 @@ private extension EnterCalcIOSView {
                         entries: activeScreen.viewModel.history,
                         palette: palette,
                         metrics: metrics,
+                        clearFeedbackVersion: historyClearFeedbackVersion(for: activeScreen),
                         isResizing: isResizingHistoryOverlay,
                         onResizeChanged: { value in
                             updateHistoryOverlayHeight(for: activeScreen, metrics: metrics, containerHeight: containerSize.height, dragValue: value)
@@ -760,7 +765,13 @@ private extension EnterCalcIOSView {
                             activeScreen.viewModel.reuse(entry)
                             dismissHistoryOverlay()
                         },
-                        onClear: { activeScreen.viewModel.clearHistory() },
+                        onClear: {
+                            triggerHistoryClearFeedback(for: activeScreen)
+                            activeScreen.viewModel.clearHistory()
+                            if metrics.mode == .phonePortrait {
+                                dismissHistoryOverlay()
+                            }
+                        },
                         onDismiss: { dismissHistoryOverlay() },
                         onCopyEntry: { entry in copyHistoryEntryResultToPasteboard(entry, from: activeScreen.viewModel) },
                         onCopyOperationEntry: { entry in copyHistoryEntryOperationToPasteboard(entry, from: activeScreen.viewModel) }
@@ -1120,7 +1131,6 @@ private extension EnterCalcIOSView {
                     .frame(width: buttonSize ?? metrics.headerButtonSize, height: buttonSize ?? metrics.headerButtonSize)
                     .foregroundStyle(palette.textPrimary)
             }
-            .buttonStyle(.plain)
             .buttonStyle(IOSPressedButtonStyle(cornerRadius: metrics.headerCornerRadius, overlayColor: palette.headerHover))
             .accessibilityLabel(Text(localized(settingsTitleKey(for: screen))))
         }
@@ -1142,7 +1152,6 @@ private extension EnterCalcIOSView {
                 .frame(width: buttonSize ?? metrics.headerButtonSize, height: buttonSize ?? metrics.headerButtonSize)
                 .foregroundStyle(palette.textPrimary)
         }
-        .buttonStyle(.plain)
         .buttonStyle(IOSPressedButtonStyle(cornerRadius: metrics.headerCornerRadius, overlayColor: palette.headerHover))
         .disabled(screen.isHomeScreen && !screenStore.canCreateScreen)
         .opacity(screen.isHomeScreen && !screenStore.canCreateScreen ? 0.5 : 1)
@@ -1164,6 +1173,15 @@ private extension EnterCalcIOSView {
             )
             .padding(.top, 5)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            if metrics.usesInlineLandscapeHistory && !screen.viewModel.history.isEmpty {
+                landscapeHistoryClearButton(
+                    metrics: metrics,
+                    screen: screen
+                )
+                .padding(.top, max(8, metrics.sectionSpacing))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
             if screen.settings.disablesSwipeDownToRound {
                 roundingButton(
@@ -1192,6 +1210,35 @@ private extension EnterCalcIOSView {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    @ViewBuilder
+    func landscapeHistoryClearButton(
+        metrics: IOSLayoutMetrics,
+        screen: CalculatorScreenSession
+    ) -> some View {
+        let buttonSize = metrics.headerButtonSize + 4
+        let iconSize = metrics.headerIconFontSize + 2
+
+        Button {
+            triggerHistoryClearFeedback(for: screen)
+            screen.viewModel.clearHistory()
+        } label: {
+            Image(systemName: "trash")
+                .font(EnterCalcFont.appFont(size: iconSize))
+                .frame(width: buttonSize, height: buttonSize)
+                .foregroundStyle(palette.textPrimary)
+        }
+        .buttonStyle(IOSPressedButtonStyle(cornerRadius: metrics.headerCornerRadius, overlayColor: palette.headerHover))
+        .accessibilityLabel(Text(localized("history.clear")))
+    }
+
+    func triggerHistoryClearFeedback(for screen: CalculatorScreenSession) {
+        historyClearFeedbackVersionByScreen[screen.id, default: 0] += 1
+    }
+
+    func historyClearFeedbackVersion(for screen: CalculatorScreenSession) -> Int {
+        historyClearFeedbackVersionByScreen[screen.id, default: 0]
     }
 
     @ViewBuilder
@@ -1431,7 +1478,6 @@ private extension EnterCalcIOSView {
                 .frame(width: buttonSize ?? metrics.headerButtonSize, height: buttonSize ?? metrics.headerButtonSize)
                 .foregroundStyle(palette.textPrimary)
         }
-        .buttonStyle(.plain)
         .buttonStyle(IOSPressedButtonStyle(cornerRadius: metrics.headerCornerRadius, overlayColor: palette.headerHover))
         .accessibilityLabel(Text(localized("history.toggle")))
     }
@@ -1449,7 +1495,6 @@ private extension EnterCalcIOSView {
                 .frame(width: buttonSize ?? metrics.headerButtonSize, height: buttonSize ?? metrics.headerButtonSize)
                 .foregroundStyle(palette.textPrimary)
         }
-        .buttonStyle(.plain)
         .buttonStyle(IOSPressedButtonStyle(cornerRadius: metrics.headerCornerRadius, overlayColor: palette.headerHover))
         .accessibilityLabel(Text(localized("rounding.title")))
     }
@@ -1502,8 +1547,12 @@ private extension EnterCalcIOSView {
             entries: screen.viewModel.history,
             palette: palette,
             metrics: metrics,
+            clearFeedbackVersion: historyClearFeedbackVersion(for: screen),
             onSelect: { entry in screen.viewModel.reuse(entry) },
-            onClear: { screen.viewModel.clearHistory() },
+            onClear: {
+                triggerHistoryClearFeedback(for: screen)
+                screen.viewModel.clearHistory()
+            },
             onDismiss: { toggleOverlay(.history) },
             onCopyEntry: { entry in copyHistoryEntryResultToPasteboard(entry, from: screen.viewModel) },
             onCopyOperationEntry: { entry in copyHistoryEntryOperationToPasteboard(entry, from: screen.viewModel) }
@@ -2078,9 +2127,8 @@ private extension EnterCalcIOSView {
         containerHeight: CGFloat,
         dragValue: DragGesture.Value
     ) {
-        let defaultHeight = defaultHistoryOverlayHeight(metrics: metrics, containerHeight: containerHeight)
         let maximumHeight = maximumHistoryOverlayHeight(metrics: metrics, containerHeight: containerHeight)
-        let minimumHeight = minimumHistoryOverlayHeight(defaultHeight: defaultHeight, maximumHeight: maximumHeight)
+        let minimumHeight = minimumHistoryOverlayHeight(maximumHeight: maximumHeight)
 
         if !isResizingHistoryOverlay {
             historyOverlayResizeGestureStartHeight = resolvedHistoryOverlayHeight(for: screen, metrics: metrics, containerHeight: containerHeight)
@@ -2094,10 +2142,11 @@ private extension EnterCalcIOSView {
     }
 
     func finishHistoryOverlayResize(for screen: CalculatorScreenSession, metrics: IOSLayoutMetrics, containerHeight: CGFloat) {
-        let defaultHeight = defaultHistoryOverlayHeight(metrics: metrics, containerHeight: containerHeight)
+        let maximumHeight = maximumHistoryOverlayHeight(metrics: metrics, containerHeight: containerHeight)
+        let minimumHeight = minimumHistoryOverlayHeight(maximumHeight: maximumHeight)
         let resolvedHeight = resolvedHistoryOverlayHeight(for: screen, metrics: metrics, containerHeight: containerHeight)
 
-        if abs(resolvedHeight - defaultHeight) < 1 {
+        if abs(resolvedHeight - minimumHeight) < 1 {
             screen.updateHistoryOverlayHeight(nil)
         } else {
             screen.updateHistoryOverlayHeight(Double(resolvedHeight))
@@ -2109,16 +2158,15 @@ private extension EnterCalcIOSView {
     }
 
     func resolvedHistoryOverlayHeight(for screen: CalculatorScreenSession, metrics: IOSLayoutMetrics, containerHeight: CGFloat) -> CGFloat {
-        let defaultHeight = defaultHistoryOverlayHeight(metrics: metrics, containerHeight: containerHeight)
         let maximumHeight = maximumHistoryOverlayHeight(metrics: metrics, containerHeight: containerHeight)
-        let minimumHeight = minimumHistoryOverlayHeight(defaultHeight: defaultHeight, maximumHeight: maximumHeight)
+        let minimumHeight = minimumHistoryOverlayHeight(maximumHeight: maximumHeight)
 
         if liveHistoryOverlayScreenID == screen.id, let liveHistoryOverlayHeight {
             return clamp(liveHistoryOverlayHeight, to: minimumHeight...maximumHeight)
         }
 
         guard let storedHeight = screen.historyOverlayHeight else {
-            return defaultHeight
+            return minimumHeight
         }
 
         return clamp(CGFloat(storedHeight), to: minimumHeight...maximumHeight)
@@ -2130,11 +2178,11 @@ private extension EnterCalcIOSView {
 
     func defaultHistoryOverlayHeight(metrics: IOSLayoutMetrics, containerHeight: CGFloat) -> CGFloat {
         let maximumHeight = maximumHistoryOverlayHeight(metrics: metrics, containerHeight: containerHeight)
-        return min(maximumHeight, metrics.bottomOverlayPanelHeight)
+        return minimumHistoryOverlayHeight(maximumHeight: maximumHeight)
     }
 
-    func minimumHistoryOverlayHeight(defaultHeight: CGFloat, maximumHeight: CGFloat) -> CGFloat {
-        min(maximumHeight, max(160, defaultHeight * 0.66))
+    func minimumHistoryOverlayHeight(maximumHeight: CGFloat) -> CGFloat {
+        min(maximumHeight, 160)
     }
 
     func maximumHistoryOverlayHeight(metrics: IOSLayoutMetrics, containerHeight: CGFloat) -> CGFloat {
@@ -2490,6 +2538,7 @@ private struct IOSHistoryPanel: View {
     let entries: [HistoryEntry]
     let palette: Palette
     let metrics: IOSLayoutMetrics
+    let clearFeedbackVersion: Int
     let isResizing: Bool
     let onResizeChanged: ((DragGesture.Value) -> Void)?
     let onResizeEnded: (() -> Void)?
@@ -2499,15 +2548,17 @@ private struct IOSHistoryPanel: View {
     let onCopyEntry: (HistoryEntry) -> Void
     let onCopyOperationEntry: (HistoryEntry) -> Void
     @Environment(\.colorScheme) private var colorScheme
+    @State private var didClearHistoryInOverlay: Bool = false
 
-    private var floatingHistoryActionInset: CGFloat {
-        metrics.headerButtonSize + metrics.panelVerticalPadding * 2
+    private var showsCloseButton: Bool {
+        metrics.mode == .phonePortrait
     }
 
     init(
         entries: [HistoryEntry],
         palette: Palette,
         metrics: IOSLayoutMetrics,
+        clearFeedbackVersion: Int = 0,
         isResizing: Bool = false,
         onResizeChanged: ((DragGesture.Value) -> Void)? = nil,
         onResizeEnded: (() -> Void)? = nil,
@@ -2520,6 +2571,7 @@ private struct IOSHistoryPanel: View {
         self.entries = entries
         self.palette = palette
         self.metrics = metrics
+        self.clearFeedbackVersion = clearFeedbackVersion
         self.isResizing = isResizing
         self.onResizeChanged = onResizeChanged
         self.onResizeEnded = onResizeEnded
@@ -2530,18 +2582,37 @@ private struct IOSHistoryPanel: View {
         self.onCopyOperationEntry = onCopyOperationEntry
     }
 
+    private var alignsEmptyStateToTop: Bool {
+        metrics.mode == .phoneLandscape || metrics.mode == .padWide
+    }
+
+    private var shouldShowAfterClearMessage: Bool {
+        metrics.mode != .phonePortrait
+    }
+
+    private var emptyHistoryMessage: String {
+        localized(didClearHistoryInOverlay ? "history.emptyAfterClear" : "history.empty")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: metrics.panelSpacing) {
             if let onResizeChanged {
-                historyResizeHandle(onResizeChanged: onResizeChanged)
+                historyOverlayHeader(onResizeChanged: onResizeChanged)
             }
 
             if entries.isEmpty {
-                Text(localized("history.empty"))
-                    .font(EnterCalcFont.appFont(size: metrics.panelSecondaryFontSize + 2))
-                    .foregroundColor(palette.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                if emptyHistoryMessage.isEmpty {
+                    Color.clear
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    Text(emptyHistoryMessage)
+                        .font(EnterCalcFont.appFont(size: metrics.panelSecondaryFontSize + 2))
+                        .foregroundColor(palette.textSecondary)
+                        .multilineTextAlignment(alignsEmptyStateToTop ? .leading : .center)
+                        .padding(.top, alignsEmptyStateToTop ? 100 : 0)
+                        .padding(.leading, alignsEmptyStateToTop ? metrics.panelHorizontalPadding : 0)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignsEmptyStateToTop ? .topLeading : .center)
+                }
             } else {
                 ScrollView(.vertical) {
                     LazyVStack(alignment: .leading, spacing: metrics.panelItemSpacing) {
@@ -2589,35 +2660,91 @@ private struct IOSHistoryPanel: View {
                     .padding(.top, 2)
                     .padding(.leading, metrics.panelTilePadding + 6)
                     .padding(.trailing, metrics.panelTilePadding + 6)
-                    .padding(.bottom, floatingHistoryActionInset)
+                    .padding(.bottom, metrics.panelVerticalPadding)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
         .padding(.horizontal, metrics.panelHorizontalPadding)
-        .padding(.vertical, metrics.panelVerticalPadding)
+        .padding(.top, 0)
+        .padding(.bottom, metrics.panelVerticalPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(
-            RoundedRectangle(cornerRadius: metrics.surfaceCornerRadius, style: .continuous)
+            Rectangle()
                 .fill(palette.historyBackground)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: metrics.surfaceCornerRadius, style: .continuous)
+            Rectangle()
                 .stroke(palette.buttonBorder, lineWidth: 1)
         )
-        .overlay(alignment: .bottomLeading) {
-            floatingHistoryActionButton
-                .padding(.leading, metrics.panelHorizontalPadding)
-                .padding(.bottom, metrics.panelVerticalPadding)
-                .zIndex(1)
+        .onChange(of: entries.count) { _, count in
+            if count > 0 {
+                didClearHistoryInOverlay = false
+            }
         }
-        .contentShape(RoundedRectangle(cornerRadius: metrics.surfaceCornerRadius, style: .continuous))
+        .onChange(of: clearFeedbackVersion) { _, _ in
+            guard shouldShowAfterClearMessage else {
+                didClearHistoryInOverlay = false
+                return
+            }
+
+            didClearHistoryInOverlay = true
+        }
+        .contentShape(Rectangle())
+    }
+
+    private func historyOverlayHeader(onResizeChanged: @escaping (DragGesture.Value) -> Void) -> some View {
+        let headerControlSize = max(metrics.headerButtonSize, 44)
+
+        return ZStack {
+            historyResizeHandle(onResizeChanged: onResizeChanged, rowHeight: headerControlSize)
+
+            HStack(spacing: 0) {
+                if !entries.isEmpty {
+                    floatingHistoryActionButton
+                } else {
+                    Color.clear
+                        .frame(width: headerControlSize, height: headerControlSize)
+                }
+
+                Spacer(minLength: 0)
+
+                if showsCloseButton {
+                    floatingHistoryDismissButton
+                } else {
+                    Color.clear
+                        .frame(width: headerControlSize, height: headerControlSize)
+                }
+            }
+        }
+        .frame(height: headerControlSize)
+    }
+
+    private var floatingHistoryDismissButton: some View {
+        let hitTargetSize = max(metrics.headerButtonSize, 44)
+
+        return Button(action: onDismiss) {
+            Image(systemName: "xmark")
+                .font(EnterCalcFont.appFont(size: metrics.panelPrimaryFontSize * 1.15))
+                .frame(width: metrics.headerButtonSize, height: metrics.headerButtonSize)
+                .foregroundColor(palette.textSecondary)
+        }
+        .frame(width: hitTargetSize, height: hitTargetSize, alignment: .center)
+        .contentShape(Rectangle())
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(localized("close")))
     }
 
     private var floatingHistoryActionButton: some View {
         let hitTargetSize = max(metrics.headerButtonSize, 44)
 
-        return Button(action: entries.isEmpty ? onDismiss : onClear) {
+        return Button {
+            if entries.isEmpty {
+                onDismiss()
+            } else {
+                onClear()
+            }
+        } label: {
             Image(systemName: "trash")
                 .font(EnterCalcFont.appFont(size: metrics.panelPrimaryFontSize * 1.15))
                 .frame(width: metrics.headerButtonSize, height: metrics.headerButtonSize)
@@ -2626,13 +2753,13 @@ private struct IOSHistoryPanel: View {
         .frame(width: hitTargetSize, height: hitTargetSize, alignment: .center)
         .contentShape(Rectangle())
         .buttonStyle(.plain)
+        .accessibilityLabel(Text(localized("history.clear")))
     }
 
-    private func historyResizeHandle(onResizeChanged: @escaping (DragGesture.Value) -> Void) -> some View {
+    private func historyResizeHandle(onResizeChanged: @escaping (DragGesture.Value) -> Void, rowHeight: CGFloat) -> some View {
         let accentColor = palette.accent
         let handleColor = isResizing ? accentColor : palette.textSecondary.opacity(colorScheme == .dark ? 0.65 : 0.4)
         let lineColor = handleColor
-        let handleBackground = palette.historyBackground
         let dragGesture = DragGesture(minimumDistance: 0, coordinateSpace: .local)
             .onChanged { value in
                 onResizeChanged(value)
@@ -2641,10 +2768,13 @@ private struct IOSHistoryPanel: View {
                 onResizeEnded?()
             }
 
-        return ZStack {
+        let handleBackground = palette.historyBackground
+        let handleWidth = min(120, max(84, metrics.overlayPanelWidth * 0.42))
+
+        let handle = ZStack {
             RoundedRectangle(cornerRadius: 0.5, style: .continuous)
                 .fill(lineColor)
-                .frame(width: min(120, max(84, metrics.overlayPanelWidth * 0.42)))
+                .frame(width: handleWidth)
                 .frame(height: isResizing ? 2 : 1)
 
             Image(systemName: "arrow.up.arrow.down")
@@ -2657,12 +2787,13 @@ private struct IOSHistoryPanel: View {
                         .fill(handleBackground)
                 )
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 32)
+        .frame(width: handleWidth, height: rowHeight)
         .contentShape(Rectangle())
         .simultaneousGesture(dragGesture)
         .accessibilityLabel(Text("Resize history"))
         .accessibilityHint(Text("Drag up or down to resize the history overlay"))
+
+        return handle
     }
 }
 

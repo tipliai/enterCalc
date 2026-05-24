@@ -26,9 +26,10 @@
 "settings.credit.part1" = "© 2026 Tipli AI, LLC。EnterCalc 是开源软件，并基于 MIT 许可证发布。欢迎前往 ";
 "settings.credit.linkText" = "GitHub";
 "settings.credit.middle" = " 为该项目贡献力量。";
-"calculator.mode.standard" = "Classic";
+"calculator.mode.basic" = "Basic";
 "history.title" = "历史记录";
 "history.empty" = "现在下结论还为时过早。";
+"history.emptyAfterClear" = "";
 "history.clear" = "清除历史";
 "history.copyOperation" = "复制算式";
 "settings.rounding.disableSwipeDown" = "禁用下滑进行四舍五入";
