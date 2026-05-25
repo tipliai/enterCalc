@@ -1215,9 +1215,7 @@ public final class CalculatorViewModel: ObservableObject {
             case BinaryOperator.subtract.symbol:
                 result = lhs - rhs
             case BinaryOperator.multiply.symbol:
-                let lhsDbl = NSDecimalNumber(decimal: lhs).doubleValue
-                let rhsDbl = NSDecimalNumber(decimal: rhs).doubleValue
-                if rhsDbl != 0 && abs(lhsDbl) >= Self.maxFormatterMagnitude / abs(rhsDbl) { return .overflow }
+                if multiplicationWouldOverflowDisplay(lhs, rhs) { return .overflow }
                 result = lhs * rhs
             case BinaryOperator.divide.symbol:
                 if rhs == 0 { return .divideByZero }

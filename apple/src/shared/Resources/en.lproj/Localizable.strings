@@ -1,6 +1,5 @@
 "error.divideByZero" = "Cannot divide by zero";
 "error.invalidInput" = "Invalid input";
-"error.overflow" = "Overflow";
 "error.outOfRange" = "Out of range";
 "settings.title" = "Settings";
 "settings.screen.title" = "Screen Settings";

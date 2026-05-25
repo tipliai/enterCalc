@@ -1,6 +1,5 @@
 "error.divideByZero" = "Division par zéro impossible";
 "error.invalidInput" = "Entrée non valide";
-"error.overflow" = "Débordement";
 "error.outOfRange" = "Hors plage";
 "settings.title" = "Réglages";
 "settings.screen.title" = "Réglages de l’écran";
