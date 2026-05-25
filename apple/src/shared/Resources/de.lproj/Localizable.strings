@@ -1,5 +1,6 @@
 "error.divideByZero" = "Durch Null kann nicht geteilt werden";
 "error.invalidInput" = "Ungültige Eingabe";
+"error.outOfRange" = "Außerhalb des Bereichs";
 "settings.title" = "Einstellungen";
 "settings.screen.title" = "Bildschirmeinstellungen";
 "settings.close" = "Einstellungen schließen";

@@ -70,9 +70,12 @@ public final class CalculatorViewModel: ObservableObject {
     enum Limits {
         static let maxInputDigits = 16
         static let maxStoredHistoryEntries = 64
+        static let maxHistoryExpressionCharacters = 512
+        static let maxHistoryResultCharacters = 256
         static let maxStoredMemoryEntries = 64
         static let maxUndoDepth = 64
         static let maxRedoDepth = 64
+        static let maxConsecutiveSquareOrRootDepth = 25
         static let maxPasteCharacters = 512
         static let maxPasteReplaySteps = 256
         static let maxPasteNestingDepth = 32
@@ -88,6 +91,8 @@ public final class CalculatorViewModel: ObservableObject {
     private enum ExpressionEvaluationError: Error {
         case invalidInput
         case divideByZero
+        case overflow
+        case underflow
     }
 
     private enum PasteReplayStep {
@@ -240,6 +245,10 @@ public final class CalculatorViewModel: ObservableObject {
     var redoDepth: Int {
         redoStack.count
     }
+
+    // Maximum absolute value the NumberFormatter can display before clipping to 0.
+    // Determined by maximumIntegerDigits = 32 in the formatter (values >= 1e32 are clipped).
+    private static let maxFormatterMagnitude: Double = 1e32
 
     private let formatter: NumberFormatter = {
         let f = NumberFormatter()
@@ -512,6 +521,10 @@ public final class CalculatorViewModel: ObservableObject {
 
         if let _ = pendingOperator, !shouldResetInputOnNextDigit {
             performPendingOperation(addToHistory: false)
+            if isErrorState {
+                completeUndoableChange(from: snapshot)
+                return
+            }
         } else if accumulator == nil {
             accumulator = currentValue
             accumulatorToken = currentToken
@@ -576,6 +589,16 @@ public final class CalculatorViewModel: ObservableObject {
                 openParenthesisCount = 0
                 isExpressionMode = false
                 setError("error.invalidInput")
+            case .failure(.overflow):
+                expressionTokens.removeAll()
+                openParenthesisCount = 0
+                isExpressionMode = false
+                setError("error.outOfRange")
+            case .failure(.underflow):
+                expressionTokens.removeAll()
+                openParenthesisCount = 0
+                isExpressionMode = false
+                setError("error.outOfRange")
             }
             completeUndoableChange(from: snapshot)
             return
@@ -585,7 +608,18 @@ public final class CalculatorViewModel: ObservableObject {
             performPendingOperation(addToHistory: true)
         } else if let lastOp = lastOperator, let lastOperand = lastOperand {
             let lhs = currentValue
+            if lastOp == .multiply,
+               multiplicationWouldOverflowDisplay(lhs, lastOperand) {
+                setError("error.outOfRange")
+                completeUndoableChange(from: snapshot)
+                return
+            }
             let result = lastOp.apply(lhs, lastOperand)
+            if valueWouldUnderflowDisplay(result) {
+                setError("error.outOfRange")
+                completeUndoableChange(from: snapshot)
+                return
+            }
             let resultText = format(result)
             let lhsToken = currentToken
             let rhsToken = lastOperandToken ?? displayString(for: format(lastOperand))
@@ -613,6 +647,11 @@ public final class CalculatorViewModel: ObservableObject {
 
     public func reciprocal() {
         let snapshot = beginUndoableChange()
+        if nextUnaryChainDepth(for: currentToken) > Limits.maxConsecutiveSquareOrRootDepth {
+            setError("error.outOfRange")
+            completeUndoableChange(from: snapshot)
+            return
+        }
         let value = currentValue
         guard value != 0 else {
             setError("error.divideByZero")
@@ -620,7 +659,13 @@ public final class CalculatorViewModel: ObservableObject {
             return
         }
         let operandToken = currentToken
-        currentInput = format(Decimal(1) / value)
+        let result = Decimal(1) / value
+        if valueWouldUnderflowDisplay(result) {
+            setError("error.outOfRange")
+            completeUndoableChange(from: snapshot)
+            return
+        }
+        currentInput = format(result)
         currentToken = boundedDisplayToken("1/(\(operandToken))", fallback: groupedNumberString(currentInput))
         if isExpressionMode {
             applyCurrentUnaryTokenToExpression()
@@ -635,8 +680,26 @@ public final class CalculatorViewModel: ObservableObject {
     public func square() {
         guard !isErrorState else { return }
         let snapshot = beginUndoableChange()
+        if nextUnaryChainDepth(for: currentToken) > Limits.maxConsecutiveSquareOrRootDepth {
+            setError("error.outOfRange")
+            completeUndoableChange(from: snapshot)
+            return
+        }
+        let val = currentValue
+        let dbl = NSDecimalNumber(decimal: val).doubleValue
+        if abs(dbl) >= Self.maxFormatterMagnitude.squareRoot() {
+            setError("error.outOfRange")
+            completeUndoableChange(from: snapshot)
+            return
+        }
+        let result = val * val
+        if valueWouldUnderflowDisplay(result) {
+            setError("error.outOfRange")
+            completeUndoableChange(from: snapshot)
+            return
+        }
         let operandToken = currentToken
-        currentInput = format(currentValue * currentValue)
+        currentInput = format(result)
         currentToken = boundedDisplayToken("sqr(\(operandToken))", fallback: groupedNumberString(currentInput))
         if isExpressionMode {
             applyCurrentUnaryTokenToExpression()
@@ -650,12 +713,27 @@ public final class CalculatorViewModel: ObservableObject {
 
     public func squareRoot() {
         let snapshot = beginUndoableChange()
+        if nextUnaryChainDepth(for: currentToken) > Limits.maxConsecutiveSquareOrRootDepth {
+            setError("error.outOfRange")
+            completeUndoableChange(from: snapshot)
+            return
+        }
+        let decimalValue = currentValue
         let value = currentDoubleValue
         if value < 0 {
             setError("error.invalidInput")
+        } else if decimalValue != 0 && value == 0 {
+            setError("error.outOfRange")
         } else {
             let operandToken = currentToken
-            currentInput = format(sqrt(value))
+            let root = sqrt(value)
+            let rootDecimal = Decimal(root)
+            if valueWouldUnderflowDisplay(rootDecimal) {
+                setError("error.outOfRange")
+                completeUndoableChange(from: snapshot)
+                return
+            }
+            currentInput = format(rootDecimal)
             currentToken = boundedDisplayToken("√(\(operandToken))", fallback: groupedNumberString(currentInput))
             if isExpressionMode {
                 applyCurrentUnaryTokenToExpression()
@@ -1053,37 +1131,55 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func expressionTokenValue(_ token: String) -> Result<Decimal, ExpressionEvaluationError> {
+        expressionTokenValue(token, unaryDepth: 0)
+    }
+
+    private func expressionTokenValue(_ token: String, unaryDepth: Int) -> Result<Decimal, ExpressionEvaluationError> {
         if let normalized = normalizeDisplayNumberToken(token),
            let value = decimalValue(fromCanonicalString: normalized) {
             return .success(value)
         }
 
         if let inner = wrappedExpressionOperand(token, prefix: "sqr(") {
-            switch expressionTokenValue(inner) {
+            let nextDepth = unaryDepth + 1
+            if nextDepth > Limits.maxConsecutiveSquareOrRootDepth { return .failure(.underflow) }
+            switch expressionTokenValue(inner, unaryDepth: nextDepth) {
             case .success(let value):
-                return .success(value * value)
+                let dbl = NSDecimalNumber(decimal: value).doubleValue
+                if abs(dbl) >= Self.maxFormatterMagnitude.squareRoot() { return .failure(.overflow) }
+                let squared = value * value
+                if valueWouldUnderflowDisplay(squared) { return .failure(.underflow) }
+                return .success(squared)
             case .failure(let error):
                 return .failure(error)
             }
         }
 
         if let inner = wrappedExpressionOperand(token, prefix: "√(") {
-            switch expressionTokenValue(inner) {
+            let nextDepth = unaryDepth + 1
+            if nextDepth > Limits.maxConsecutiveSquareOrRootDepth { return .failure(.underflow) }
+            switch expressionTokenValue(inner, unaryDepth: nextDepth) {
             case .success(let value):
                 let root = sqrt(NSDecimalNumber(decimal: value).doubleValue)
-                return .success(Decimal(root))
+                let rootDecimal = Decimal(root)
+                if valueWouldUnderflowDisplay(rootDecimal) { return .failure(.underflow) }
+                return .success(rootDecimal)
             case .failure(let error):
                 return .failure(error)
             }
         }
 
         if let inner = wrappedExpressionOperand(token, prefix: "1/(") {
-            switch expressionTokenValue(inner) {
+            let nextDepth = unaryDepth + 1
+            if nextDepth > Limits.maxConsecutiveSquareOrRootDepth { return .failure(.underflow) }
+            switch expressionTokenValue(inner, unaryDepth: nextDepth) {
             case .success(let value):
                 if value == 0 {
                     return .failure(.divideByZero)
                 }
-                return .success(Decimal(1) / value)
+                let reciprocal = Decimal(1) / value
+                if valueWouldUnderflowDisplay(reciprocal) { return .failure(.underflow) }
+                return .success(reciprocal)
             case .failure(let error):
                 return .failure(error)
             }
@@ -1145,6 +1241,7 @@ public final class CalculatorViewModel: ObservableObject {
             case BinaryOperator.subtract.symbol:
                 result = lhs - rhs
             case BinaryOperator.multiply.symbol:
+                if multiplicationWouldOverflowDisplay(lhs, rhs) { return .overflow }
                 result = lhs * rhs
             case BinaryOperator.divide.symbol:
                 if rhs == 0 { return .divideByZero }
@@ -1152,6 +1249,7 @@ public final class CalculatorViewModel: ObservableObject {
             default:
                 return .invalidInput
             }
+            if valueWouldUnderflowDisplay(result) { return .underflow }
             values.append(result)
             return nil
         }
@@ -1210,7 +1308,15 @@ public final class CalculatorViewModel: ObservableObject {
             setError("error.divideByZero")
             return
         }
+        if pending == .multiply, multiplicationWouldOverflowDisplay(lhs, rhs) {
+            setError("error.outOfRange")
+            return
+        }
         let result = pending.apply(lhs, rhs)
+        if valueWouldUnderflowDisplay(result) {
+            setError("error.outOfRange")
+            return
+        }
         let resultText = format(result)
 
         if addToHistory {
@@ -1270,17 +1376,57 @@ public final class CalculatorViewModel: ObservableObject {
             }
         }
 
-        let displayExpression = groupedExpressionString(historyExpression)
+        let boundedExpression = String(historyExpression.prefix(Limits.maxHistoryExpressionCharacters))
+        let boundedResult = String(historyResult.prefix(Limits.maxHistoryResultCharacters))
+        let displayExpression = groupedExpressionString(boundedExpression)
         history.insert(
             HistoryEntry(
-                expression: historyExpression,
-                result: historyResult,
+                expression: boundedExpression,
+                result: boundedResult,
                 displayExpression: displayExpression,
                 displayResult: displayResult
             ),
             at: 0
         )
         trimToNewestEntries(&history, maxCount: Limits.maxStoredHistoryEntries)
+    }
+
+    private func multiplicationWouldOverflowDisplay(_ lhs: Decimal, _ rhs: Decimal) -> Bool {
+        let lhsDbl = NSDecimalNumber(decimal: lhs).doubleValue
+        let rhsDbl = NSDecimalNumber(decimal: rhs).doubleValue
+
+        guard lhsDbl.isFinite, rhsDbl.isFinite else { return true }
+        guard lhsDbl != 0, rhsDbl != 0 else { return false }
+
+        return abs(lhsDbl) >= Self.maxFormatterMagnitude / abs(rhsDbl)
+    }
+
+    private func valueWouldUnderflowDisplay(_ value: Decimal) -> Bool {
+        if value.isNaN { return true }
+        guard value != 0 else { return false }
+
+        let rendered = formatter.string(from: NSDecimalNumber(decimal: value)) ?? decimalNumberString(from: value)
+        return rendered == "0" || rendered == "-0"
+    }
+
+    private func nextUnaryChainDepth(for token: String) -> Int {
+        unaryChainDepth(of: token) + 1
+    }
+
+    private func unaryChainDepth(of token: String) -> Int {
+        if let inner = wrappedExpressionOperand(token, prefix: "sqr(") {
+            return unaryChainDepth(of: inner) + 1
+        }
+
+        if let inner = wrappedExpressionOperand(token, prefix: "√(") {
+            return unaryChainDepth(of: inner) + 1
+        }
+
+        if let inner = wrappedExpressionOperand(token, prefix: "1/(") {
+            return unaryChainDepth(of: inner) + 1
+        }
+
+        return 0
     }
 
     private func insertMemoryEntry(_ value: Decimal) {
