@@ -647,6 +647,11 @@ public final class CalculatorViewModel: ObservableObject {
 
     public func reciprocal() {
         let snapshot = beginUndoableChange()
+        if nextUnaryChainDepth(for: currentToken) > Limits.maxConsecutiveSquareOrRootDepth {
+            setError("error.outOfRange")
+            completeUndoableChange(from: snapshot)
+            return
+        }
         let value = currentValue
         guard value != 0 else {
             setError("error.divideByZero")
@@ -675,7 +680,7 @@ public final class CalculatorViewModel: ObservableObject {
     public func square() {
         guard !isErrorState else { return }
         let snapshot = beginUndoableChange()
-        if nextSquareOrRootDepth(for: currentToken) > Limits.maxConsecutiveSquareOrRootDepth {
+        if nextUnaryChainDepth(for: currentToken) > Limits.maxConsecutiveSquareOrRootDepth {
             setError("error.outOfRange")
             completeUndoableChange(from: snapshot)
             return
@@ -708,7 +713,7 @@ public final class CalculatorViewModel: ObservableObject {
 
     public func squareRoot() {
         let snapshot = beginUndoableChange()
-        if nextSquareOrRootDepth(for: currentToken) > Limits.maxConsecutiveSquareOrRootDepth {
+        if nextUnaryChainDepth(for: currentToken) > Limits.maxConsecutiveSquareOrRootDepth {
             setError("error.outOfRange")
             completeUndoableChange(from: snapshot)
             return
@@ -1126,19 +1131,19 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func expressionTokenValue(_ token: String) -> Result<Decimal, ExpressionEvaluationError> {
-        expressionTokenValue(token, squareOrRootDepth: 0)
+        expressionTokenValue(token, unaryDepth: 0)
     }
 
-    private func expressionTokenValue(_ token: String, squareOrRootDepth: Int) -> Result<Decimal, ExpressionEvaluationError> {
+    private func expressionTokenValue(_ token: String, unaryDepth: Int) -> Result<Decimal, ExpressionEvaluationError> {
         if let normalized = normalizeDisplayNumberToken(token),
            let value = decimalValue(fromCanonicalString: normalized) {
             return .success(value)
         }
 
         if let inner = wrappedExpressionOperand(token, prefix: "sqr(") {
-            let nextDepth = squareOrRootDepth + 1
+            let nextDepth = unaryDepth + 1
             if nextDepth > Limits.maxConsecutiveSquareOrRootDepth { return .failure(.underflow) }
-            switch expressionTokenValue(inner, squareOrRootDepth: nextDepth) {
+            switch expressionTokenValue(inner, unaryDepth: nextDepth) {
             case .success(let value):
                 let dbl = NSDecimalNumber(decimal: value).doubleValue
                 if abs(dbl) >= Self.maxFormatterMagnitude.squareRoot() { return .failure(.overflow) }
@@ -1151,9 +1156,9 @@ public final class CalculatorViewModel: ObservableObject {
         }
 
         if let inner = wrappedExpressionOperand(token, prefix: "√(") {
-            let nextDepth = squareOrRootDepth + 1
+            let nextDepth = unaryDepth + 1
             if nextDepth > Limits.maxConsecutiveSquareOrRootDepth { return .failure(.underflow) }
-            switch expressionTokenValue(inner, squareOrRootDepth: nextDepth) {
+            switch expressionTokenValue(inner, unaryDepth: nextDepth) {
             case .success(let value):
                 let root = sqrt(NSDecimalNumber(decimal: value).doubleValue)
                 let rootDecimal = Decimal(root)
@@ -1165,7 +1170,9 @@ public final class CalculatorViewModel: ObservableObject {
         }
 
         if let inner = wrappedExpressionOperand(token, prefix: "1/(") {
-            switch expressionTokenValue(inner, squareOrRootDepth: squareOrRootDepth) {
+            let nextDepth = unaryDepth + 1
+            if nextDepth > Limits.maxConsecutiveSquareOrRootDepth { return .failure(.underflow) }
+            switch expressionTokenValue(inner, unaryDepth: nextDepth) {
             case .success(let value):
                 if value == 0 {
                     return .failure(.divideByZero)
@@ -1402,17 +1409,21 @@ public final class CalculatorViewModel: ObservableObject {
         return rendered == "0" || rendered == "-0"
     }
 
-    private func nextSquareOrRootDepth(for token: String) -> Int {
-        squareOrRootDepth(of: token) + 1
+    private func nextUnaryChainDepth(for token: String) -> Int {
+        unaryChainDepth(of: token) + 1
     }
 
-    private func squareOrRootDepth(of token: String) -> Int {
+    private func unaryChainDepth(of token: String) -> Int {
         if let inner = wrappedExpressionOperand(token, prefix: "sqr(") {
-            return squareOrRootDepth(of: inner) + 1
+            return unaryChainDepth(of: inner) + 1
         }
 
         if let inner = wrappedExpressionOperand(token, prefix: "√(") {
-            return squareOrRootDepth(of: inner) + 1
+            return unaryChainDepth(of: inner) + 1
+        }
+
+        if let inner = wrappedExpressionOperand(token, prefix: "1/(") {
+            return unaryChainDepth(of: inner) + 1
         }
 
         return 0

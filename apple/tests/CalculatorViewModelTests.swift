@@ -1646,6 +1646,31 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.expressionDisplay, "")
     }
 
+    func testReciprocalChainAtLimitStillComputes() {
+        let viewModel = CalculatorViewModel()
+
+        enter("8", into: viewModel)
+        for _ in 0..<CalculatorViewModel.Limits.maxConsecutiveSquareOrRootDepth {
+            viewModel.reciprocal()
+        }
+
+        XCTAssertFalse(viewModel.isErrorState)
+    }
+
+    func testReciprocalChainBeyondLimitSetsOutOfRange() {
+        let viewModel = CalculatorViewModel()
+
+        enter("8", into: viewModel)
+        for _ in 0..<(CalculatorViewModel.Limits.maxConsecutiveSquareOrRootDepth + 1) {
+            viewModel.reciprocal()
+            if viewModel.isErrorState { break }
+        }
+
+        XCTAssertTrue(viewModel.isErrorState)
+        XCTAssertEqual(viewModel.display, "Out of range")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+    }
+
     func testScientificNotationPasteBeyondRangeIsIgnoredWithoutCorruptingState() {
         let viewModel = CalculatorViewModel()
         enter("42", into: viewModel)
