@@ -75,6 +75,7 @@ public final class CalculatorViewModel: ObservableObject {
         static let maxStoredMemoryEntries = 64
         static let maxUndoDepth = 64
         static let maxRedoDepth = 64
+        static let maxConsecutiveSquareOrRootDepth = 25
         static let maxPasteCharacters = 512
         static let maxPasteReplaySteps = 256
         static let maxPasteNestingDepth = 32
@@ -674,6 +675,11 @@ public final class CalculatorViewModel: ObservableObject {
     public func square() {
         guard !isErrorState else { return }
         let snapshot = beginUndoableChange()
+        if nextSquareOrRootDepth(for: currentToken) > Limits.maxConsecutiveSquareOrRootDepth {
+            setError("error.outOfRange")
+            completeUndoableChange(from: snapshot)
+            return
+        }
         let val = currentValue
         let dbl = NSDecimalNumber(decimal: val).doubleValue
         if abs(dbl) >= Self.maxFormatterMagnitude.squareRoot() {
@@ -702,6 +708,11 @@ public final class CalculatorViewModel: ObservableObject {
 
     public func squareRoot() {
         let snapshot = beginUndoableChange()
+        if nextSquareOrRootDepth(for: currentToken) > Limits.maxConsecutiveSquareOrRootDepth {
+            setError("error.outOfRange")
+            completeUndoableChange(from: snapshot)
+            return
+        }
         let decimalValue = currentValue
         let value = currentDoubleValue
         if value < 0 {
@@ -1115,13 +1126,19 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func expressionTokenValue(_ token: String) -> Result<Decimal, ExpressionEvaluationError> {
+        expressionTokenValue(token, squareOrRootDepth: 0)
+    }
+
+    private func expressionTokenValue(_ token: String, squareOrRootDepth: Int) -> Result<Decimal, ExpressionEvaluationError> {
         if let normalized = normalizeDisplayNumberToken(token),
            let value = decimalValue(fromCanonicalString: normalized) {
             return .success(value)
         }
 
         if let inner = wrappedExpressionOperand(token, prefix: "sqr(") {
-            switch expressionTokenValue(inner) {
+            let nextDepth = squareOrRootDepth + 1
+            if nextDepth > Limits.maxConsecutiveSquareOrRootDepth { return .failure(.underflow) }
+            switch expressionTokenValue(inner, squareOrRootDepth: nextDepth) {
             case .success(let value):
                 let dbl = NSDecimalNumber(decimal: value).doubleValue
                 if abs(dbl) >= Self.maxFormatterMagnitude.squareRoot() { return .failure(.overflow) }
@@ -1134,7 +1151,9 @@ public final class CalculatorViewModel: ObservableObject {
         }
 
         if let inner = wrappedExpressionOperand(token, prefix: "√(") {
-            switch expressionTokenValue(inner) {
+            let nextDepth = squareOrRootDepth + 1
+            if nextDepth > Limits.maxConsecutiveSquareOrRootDepth { return .failure(.underflow) }
+            switch expressionTokenValue(inner, squareOrRootDepth: nextDepth) {
             case .success(let value):
                 let root = sqrt(NSDecimalNumber(decimal: value).doubleValue)
                 let rootDecimal = Decimal(root)
@@ -1146,7 +1165,7 @@ public final class CalculatorViewModel: ObservableObject {
         }
 
         if let inner = wrappedExpressionOperand(token, prefix: "1/(") {
-            switch expressionTokenValue(inner) {
+            switch expressionTokenValue(inner, squareOrRootDepth: squareOrRootDepth) {
             case .success(let value):
                 if value == 0 {
                     return .failure(.divideByZero)
@@ -1381,6 +1400,22 @@ public final class CalculatorViewModel: ObservableObject {
 
         let rendered = formatter.string(from: NSDecimalNumber(decimal: value)) ?? decimalNumberString(from: value)
         return rendered == "0" || rendered == "-0"
+    }
+
+    private func nextSquareOrRootDepth(for token: String) -> Int {
+        squareOrRootDepth(of: token) + 1
+    }
+
+    private func squareOrRootDepth(of token: String) -> Int {
+        if let inner = wrappedExpressionOperand(token, prefix: "sqr(") {
+            return squareOrRootDepth(of: inner) + 1
+        }
+
+        if let inner = wrappedExpressionOperand(token, prefix: "√(") {
+            return squareOrRootDepth(of: inner) + 1
+        }
+
+        return 0
     }
 
     private func insertMemoryEntry(_ value: Decimal) {

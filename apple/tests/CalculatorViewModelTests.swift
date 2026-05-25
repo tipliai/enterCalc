@@ -1607,6 +1607,45 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.expressionDisplay, "")
     }
 
+    func testSquareRootChainAtLimitStillComputes() {
+        let viewModel = CalculatorViewModel()
+
+        enter("8", into: viewModel)
+        for _ in 0..<CalculatorViewModel.Limits.maxConsecutiveSquareOrRootDepth {
+            viewModel.squareRoot()
+        }
+
+        XCTAssertFalse(viewModel.isErrorState)
+    }
+
+    func testSquareRootChainBeyondLimitSetsOutOfRange() {
+        let viewModel = CalculatorViewModel()
+
+        enter("8", into: viewModel)
+        for _ in 0..<(CalculatorViewModel.Limits.maxConsecutiveSquareOrRootDepth + 1) {
+            viewModel.squareRoot()
+            if viewModel.isErrorState { break }
+        }
+
+        XCTAssertTrue(viewModel.isErrorState)
+        XCTAssertEqual(viewModel.display, "Out of range")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+    }
+
+    func testSquareChainBeyondLimitSetsOutOfRangeEvenWhenValueStaysRepresentable() {
+        let viewModel = CalculatorViewModel()
+
+        enter("1", into: viewModel)
+        for _ in 0..<(CalculatorViewModel.Limits.maxConsecutiveSquareOrRootDepth + 1) {
+            viewModel.square()
+            if viewModel.isErrorState { break }
+        }
+
+        XCTAssertTrue(viewModel.isErrorState)
+        XCTAssertEqual(viewModel.display, "Out of range")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+    }
+
     func testScientificNotationPasteBeyondRangeIsIgnoredWithoutCorruptingState() {
         let viewModel = CalculatorViewModel()
         enter("42", into: viewModel)
