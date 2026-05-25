@@ -91,6 +91,7 @@ public final class CalculatorViewModel: ObservableObject {
         case invalidInput
         case divideByZero
         case overflow
+        case underflow
     }
 
     private enum PasteReplayStep {
@@ -591,7 +592,12 @@ public final class CalculatorViewModel: ObservableObject {
                 expressionTokens.removeAll()
                 openParenthesisCount = 0
                 isExpressionMode = false
-                setError("error.overflow")
+                setError("error.outOfRange")
+            case .failure(.underflow):
+                expressionTokens.removeAll()
+                openParenthesisCount = 0
+                isExpressionMode = false
+                setError("error.outOfRange")
             }
             completeUndoableChange(from: snapshot)
             return
@@ -603,11 +609,16 @@ public final class CalculatorViewModel: ObservableObject {
             let lhs = currentValue
             if lastOp == .multiply,
                multiplicationWouldOverflowDisplay(lhs, lastOperand) {
-                setError("error.overflow")
+                setError("error.outOfRange")
                 completeUndoableChange(from: snapshot)
                 return
             }
             let result = lastOp.apply(lhs, lastOperand)
+            if valueWouldUnderflowDisplay(result) {
+                setError("error.outOfRange")
+                completeUndoableChange(from: snapshot)
+                return
+            }
             let resultText = format(result)
             let lhsToken = currentToken
             let rhsToken = lastOperandToken ?? displayString(for: format(lastOperand))
@@ -642,7 +653,13 @@ public final class CalculatorViewModel: ObservableObject {
             return
         }
         let operandToken = currentToken
-        currentInput = format(Decimal(1) / value)
+        let result = Decimal(1) / value
+        if valueWouldUnderflowDisplay(result) {
+            setError("error.outOfRange")
+            completeUndoableChange(from: snapshot)
+            return
+        }
+        currentInput = format(result)
         currentToken = boundedDisplayToken("1/(\(operandToken))", fallback: groupedNumberString(currentInput))
         if isExpressionMode {
             applyCurrentUnaryTokenToExpression()
@@ -660,12 +677,18 @@ public final class CalculatorViewModel: ObservableObject {
         let val = currentValue
         let dbl = NSDecimalNumber(decimal: val).doubleValue
         if abs(dbl) >= Self.maxFormatterMagnitude.squareRoot() {
-            setError("error.overflow")
+            setError("error.outOfRange")
+            completeUndoableChange(from: snapshot)
+            return
+        }
+        let result = val * val
+        if valueWouldUnderflowDisplay(result) {
+            setError("error.outOfRange")
             completeUndoableChange(from: snapshot)
             return
         }
         let operandToken = currentToken
-        currentInput = format(val * val)
+        currentInput = format(result)
         currentToken = boundedDisplayToken("sqr(\(operandToken))", fallback: groupedNumberString(currentInput))
         if isExpressionMode {
             applyCurrentUnaryTokenToExpression()
@@ -679,12 +702,22 @@ public final class CalculatorViewModel: ObservableObject {
 
     public func squareRoot() {
         let snapshot = beginUndoableChange()
+        let decimalValue = currentValue
         let value = currentDoubleValue
         if value < 0 {
             setError("error.invalidInput")
+        } else if decimalValue != 0 && value == 0 {
+            setError("error.outOfRange")
         } else {
             let operandToken = currentToken
-            currentInput = format(sqrt(value))
+            let root = sqrt(value)
+            let rootDecimal = Decimal(root)
+            if valueWouldUnderflowDisplay(rootDecimal) {
+                setError("error.outOfRange")
+                completeUndoableChange(from: snapshot)
+                return
+            }
+            currentInput = format(rootDecimal)
             currentToken = boundedDisplayToken("√(\(operandToken))", fallback: groupedNumberString(currentInput))
             if isExpressionMode {
                 applyCurrentUnaryTokenToExpression()
@@ -1092,7 +1125,9 @@ public final class CalculatorViewModel: ObservableObject {
             case .success(let value):
                 let dbl = NSDecimalNumber(decimal: value).doubleValue
                 if abs(dbl) >= Self.maxFormatterMagnitude.squareRoot() { return .failure(.overflow) }
-                return .success(value * value)
+                let squared = value * value
+                if valueWouldUnderflowDisplay(squared) { return .failure(.underflow) }
+                return .success(squared)
             case .failure(let error):
                 return .failure(error)
             }
@@ -1102,7 +1137,9 @@ public final class CalculatorViewModel: ObservableObject {
             switch expressionTokenValue(inner) {
             case .success(let value):
                 let root = sqrt(NSDecimalNumber(decimal: value).doubleValue)
-                return .success(Decimal(root))
+                let rootDecimal = Decimal(root)
+                if valueWouldUnderflowDisplay(rootDecimal) { return .failure(.underflow) }
+                return .success(rootDecimal)
             case .failure(let error):
                 return .failure(error)
             }
@@ -1114,7 +1151,9 @@ public final class CalculatorViewModel: ObservableObject {
                 if value == 0 {
                     return .failure(.divideByZero)
                 }
-                return .success(Decimal(1) / value)
+                let reciprocal = Decimal(1) / value
+                if valueWouldUnderflowDisplay(reciprocal) { return .failure(.underflow) }
+                return .success(reciprocal)
             case .failure(let error):
                 return .failure(error)
             }
@@ -1186,6 +1225,7 @@ public final class CalculatorViewModel: ObservableObject {
             default:
                 return .invalidInput
             }
+            if valueWouldUnderflowDisplay(result) { return .underflow }
             values.append(result)
             return nil
         }
@@ -1245,10 +1285,14 @@ public final class CalculatorViewModel: ObservableObject {
             return
         }
         if pending == .multiply, multiplicationWouldOverflowDisplay(lhs, rhs) {
-            setError("error.overflow")
+            setError("error.outOfRange")
             return
         }
         let result = pending.apply(lhs, rhs)
+        if valueWouldUnderflowDisplay(result) {
+            setError("error.outOfRange")
+            return
+        }
         let resultText = format(result)
 
         if addToHistory {
@@ -1331,6 +1375,14 @@ public final class CalculatorViewModel: ObservableObject {
         guard lhsDbl != 0, rhsDbl != 0 else { return false }
 
         return abs(lhsDbl) >= Self.maxFormatterMagnitude / abs(rhsDbl)
+    }
+
+    private func valueWouldUnderflowDisplay(_ value: Decimal) -> Bool {
+        if value.isNaN { return true }
+        guard value != 0 else { return false }
+
+        let rendered = formatter.string(from: NSDecimalNumber(decimal: value)) ?? decimalNumberString(from: value)
+        return rendered == "0" || rendered == "-0"
     }
 
     private func insertMemoryEntry(_ value: Decimal) {

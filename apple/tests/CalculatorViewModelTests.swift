@@ -1368,7 +1368,7 @@ final class CalculatorViewModelTests: XCTestCase {
         return nil
     }
 
-    // MARK: - Overflow
+    // MARK: - Out Of Range
 
     func testRepeatedSquaringOverflowSetsErrorState() {
         let viewModel = CalculatorViewModel()
@@ -1385,7 +1385,7 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.square() // ≈6.3e57 — overflows Decimal range
 
         XCTAssertTrue(viewModel.isErrorState)
-        XCTAssertEqual(viewModel.display, "Overflow")
+        XCTAssertEqual(viewModel.display, "Out of range")
         XCTAssertEqual(viewModel.expressionDisplay, "")
     }
 
@@ -1396,10 +1396,10 @@ final class CalculatorViewModelTests: XCTestCase {
             enter("8", into: viewModel)
             for _ in 0..<6 { viewModel.square() }
 
-            XCTAssertTrue(viewModel.isErrorState, "Expected overflow error state for language: \(code)")
+            XCTAssertTrue(viewModel.isErrorState, "Expected out-of-range error state for language: \(code)")
             let bundle = try localizedBundle(named: code)
-            let expected = bundle.localizedString(forKey: "error.overflow", value: nil, table: "Localizable")
-            XCTAssertFalse(expected.isEmpty, "Missing error.overflow translation for: \(code)")
+            let expected = bundle.localizedString(forKey: "error.outOfRange", value: nil, table: "Localizable")
+            XCTAssertFalse(expected.isEmpty, "Missing error.outOfRange translation for: \(code)")
             XCTAssertEqual(viewModel.display, expected, "Wrong display for language: \(code)")
 
             viewModel.clearAll()
@@ -1432,7 +1432,7 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.evaluate()                      // repeats: ≈7.9e28 × ≈7.9e28 → overflow
 
         XCTAssertTrue(viewModel.isErrorState)
-        XCTAssertEqual(viewModel.display, "Overflow")
+        XCTAssertEqual(viewModel.display, "Out of range")
     }
 
     func testOverflowKeepsOperationRowEmptyAndOperationCopyUnavailable() {
@@ -1459,7 +1459,7 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.evaluate()
 
         XCTAssertTrue(viewModel.isErrorState)
-        XCTAssertEqual(viewModel.display, "Overflow")
+        XCTAssertEqual(viewModel.display, "Out of range")
         XCTAssertEqual(viewModel.expressionDisplay, "")
     }
 
@@ -1474,7 +1474,7 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.setOperator(.add)
 
         XCTAssertTrue(viewModel.isErrorState)
-        XCTAssertEqual(viewModel.display, "Overflow")
+        XCTAssertEqual(viewModel.display, "Out of range")
         XCTAssertEqual(viewModel.expressionDisplay, "")
     }
 
@@ -1492,7 +1492,7 @@ final class CalculatorViewModelTests: XCTestCase {
 
             viewModel.redo()
             XCTAssertTrue(viewModel.isErrorState)
-            XCTAssertEqual(viewModel.display, "Overflow")
+            XCTAssertEqual(viewModel.display, "Out of range")
             XCTAssertEqual(viewModel.expressionDisplay, "")
         }
 
@@ -1549,7 +1549,7 @@ final class CalculatorViewModelTests: XCTestCase {
             viewModel.copyToPasteboard()
             XCTAssertNotNil(clipboardString())
 
-            pasteString("Overflow", into: viewModel)
+            pasteString("Out of range", into: viewModel)
             pasteString(largeMalformed, into: viewModel)
 
             _ = viewModel.history.first
@@ -1566,17 +1566,17 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.display, "0")
     }
 
-    func testPastingOverflowTextLeavesOverflowStateStable() {
+    func testPastingOutOfRangeTextLeavesOutOfRangeStateStable() {
         let viewModel = CalculatorViewModel()
 
         enter("8", into: viewModel)
         for _ in 0..<6 { viewModel.square() }
         XCTAssertTrue(viewModel.isErrorState)
 
-        pasteString("Overflow", into: viewModel)
+        pasteString("Out of range", into: viewModel)
 
         XCTAssertTrue(viewModel.isErrorState)
-        XCTAssertEqual(viewModel.display, "Overflow")
+        XCTAssertEqual(viewModel.display, "Out of range")
         XCTAssertEqual(viewModel.expressionDisplay, "")
     }
 
@@ -1588,7 +1588,23 @@ final class CalculatorViewModelTests: XCTestCase {
 
         viewModel.copyToPasteboard()
 
-        XCTAssertEqual(clipboardString(), "Overflow")
+        XCTAssertEqual(clipboardString(), "Out of range")
+    }
+
+    func testRepeatedDivisionUnderflowSetsOutOfRangeError() {
+        let viewModel = CalculatorViewModel()
+
+        enter("1", into: viewModel)
+        for _ in 0..<140 {
+            viewModel.setOperator(.divide)
+            enter("10", into: viewModel)
+            viewModel.evaluate()
+            if viewModel.isErrorState { break }
+        }
+
+        XCTAssertTrue(viewModel.isErrorState)
+        XCTAssertEqual(viewModel.display, "Out of range")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
     }
 
     func testScientificNotationPasteBeyondRangeIsIgnoredWithoutCorruptingState() {
