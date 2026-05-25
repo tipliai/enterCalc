@@ -88,6 +88,7 @@ public final class CalculatorViewModel: ObservableObject {
     private enum ExpressionEvaluationError: Error {
         case invalidInput
         case divideByZero
+        case overflow
     }
 
     private enum PasteReplayStep {
@@ -240,6 +241,10 @@ public final class CalculatorViewModel: ObservableObject {
     var redoDepth: Int {
         redoStack.count
     }
+
+    // Maximum absolute value the NumberFormatter can display before clipping to 0.
+    // Determined by maximumIntegerDigits = 32 in the formatter (values >= 1e32 are clipped).
+    private static let maxFormatterMagnitude: Double = 1e32
 
     private let formatter: NumberFormatter = {
         let f = NumberFormatter()
@@ -576,6 +581,11 @@ public final class CalculatorViewModel: ObservableObject {
                 openParenthesisCount = 0
                 isExpressionMode = false
                 setError("error.invalidInput")
+            case .failure(.overflow):
+                expressionTokens.removeAll()
+                openParenthesisCount = 0
+                isExpressionMode = false
+                setError("error.overflow")
             }
             completeUndoableChange(from: snapshot)
             return
@@ -635,8 +645,15 @@ public final class CalculatorViewModel: ObservableObject {
     public func square() {
         guard !isErrorState else { return }
         let snapshot = beginUndoableChange()
+        let val = currentValue
+        let dbl = NSDecimalNumber(decimal: val).doubleValue
+        if abs(dbl) >= Self.maxFormatterMagnitude.squareRoot() {
+            setError("error.overflow")
+            completeUndoableChange(from: snapshot)
+            return
+        }
         let operandToken = currentToken
-        currentInput = format(currentValue * currentValue)
+        currentInput = format(val * val)
         currentToken = boundedDisplayToken("sqr(\(operandToken))", fallback: groupedNumberString(currentInput))
         if isExpressionMode {
             applyCurrentUnaryTokenToExpression()
@@ -1061,6 +1078,8 @@ public final class CalculatorViewModel: ObservableObject {
         if let inner = wrappedExpressionOperand(token, prefix: "sqr(") {
             switch expressionTokenValue(inner) {
             case .success(let value):
+                let dbl = NSDecimalNumber(decimal: value).doubleValue
+                if abs(dbl) >= Self.maxFormatterMagnitude.squareRoot() { return .failure(.overflow) }
                 return .success(value * value)
             case .failure(let error):
                 return .failure(error)
@@ -1145,6 +1164,9 @@ public final class CalculatorViewModel: ObservableObject {
             case BinaryOperator.subtract.symbol:
                 result = lhs - rhs
             case BinaryOperator.multiply.symbol:
+                let lhsDbl = NSDecimalNumber(decimal: lhs).doubleValue
+                let rhsDbl = NSDecimalNumber(decimal: rhs).doubleValue
+                if rhsDbl != 0 && abs(lhsDbl) >= Self.maxFormatterMagnitude / abs(rhsDbl) { return .overflow }
                 result = lhs * rhs
             case BinaryOperator.divide.symbol:
                 if rhs == 0 { return .divideByZero }
@@ -1209,6 +1231,14 @@ public final class CalculatorViewModel: ObservableObject {
         if pending == .divide && rhs == 0 {
             setError("error.divideByZero")
             return
+        }
+        if pending == .multiply {
+            let lhsDbl = NSDecimalNumber(decimal: lhs).doubleValue
+            let rhsDbl = NSDecimalNumber(decimal: rhs).doubleValue
+            if rhsDbl != 0 && abs(lhsDbl) >= Self.maxFormatterMagnitude / abs(rhsDbl) {
+                setError("error.overflow")
+                return
+            }
         }
         let result = pending.apply(lhs, rhs)
         let resultText = format(result)

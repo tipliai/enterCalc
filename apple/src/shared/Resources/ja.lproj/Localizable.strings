@@ -1,5 +1,6 @@
 "error.divideByZero" = "0 で割ることはできません";
 "error.invalidInput" = "無効な入力です";
+"error.overflow" = "オーバーフロー";
 "settings.title" = "設定";
 "settings.screen.title" = "画面設定";
 "settings.close" = "設定を閉じる";

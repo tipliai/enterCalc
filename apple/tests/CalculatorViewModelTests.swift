@@ -1367,4 +1367,71 @@ final class CalculatorViewModelTests: XCTestCase {
 
         return nil
     }
+
+    // MARK: - Overflow
+
+    func testRepeatedSquaringOverflowSetsErrorState() {
+        let viewModel = CalculatorViewModel()
+
+        // 8^2^2^2^2^2 — each square() call squares the current display value.
+        // After enough iterations the number exceeds the representable range and must
+        // enter an overflow error state instead of silently showing 0.
+        enter("8", into: viewModel)
+        viewModel.square() // 64
+        viewModel.square() // 4 096
+        viewModel.square() // 16 777 216
+        viewModel.square() // 281 474 976 710 656
+        viewModel.square() // ≈7.9e28 — still representable
+        viewModel.square() // ≈6.3e57 — overflows Decimal range
+
+        XCTAssertTrue(viewModel.isErrorState)
+        XCTAssertEqual(viewModel.display, "Overflow")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+    }
+
+    func testOverflowLocalizedInAllSupportedLanguages() throws {
+        let viewModel = CalculatorViewModel()
+
+        try withLanguageOverrides { code in
+            enter("8", into: viewModel)
+            for _ in 0..<6 { viewModel.square() }
+
+            XCTAssertTrue(viewModel.isErrorState, "Expected overflow error state for language: \(code)")
+            let bundle = try localizedBundle(named: code)
+            let expected = bundle.localizedString(forKey: "error.overflow", value: nil, table: "Localizable")
+            XCTAssertFalse(expected.isEmpty, "Missing error.overflow translation for: \(code)")
+            XCTAssertEqual(viewModel.display, expected, "Wrong display for language: \(code)")
+
+            viewModel.clearAll()
+        }
+    }
+
+    func testOverflowClearsCorrectly() {
+        let viewModel = CalculatorViewModel()
+
+        enter("8", into: viewModel)
+        for _ in 0..<6 { viewModel.square() }
+        XCTAssertTrue(viewModel.isErrorState)
+
+        viewModel.clearAll()
+
+        XCTAssertFalse(viewModel.isErrorState)
+        XCTAssertEqual(viewModel.display, "0")
+    }
+
+    func testMultiplyOverflowSetsErrorState() {
+        let viewModel = CalculatorViewModel()
+
+        // Get to ≈7.9e28 via five squarings of 8 (stays within Decimal range),
+        // then multiply that value by itself — the product ≈6.3e57 overflows.
+        enter("8", into: viewModel)
+        for _ in 0..<5 { viewModel.square() }   // display: ≈7.9e28, no error yet
+        XCTAssertFalse(viewModel.isErrorState, "Pre-condition: value should be valid before multiply")
+
+        viewModel.setOperator(.multiply)
+        viewModel.evaluate()                      // repeats: ≈7.9e28 × ≈7.9e28 → overflow
+
+        XCTAssertTrue(viewModel.isErrorState)
+        XCTAssertEqual(viewModel.display, "Overflow")
+    }
 }
