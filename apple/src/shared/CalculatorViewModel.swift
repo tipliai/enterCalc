@@ -70,6 +70,8 @@ public final class CalculatorViewModel: ObservableObject {
     enum Limits {
         static let maxInputDigits = 16
         static let maxStoredHistoryEntries = 64
+        static let maxHistoryExpressionCharacters = 512
+        static let maxHistoryResultCharacters = 256
         static let maxStoredMemoryEntries = 64
         static let maxUndoDepth = 64
         static let maxRedoDepth = 64
@@ -517,6 +519,10 @@ public final class CalculatorViewModel: ObservableObject {
 
         if let _ = pendingOperator, !shouldResetInputOnNextDigit {
             performPendingOperation(addToHistory: false)
+            if isErrorState {
+                completeUndoableChange(from: snapshot)
+                return
+            }
         } else if accumulator == nil {
             accumulator = currentValue
             accumulatorToken = currentToken
@@ -595,6 +601,12 @@ public final class CalculatorViewModel: ObservableObject {
             performPendingOperation(addToHistory: true)
         } else if let lastOp = lastOperator, let lastOperand = lastOperand {
             let lhs = currentValue
+            if lastOp == .multiply,
+               multiplicationWouldOverflowDisplay(lhs, lastOperand) {
+                setError("error.overflow")
+                completeUndoableChange(from: snapshot)
+                return
+            }
             let result = lastOp.apply(lhs, lastOperand)
             let resultText = format(result)
             let lhsToken = currentToken
@@ -1232,13 +1244,9 @@ public final class CalculatorViewModel: ObservableObject {
             setError("error.divideByZero")
             return
         }
-        if pending == .multiply {
-            let lhsDbl = NSDecimalNumber(decimal: lhs).doubleValue
-            let rhsDbl = NSDecimalNumber(decimal: rhs).doubleValue
-            if rhsDbl != 0 && abs(lhsDbl) >= Self.maxFormatterMagnitude / abs(rhsDbl) {
-                setError("error.overflow")
-                return
-            }
+        if pending == .multiply, multiplicationWouldOverflowDisplay(lhs, rhs) {
+            setError("error.overflow")
+            return
         }
         let result = pending.apply(lhs, rhs)
         let resultText = format(result)
@@ -1300,17 +1308,29 @@ public final class CalculatorViewModel: ObservableObject {
             }
         }
 
-        let displayExpression = groupedExpressionString(historyExpression)
+        let boundedExpression = String(historyExpression.prefix(Limits.maxHistoryExpressionCharacters))
+        let boundedResult = String(historyResult.prefix(Limits.maxHistoryResultCharacters))
+        let displayExpression = groupedExpressionString(boundedExpression)
         history.insert(
             HistoryEntry(
-                expression: historyExpression,
-                result: historyResult,
+                expression: boundedExpression,
+                result: boundedResult,
                 displayExpression: displayExpression,
                 displayResult: displayResult
             ),
             at: 0
         )
         trimToNewestEntries(&history, maxCount: Limits.maxStoredHistoryEntries)
+    }
+
+    private func multiplicationWouldOverflowDisplay(_ lhs: Decimal, _ rhs: Decimal) -> Bool {
+        let lhsDbl = NSDecimalNumber(decimal: lhs).doubleValue
+        let rhsDbl = NSDecimalNumber(decimal: rhs).doubleValue
+
+        guard lhsDbl.isFinite, rhsDbl.isFinite else { return true }
+        guard lhsDbl != 0, rhsDbl != 0 else { return false }
+
+        return abs(lhsDbl) >= Self.maxFormatterMagnitude / abs(rhsDbl)
     }
 
     private func insertMemoryEntry(_ value: Decimal) {

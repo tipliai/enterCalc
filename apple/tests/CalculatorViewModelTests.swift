@@ -1434,4 +1434,170 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.isErrorState)
         XCTAssertEqual(viewModel.display, "Overflow")
     }
+
+    func testOverflowKeepsOperationRowEmptyAndOperationCopyUnavailable() {
+        let viewModel = CalculatorViewModel()
+
+        enter("8", into: viewModel)
+        for _ in 0..<6 { viewModel.square() }
+
+        XCTAssertTrue(viewModel.isErrorState)
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+        XCTAssertFalse(viewModel.hasOperationToCopy)
+    }
+
+    func testRepeatedEqualsOverflowSetsErrorInsteadOfZero() {
+        let viewModel = CalculatorViewModel()
+
+        enter("999999999999999", into: viewModel)
+        viewModel.setOperator(.multiply)
+        enter("999999999999999", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertFalse(viewModel.isErrorState)
+
+        viewModel.evaluate()
+
+        XCTAssertTrue(viewModel.isErrorState)
+        XCTAssertEqual(viewModel.display, "Overflow")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+    }
+
+    func testOverflowDuringPendingOperatorResolutionDoesNotLeaveOperatorPreview() {
+        let viewModel = CalculatorViewModel()
+
+        enter("8", into: viewModel)
+        for _ in 0..<5 { viewModel.square() }
+        viewModel.setOperator(.multiply)
+        enter("2000", into: viewModel)
+
+        viewModel.setOperator(.add)
+
+        XCTAssertTrue(viewModel.isErrorState)
+        XCTAssertEqual(viewModel.display, "Overflow")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+    }
+
+    func testOverflowUndoRedoRoundTripsSafely() {
+        let viewModel = CalculatorViewModel()
+
+        enter("8", into: viewModel)
+        for _ in 0..<6 { viewModel.square() }
+        XCTAssertTrue(viewModel.isErrorState)
+
+        for _ in 0..<10 {
+            viewModel.undo()
+            XCTAssertFalse(viewModel.isErrorState)
+            XCTAssertNotEqual(viewModel.display, "0")
+
+            viewModel.redo()
+            XCTAssertTrue(viewModel.isErrorState)
+            XCTAssertEqual(viewModel.display, "Overflow")
+            XCTAssertEqual(viewModel.expressionDisplay, "")
+        }
+
+        XCTAssertLessThanOrEqual(viewModel.undoDepth, CalculatorViewModel.Limits.maxUndoDepth)
+        XCTAssertLessThanOrEqual(viewModel.redoDepth, CalculatorViewModel.Limits.maxRedoDepth)
+    }
+
+    func testClearingAfterOverflowResetsAndAllowsNormalCalculation() {
+        let viewModel = CalculatorViewModel()
+
+        enter("8", into: viewModel)
+        for _ in 0..<6 { viewModel.square() }
+        XCTAssertTrue(viewModel.isErrorState)
+
+        viewModel.clearAll()
+        enter("2", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("3", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertFalse(viewModel.isErrorState)
+        XCTAssertEqual(viewModel.display, "5")
+        XCTAssertEqual(viewModel.expressionDisplay, "2 + 3 =")
+    }
+
+    func testHistoryPayloadsRemainBoundedUnderLargeInputStress() {
+        let viewModel = CalculatorViewModel()
+
+        for _ in 0..<(CalculatorViewModel.Limits.maxStoredHistoryEntries + 20) {
+            enter("9999999999999999", into: viewModel)
+            viewModel.setOperator(.add)
+            enter("1", into: viewModel)
+            viewModel.evaluate()
+            viewModel.clearAll()
+        }
+
+        XCTAssertEqual(viewModel.history.count, CalculatorViewModel.Limits.maxStoredHistoryEntries)
+        for entry in viewModel.history {
+            XCTAssertLessThanOrEqual(entry.expression.count, CalculatorViewModel.Limits.maxHistoryExpressionCharacters)
+            XCTAssertLessThanOrEqual(entry.result.count, CalculatorViewModel.Limits.maxHistoryResultCharacters)
+        }
+    }
+
+    func testStressLargePasteCalculateUndoRedoCopyHistoryAndClearFlow() {
+        let viewModel = CalculatorViewModel()
+        let largeMalformed = String(repeating: "9", count: CalculatorViewModel.Limits.maxPasteCharacters - 5)
+
+        for _ in 0..<30 {
+            pasteString("9.999999999999999e+15", into: viewModel)
+            viewModel.setOperator(.multiply)
+            pasteString("9.999999999999999e+15", into: viewModel)
+            viewModel.evaluate()
+
+            viewModel.copyToPasteboard()
+            XCTAssertNotNil(clipboardString())
+
+            pasteString("Overflow", into: viewModel)
+            pasteString(largeMalformed, into: viewModel)
+
+            _ = viewModel.history.first
+            _ = viewModel.history.count
+
+            viewModel.undo()
+            viewModel.redo()
+            viewModel.clearAll()
+        }
+
+        XCTAssertLessThanOrEqual(viewModel.history.count, CalculatorViewModel.Limits.maxStoredHistoryEntries)
+        XCTAssertLessThanOrEqual(viewModel.undoDepth, CalculatorViewModel.Limits.maxUndoDepth)
+        XCTAssertLessThanOrEqual(viewModel.redoDepth, CalculatorViewModel.Limits.maxRedoDepth)
+        XCTAssertEqual(viewModel.display, "0")
+    }
+
+    func testPastingOverflowTextLeavesOverflowStateStable() {
+        let viewModel = CalculatorViewModel()
+
+        enter("8", into: viewModel)
+        for _ in 0..<6 { viewModel.square() }
+        XCTAssertTrue(viewModel.isErrorState)
+
+        pasteString("Overflow", into: viewModel)
+
+        XCTAssertTrue(viewModel.isErrorState)
+        XCTAssertEqual(viewModel.display, "Overflow")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+    }
+
+    func testCopyOverflowWritesOverflowTextOnly() {
+        let viewModel = CalculatorViewModel()
+
+        enter("8", into: viewModel)
+        for _ in 0..<6 { viewModel.square() }
+
+        viewModel.copyToPasteboard()
+
+        XCTAssertEqual(clipboardString(), "Overflow")
+    }
+
+    func testScientificNotationPasteBeyondRangeIsIgnoredWithoutCorruptingState() {
+        let viewModel = CalculatorViewModel()
+        enter("42", into: viewModel)
+
+        pasteString("1e999999", into: viewModel)
+
+        XCTAssertFalse(viewModel.isErrorState)
+        XCTAssertEqual(viewModel.display, "42")
+    }
 }
