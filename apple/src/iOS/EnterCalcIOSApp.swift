@@ -390,7 +390,7 @@ struct EnterCalcIOSView: View {
     var body: some View {
         GeometryReader { geometry in
             let isLandscapePresentation = currentInterfaceOrientationIsLandscape(fallbackSize: geometry.size)
-            let screenReferenceSize = currentWindowSceneScreenSize(fallbackSize: geometry.size)
+            let screenReferenceSize = currentScreenReferenceSize(fallbackSize: geometry.size)
             let metrics = IOSLayoutMetrics(
                 size: geometry.size,
                 safeAreaInsets: geometry.safeAreaInsets,
@@ -412,7 +412,7 @@ struct EnterCalcIOSView: View {
                     overlayScrim(metrics: metrics)
                 }
 
-                overlayPanels(metrics: metrics, containerSize: geometry.size)
+                overlayPanels(metrics: metrics, containerSize: geometry.size, safeAreaInsets: geometry.safeAreaInsets)
                     .rotationEffect(.degrees(counterRotatesForUpsideDownPortrait ? 180 : 0))
 
                 IOSHardwareKeyCaptureView(
@@ -775,7 +775,7 @@ private extension EnterCalcIOSView {
     }
 
     @ViewBuilder
-    func overlayPanels(metrics: IOSLayoutMetrics, containerSize: CGSize) -> some View {
+    func overlayPanels(metrics: IOSLayoutMetrics, containerSize: CGSize, safeAreaInsets: EdgeInsets) -> some View {
         ZStack(alignment: .top) {
             if metrics.usesOverlayHistory, activeOverlay == .history {
                 historyOverlayPanel(metrics: metrics, containerHeight: containerSize.height, screen: activeScreen) {
@@ -784,6 +784,7 @@ private extension EnterCalcIOSView {
                         palette: palette,
                         metrics: metrics,
                         clearFeedbackVersion: historyClearFeedbackVersion(for: activeScreen),
+                        bottomSafeAreaInset: metrics.mode == .phonePortrait ? safeAreaInsets.bottom : 0,
                         isResizing: isResizingHistoryOverlay,
                         onResizeChanged: { value in
                             updateHistoryOverlayHeight(for: activeScreen, metrics: metrics, containerHeight: containerSize.height, dragValue: value)
@@ -2273,22 +2274,8 @@ private extension EnterCalcIOSView {
 #endif
     }
 
-    func activeWindowScene() -> UIWindowScene? {
-#if canImport(UIKit)
-        let windowScenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        return windowScenes.first(where: { $0.activationState == .foregroundActive }) ?? windowScenes.first
-#else
-        return nil
-#endif
-    }
-
     func currentInterfaceOrientationIsLandscape(fallbackSize: CGSize) -> Bool {
 #if canImport(UIKit)
-        if let interfaceOrientation = activeWindowScene()?.interfaceOrientation,
-           interfaceOrientation.isLandscape || interfaceOrientation.isPortrait {
-            return interfaceOrientation.isLandscape
-        }
-
         switch UIDevice.current.orientation {
         case .landscapeLeft, .landscapeRight:
             return true
@@ -2302,9 +2289,9 @@ private extension EnterCalcIOSView {
 #endif
     }
 
-    func currentWindowSceneScreenSize(fallbackSize: CGSize) -> CGSize {
+    func currentScreenReferenceSize(fallbackSize: CGSize) -> CGSize {
 #if canImport(UIKit)
-        activeWindowScene()?.screen.bounds.size ?? fallbackSize
+        UIScreen.main.bounds.size
 #else
         fallbackSize
 #endif
@@ -2653,6 +2640,7 @@ private struct IOSHistoryPanel: View {
     let metrics: IOSLayoutMetrics
     let clearFeedbackVersion: Int
     let usesSurfaceBackground: Bool
+    let bottomSafeAreaInset: CGFloat
     let isResizing: Bool
     let onResizeChanged: ((DragGesture.Value) -> Void)?
     let onResizeEnded: (() -> Void)?
@@ -2675,6 +2663,7 @@ private struct IOSHistoryPanel: View {
         metrics: IOSLayoutMetrics,
         clearFeedbackVersion: Int = 0,
         usesSurfaceBackground: Bool = false,
+        bottomSafeAreaInset: CGFloat = 0,
         isResizing: Bool = false,
         onResizeChanged: ((DragGesture.Value) -> Void)? = nil,
         onResizeEnded: (() -> Void)? = nil,
@@ -2689,6 +2678,7 @@ private struct IOSHistoryPanel: View {
         self.metrics = metrics
         self.clearFeedbackVersion = clearFeedbackVersion
         self.usesSurfaceBackground = usesSurfaceBackground
+        self.bottomSafeAreaInset = bottomSafeAreaInset
         self.isResizing = isResizing
         self.onResizeChanged = onResizeChanged
         self.onResizeEnded = onResizeEnded
@@ -2791,7 +2781,7 @@ private struct IOSHistoryPanel: View {
         }
         .padding(.horizontal, metrics.panelHorizontalPadding)
         .padding(.top, 0)
-        .padding(.bottom, metrics.panelVerticalPadding)
+        .padding(.bottom, metrics.panelVerticalPadding + bottomSafeAreaInset)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(
             Rectangle()
