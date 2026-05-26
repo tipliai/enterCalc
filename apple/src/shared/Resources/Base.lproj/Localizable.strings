@@ -43,6 +43,7 @@
 "undo" = "Undo";
 "redo" = "Redo";
 "clear" = "Clear";
+"clear.all.command" = "All Clear (AC)";
 "clear.commandBackspace" = "Clear (Cmd+Backspace)";
 "screen.new" = "New Screen";
 "screen.close" = "Close Screen";

@@ -10,6 +10,7 @@ public struct CalculatorActionContext {
     public let canUndo: Bool
     public let canRedo: Bool
     public let clear: () -> Void
+    public let clearAll: () -> Void
 
     public init(
         copy: @escaping () -> Void,
@@ -20,7 +21,8 @@ public struct CalculatorActionContext {
         redo: @escaping () -> Void,
         canUndo: Bool,
         canRedo: Bool,
-        clear: @escaping () -> Void
+        clear: @escaping () -> Void,
+        clearAll: @escaping () -> Void
     ) {
         self.copy = copy
         self.copyOperation = copyOperation
@@ -31,6 +33,7 @@ public struct CalculatorActionContext {
         self.canUndo = canUndo
         self.canRedo = canRedo
         self.clear = clear
+        self.clearAll = clearAll
     }
 }
 

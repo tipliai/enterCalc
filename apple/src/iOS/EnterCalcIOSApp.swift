@@ -55,6 +55,7 @@ private enum IOSActionHaptics {
 import EnterCalcCore
 
 extension Notification.Name {
+    static let enterCalcIOSToggleHistoryPanel = Notification.Name("EnterCalc.iOS.ToggleHistoryPanel")
     static let enterCalcIOSToggleRoundingPanel = Notification.Name("EnterCalc.iOS.ToggleRoundingPanel")
 }
 
@@ -202,23 +203,28 @@ struct EnterCalcIOSApp: App {
                 }
                 .keyboardShortcut("z", modifiers: [.command, .shift])
                 .disabled(actionContext?.canRedo != true)
-            }
 
-            CommandGroup(after: .undoRedo) {
                 Button(localized("clear")) {
                     actionContext?.clear()
                 }
                 .keyboardShortcut(.escape, modifiers: [])
                 .disabled(actionContext == nil)
 
-                Button(localized("clear.commandBackspace")) {
-                    actionContext?.clear()
+                Button(localized("clear.all.command")) {
+                    actionContext?.clearAll()
                 }
                 .keyboardShortcut(.delete, modifiers: [.command])
                 .disabled(actionContext == nil)
             }
 
             CommandGroup(after: .toolbar) {
+                Button {
+                    NotificationCenter.default.post(name: .enterCalcIOSToggleHistoryPanel, object: nil)
+                } label: {
+                    Label(localized("history.toggle"), systemImage: "clock.arrow.circlepath")
+                }
+                .keyboardShortcut("h", modifiers: [.command, .shift])
+
                 Button {
                     NotificationCenter.default.post(name: .enterCalcIOSToggleRoundingPanel, object: nil)
                 } label: {
@@ -310,6 +316,14 @@ struct EnterCalcIOSView: View {
         activeScreen.settings.usesEnterKeySymbol ? "⏎" : "="
     }
 
+    private var clearButtonTitle: String {
+        activeScreen.viewModel.shouldShowAllClearButton ? "AC" : "C"
+    }
+
+    private func handleContextualClear() {
+        activeScreen.viewModel.clearEntry()
+    }
+
     private var palette: Palette {
         activeTheme.palette(using: colorScheme)
     }
@@ -324,7 +338,8 @@ struct EnterCalcIOSView: View {
             redo: { viewModel.redo() },
             canUndo: viewModel.canUndo,
             canRedo: viewModel.canRedo,
-            clear: { viewModel.clearAll() }
+            clear: { viewModel.clearEntry() },
+            clearAll: { viewModel.clearAll() }
         )
     }
 
@@ -339,7 +354,7 @@ struct EnterCalcIOSView: View {
     private var rows: [[IOSCalcButton]] {
         [
             [
-                .function("C", action: { $0.clearAll() }),
+                .function(clearButtonTitle, action: { _ in self.handleContextualClear() }),
                 .function("( )", action: { $0.inputParentheses() }),
                 .function("%", action: { $0.applyPercent() }),
                 .function("⌫", action: { $0.backspace() })
@@ -491,6 +506,12 @@ struct EnterCalcIOSView: View {
                 guard UIDevice.current.userInterfaceIdiom == .pad else { return }
                 #endif
                 toggleOverlay(.rounding)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .enterCalcIOSToggleHistoryPanel)) { _ in
+                #if canImport(UIKit)
+                guard UIDevice.current.userInterfaceIdiom == .pad else { return }
+                #endif
+                toggleOverlay(.history)
             }
         }
     }

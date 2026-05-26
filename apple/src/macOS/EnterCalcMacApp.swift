@@ -96,8 +96,8 @@ struct EnterCalcMacApp: App {
                 .keyboardShortcut(.escape, modifiers: [])
                 .disabled(actionContext == nil)
 
-                Button(localized("clear.commandBackspace")) {
-                    actionContext?.clear()
+                Button(localized("clear.all.command")) {
+                    actionContext?.clearAll()
                 }
                 .keyboardShortcut(.delete, modifiers: [.command])
                 .disabled(actionContext == nil)

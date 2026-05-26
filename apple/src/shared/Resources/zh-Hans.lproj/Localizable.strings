@@ -42,6 +42,7 @@
 "undo" = "撤销";
 "redo" = "重做";
 "clear" = "清除";
+"clear.all.command" = "全部清除（AC）";
 "clear.commandBackspace" = "清除（Cmd+Delete）";
 "screen.new" = "新建屏幕";
 "screen.close" = "关闭屏幕";

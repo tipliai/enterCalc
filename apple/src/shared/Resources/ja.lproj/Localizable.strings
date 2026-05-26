@@ -42,6 +42,7 @@
 "undo" = "取り消す";
 "redo" = "やり直す";
 "clear" = "クリア";
+"clear.all.command" = "すべてクリア (AC)";
 "clear.commandBackspace" = "クリア (Cmd+Delete)";
 "screen.new" = "新しい画面";
 "screen.close" = "画面を閉じる";
