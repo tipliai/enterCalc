@@ -566,6 +566,7 @@ struct CalculatorWindowView: View {
 
     private var keypadArea: some View {
         keypadGrid
+            .padding(.bottom, 4)
     }
 
     private var keypadGrid: some View {
