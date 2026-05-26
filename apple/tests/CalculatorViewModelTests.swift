@@ -1815,4 +1815,55 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.expressionDisplay, "")
         XCTAssertFalse(viewModel.shouldShowAllClearButton)
     }
+
+    func testSecondClearFromBlankPendingEntryAddsSingleUndoStep() {
+        let viewModel = CalculatorViewModel()
+
+        enter("5", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("3", into: viewModel)
+        viewModel.clearEntry()
+
+        let undoDepthBeforeSecondClear = viewModel.undoDepth
+        viewModel.clearEntry()
+
+        XCTAssertEqual(viewModel.undoDepth, undoDepthBeforeSecondClear + 1)
+    }
+
+    func testPasteAfterPendingClearShowsPastedValue() {
+        let viewModel = CalculatorViewModel()
+
+        enter("5", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("3", into: viewModel)
+        viewModel.clearEntry()
+
+        pasteString("7", into: viewModel)
+
+        XCTAssertEqual(viewModel.display, "7")
+        XCTAssertEqual(viewModel.expressionDisplay, "5 + 7")
+    }
+
+    func testClearParenthesizedExpressionKeepsBalancedParenthesisDepth() {
+        let viewModel = CalculatorViewModel()
+
+        enter("2", into: viewModel)
+        viewModel.setOperator(.add)
+        viewModel.inputParentheses()
+        enter("3", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("4", into: viewModel)
+        viewModel.inputParenthesis(")")
+        viewModel.setOperator(.multiply)
+        viewModel.inputParentheses()
+        enter("5", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("1", into: viewModel)
+
+        viewModel.clearEntry()
+        enter("6", into: viewModel)
+        viewModel.inputParenthesis(")")
+
+        XCTAssertEqual(viewModel.expressionDisplay, "2 + ( 3 + 4 ) × 6")
+    }
 }
