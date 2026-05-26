@@ -389,11 +389,15 @@ struct EnterCalcIOSView: View {
 
     var body: some View {
         GeometryReader { geometry in
+            let isLandscapePresentation = currentInterfaceOrientationIsLandscape(fallbackSize: geometry.size)
+            let screenReferenceSize = currentScreenReferenceSize(fallbackSize: geometry.size)
             let metrics = IOSLayoutMetrics(
                 size: geometry.size,
                 safeAreaInsets: geometry.safeAreaInsets,
                 horizontalSizeClass: horizontalSizeClass,
-                deviceFamily: currentDeviceFamily()
+                deviceFamily: currentDeviceFamily(),
+                isLandscapePresentation: isLandscapePresentation,
+                screenReferenceSize: screenReferenceSize
             )
 
             ZStack(alignment: .top) {
@@ -408,7 +412,7 @@ struct EnterCalcIOSView: View {
                     overlayScrim(metrics: metrics)
                 }
 
-                overlayPanels(metrics: metrics, containerSize: geometry.size)
+                overlayPanels(metrics: metrics, containerSize: geometry.size, safeAreaInsets: geometry.safeAreaInsets)
                     .rotationEffect(.degrees(counterRotatesForUpsideDownPortrait ? 180 : 0))
 
                 IOSHardwareKeyCaptureView(
@@ -479,6 +483,11 @@ struct EnterCalcIOSView: View {
                 } else {
                     startDisplayShimmerParallaxMotion()
                 }
+            }
+            .onValueChange(of: activeOverlay == .history && !metrics.usesOverlayHistory) { shouldClearHiddenHistoryOverlay in
+                guard shouldClearHiddenHistoryOverlay else { return }
+                activeOverlay = nil
+                resetHistoryOverlayResizeState()
             }
             .sheet(isPresented: $showSettingsSheet) {
                 IOSSettingsSheet(
@@ -766,7 +775,7 @@ private extension EnterCalcIOSView {
     }
 
     @ViewBuilder
-    func overlayPanels(metrics: IOSLayoutMetrics, containerSize: CGSize) -> some View {
+    func overlayPanels(metrics: IOSLayoutMetrics, containerSize: CGSize, safeAreaInsets: EdgeInsets) -> some View {
         ZStack(alignment: .top) {
             if metrics.usesOverlayHistory, activeOverlay == .history {
                 historyOverlayPanel(metrics: metrics, containerHeight: containerSize.height, screen: activeScreen) {
@@ -775,6 +784,7 @@ private extension EnterCalcIOSView {
                         palette: palette,
                         metrics: metrics,
                         clearFeedbackVersion: historyClearFeedbackVersion(for: activeScreen),
+                        bottomSafeAreaInset: metrics.mode == .phonePortrait ? safeAreaInsets.bottom : 0,
                         isResizing: isResizingHistoryOverlay,
                         onResizeChanged: { value in
                             updateHistoryOverlayHeight(for: activeScreen, metrics: metrics, containerHeight: containerSize.height, dragValue: value)
@@ -788,9 +798,13 @@ private extension EnterCalcIOSView {
                         },
                         onClear: {
                             triggerHistoryClearFeedback(for: activeScreen)
-                            activeScreen.viewModel.clearHistory()
                             if metrics.mode == .phonePortrait {
                                 dismissHistoryOverlay()
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                    activeScreen.viewModel.clearHistory()
+                                }
+                            } else {
+                                activeScreen.viewModel.clearHistory()
                             }
                         },
                         onDismiss: { dismissHistoryOverlay() },
@@ -1063,9 +1077,13 @@ private extension EnterCalcIOSView {
 
     @ViewBuilder
     func layoutBody(metrics: IOSLayoutMetrics) -> some View {
-        let usesLandscapeNavigationRail = metrics.mode == .phoneLandscape
-        let landscapeRailWidth = usesLandscapeNavigationRail ? metrics.headerButtonSize + 4 : 0
-        let pageSpacing = metrics.mode == .phoneLandscape && metrics.usesInlineLandscapeHistory
+        let usesLandscapeNavigationRail = metrics.usesLandscapeNavigationRail
+        let fullLandscapeRailWidth = metrics.headerButtonSize + 4
+        let padWideLandscapeRailWidth = fullLandscapeRailWidth * 0.5 + 13
+        let landscapeRailWidth = usesLandscapeNavigationRail
+            ? (metrics.mode == .padWide ? padWideLandscapeRailWidth : fullLandscapeRailWidth)
+            : 0
+        let pageSpacing = metrics.usesInlineLandscapeHistory
             ? metrics.historyPanelWidth + metrics.outerPadding * 2
             : (usesLandscapeNavigationRail ? max(metrics.sectionSpacing * 4, metrics.outerPadding * 1.5) : 0)
 
@@ -1111,7 +1129,7 @@ private extension EnterCalcIOSView {
 
     @ViewBuilder
     func paginationIndicator(metrics: IOSLayoutMetrics) -> some View {
-        let usesLandscapeNavigationRail = metrics.mode == .phoneLandscape
+        let usesLandscapeNavigationRail = metrics.usesLandscapeNavigationRail
         let activePaginationColor = activeTheme == .blue
             ? Color.white
             : Color(red: 0, green: 0.3529, blue: 1.0)
@@ -1185,39 +1203,48 @@ private extension EnterCalcIOSView {
         screen: CalculatorScreenSession,
         showsPaginationIndicator: Bool
     ) -> some View {
+        let railButtonSize = metrics.mode == .padWide ? metrics.headerButtonSize * 0.5 + 7 : metrics.headerButtonSize + 4
+        let padWideRailIconOffsetX: CGFloat = metrics.mode == .padWide ? 14 : 0
+        let railAlignment: Alignment = metrics.mode == .padWide ? .top : .topLeading
+        let buttonAlignment: Alignment = metrics.mode == .padWide ? .trailing : .leading
+        let topRailInset: CGFloat = metrics.mode == .padWide ? 35 : 5
+        let bottomRailInset: CGFloat = metrics.mode == .padWide ? 15 : 0
+
         VStack(spacing: 0) {
             pageActionButton(
                 metrics: metrics,
                 screen: screen,
-                buttonSize: metrics.headerButtonSize + 4,
+                buttonSize: railButtonSize,
                 iconSize: metrics.headerIconFontSize + 2
             )
-            .padding(.top, 5)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, topRailInset)
+            .offset(x: padWideRailIconOffsetX, y: metrics.mode == .padWide ? 5 : 0)
+            .frame(maxWidth: .infinity, alignment: buttonAlignment)
 
             if metrics.usesInlineLandscapeHistory && !screen.viewModel.history.isEmpty {
                 landscapeHistoryClearButton(
                     metrics: metrics,
                     screen: screen
                 )
-                .padding(.top, max(8, metrics.sectionSpacing))
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, max(8, metrics.sectionSpacing) + (metrics.mode == .padWide ? 20 : 0))
+                .offset(x: padWideRailIconOffsetX)
+                .frame(maxWidth: .infinity, alignment: buttonAlignment)
             }
 
             if screen.settings.disablesSwipeDownToRound {
                 roundingButton(
                     metrics: metrics,
-                    buttonSize: metrics.headerButtonSize + 4,
+                    buttonSize: railButtonSize,
                     iconSize: metrics.headerIconFontSize + 2
                 )
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: buttonAlignment)
             }
 
             Spacer(minLength: metrics.sectionSpacing)
 
             if showsPaginationIndicator {
                 paginationIndicator(metrics: metrics)
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, alignment: buttonAlignment)
             }
 
             Spacer(minLength: metrics.sectionSpacing)
@@ -1225,12 +1252,14 @@ private extension EnterCalcIOSView {
             settingsButton(
                 metrics: metrics,
                 screen: screen,
-                buttonSize: metrics.headerButtonSize + 4,
+                buttonSize: railButtonSize,
                 iconSize: metrics.headerIconFontSize + 2
             )
-                .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, bottomRailInset)
+            .offset(x: padWideRailIconOffsetX, y: metrics.mode == .padWide ? -3 : 0)
+            .frame(maxWidth: .infinity, alignment: buttonAlignment)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: railAlignment)
     }
 
     @ViewBuilder
@@ -1238,7 +1267,7 @@ private extension EnterCalcIOSView {
         metrics: IOSLayoutMetrics,
         screen: CalculatorScreenSession
     ) -> some View {
-        let buttonSize = metrics.headerButtonSize + 4
+        let buttonSize = metrics.mode == .padWide ? metrics.headerButtonSize * 0.5 + 7 : metrics.headerButtonSize + 4
         let iconSize = metrics.headerIconFontSize + 2
 
         Button {
@@ -1269,7 +1298,7 @@ private extension EnterCalcIOSView {
         @ViewBuilder content: @escaping () -> Content
     ) -> some View {
         GeometryReader { geometry in
-            let usesLandscapeNavigationRail = metrics.mode == .phoneLandscape
+            let usesLandscapeNavigationRail = metrics.usesLandscapeNavigationRail
             let paginationSpacing = showsPaginationIndicator ? metrics.pageIndicatorVerticalSpacing : 0
             let bottomFooterHeight = showsPaginationIndicator
                 ? 0
@@ -1375,13 +1404,29 @@ private extension EnterCalcIOSView {
             .padding(.top, metrics.topPadding)
             .padding(.bottom, metrics.bottomPadding)
         case .padWide:
-            pageContentWithPagination(metrics: metrics, showsPaginationIndicator: showsPaginationIndicator) {
-                calculatorSurface(metrics: metrics, screen: screen, paginationBottomInset: paginationBottomInset)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            if metrics.usesInlineLandscapeHistory {
+                pageContentWithPagination(metrics: metrics, showsPaginationIndicator: showsPaginationIndicator) {
+                    HStack(spacing: metrics.outerPadding) {
+                        landscapeHistoryPane(metrics: metrics, screen: screen)
+                            .frame(width: metrics.historyPanelWidth)
+                            .frame(maxHeight: .infinity)
+
+                        calculatorSurface(metrics: metrics, screen: screen, paginationBottomInset: paginationBottomInset)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    }
+                }
+                .padding(.top, metrics.topPadding)
+                .padding(.bottom, metrics.bottomPadding)
+                .padding(.horizontal, metrics.outerPadding)
+            } else {
+                pageContentWithPagination(metrics: metrics, showsPaginationIndicator: showsPaginationIndicator) {
+                    calculatorSurface(metrics: metrics, screen: screen, paginationBottomInset: paginationBottomInset)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                }
+                .padding(.top, metrics.topPadding)
+                .padding(.bottom, metrics.bottomPadding)
+                .padding(.horizontal, metrics.outerPadding)
             }
-            .padding(.top, metrics.topPadding)
-            .padding(.bottom, metrics.bottomPadding)
-            .padding(.horizontal, metrics.outerPadding)
         }
     }
 
@@ -1395,7 +1440,7 @@ private extension EnterCalcIOSView {
             let isLandscapeMode = metrics.mode == .phoneLandscape || metrics.mode == .padWide
             let fillsHeightWithoutScaling = metrics.mode == .padWide || (metrics.isPadWindow && metrics.mode == .phonePortrait)
             let allowsKeypadResize = !isLandscapeMode
-            let showsInlineLandscapeHeader = !metrics.usesInlineLandscapeHistory && !metrics.usesTitlebarHeader
+            let showsInlineLandscapeHeader = !metrics.usesTitlebarHeader && !metrics.usesLandscapeNavigationRail
             let keypadHeightMultiplier = allowsKeypadResize ? normalizedKeypadHeightMultiplier(for: screen) : 1.0
             let baseKeypadHeight = metrics.keypadHeight
             let baseButtonHeight = metrics.buttonHeight * keypadHeightMultiplier
@@ -1569,6 +1614,7 @@ private extension EnterCalcIOSView {
             palette: palette,
             metrics: metrics,
             clearFeedbackVersion: historyClearFeedbackVersion(for: screen),
+            usesSurfaceBackground: activeTheme == .blue && metrics.usesInlineLandscapeHistory,
             onSelect: { entry in screen.viewModel.reuse(entry) },
             onClear: {
                 triggerHistoryClearFeedback(for: screen)
@@ -1597,7 +1643,7 @@ private extension EnterCalcIOSView {
     }
 
     func header(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession) -> some View {
-        let showsLandscapeRailControls = metrics.mode == .phoneLandscape
+        let showsLandscapeRailControls = metrics.usesLandscapeNavigationRail
 
         return HStack(alignment: .top, spacing: metrics.headerSpacing) {
             if metrics.isPadWindow {
@@ -2126,12 +2172,20 @@ private extension EnterCalcIOSView {
         let panelHeight = resolvedHistoryOverlayHeight(for: screen, metrics: metrics, containerHeight: containerHeight)
 
         if metrics.usesBottomOverlaySheet {
-            content()
-                .frame(width: metrics.overlayPanelWidth, height: panelHeight)
-                .padding(.bottom, metrics.overlayBottomPadding)
-                .padding(.horizontal, metrics.mode == .phonePortrait ? metrics.outerPadding : 0)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+            if metrics.mode == .phonePortrait {
+                content()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: panelHeight)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .ignoresSafeArea(edges: .bottom)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else {
+                content()
+                    .frame(width: metrics.overlayPanelWidth, height: panelHeight)
+                    .padding(.bottom, metrics.overlayBottomPadding)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         } else {
             content()
                 .frame(width: metrics.overlayPanelWidth, height: panelHeight)
@@ -2187,7 +2241,7 @@ private extension EnterCalcIOSView {
         }
 
         guard let storedHeight = screen.historyOverlayHeight else {
-            return minimumHeight
+            return defaultHistoryOverlayHeight(metrics: metrics, containerHeight: containerHeight)
         }
 
         return clamp(CGFloat(storedHeight), to: minimumHeight...maximumHeight)
@@ -2199,7 +2253,8 @@ private extension EnterCalcIOSView {
 
     func defaultHistoryOverlayHeight(metrics: IOSLayoutMetrics, containerHeight: CGFloat) -> CGFloat {
         let maximumHeight = maximumHistoryOverlayHeight(metrics: metrics, containerHeight: containerHeight)
-        return minimumHistoryOverlayHeight(maximumHeight: maximumHeight)
+        let minimumHeight = minimumHistoryOverlayHeight(maximumHeight: maximumHeight)
+        return min(maximumHeight, minimumHeight * 1.5)
     }
 
     func minimumHistoryOverlayHeight(maximumHeight: CGFloat) -> CGFloat {
@@ -2218,6 +2273,30 @@ private extension EnterCalcIOSView {
         return .phone
 #endif
     }
+
+    func currentInterfaceOrientationIsLandscape(fallbackSize: CGSize) -> Bool {
+#if canImport(UIKit)
+        switch UIDevice.current.orientation {
+        case .landscapeLeft, .landscapeRight:
+            return true
+        case .portrait, .portraitUpsideDown:
+            return false
+        default:
+            return fallbackSize.width > fallbackSize.height
+        }
+#else
+        return fallbackSize.width > fallbackSize.height
+#endif
+    }
+
+    func currentScreenReferenceSize(fallbackSize: CGSize) -> CGSize {
+#if canImport(UIKit)
+        UIScreen.main.bounds.size
+#else
+        fallbackSize
+#endif
+    }
+
 }
 
 private struct IOSSettingsSheet: View {
@@ -2560,6 +2639,8 @@ private struct IOSHistoryPanel: View {
     let palette: Palette
     let metrics: IOSLayoutMetrics
     let clearFeedbackVersion: Int
+    let usesSurfaceBackground: Bool
+    let bottomSafeAreaInset: CGFloat
     let isResizing: Bool
     let onResizeChanged: ((DragGesture.Value) -> Void)?
     let onResizeEnded: (() -> Void)?
@@ -2570,6 +2651,7 @@ private struct IOSHistoryPanel: View {
     let onCopyOperationEntry: (HistoryEntry) -> Void
     @Environment(\.colorScheme) private var colorScheme
     @State private var didClearHistoryInOverlay: Bool = false
+    @State private var hadEntriesWhilePresented: Bool = false
 
     private var showsCloseButton: Bool {
         metrics.mode == .phonePortrait
@@ -2580,6 +2662,8 @@ private struct IOSHistoryPanel: View {
         palette: Palette,
         metrics: IOSLayoutMetrics,
         clearFeedbackVersion: Int = 0,
+        usesSurfaceBackground: Bool = false,
+        bottomSafeAreaInset: CGFloat = 0,
         isResizing: Bool = false,
         onResizeChanged: ((DragGesture.Value) -> Void)? = nil,
         onResizeEnded: (() -> Void)? = nil,
@@ -2593,6 +2677,8 @@ private struct IOSHistoryPanel: View {
         self.palette = palette
         self.metrics = metrics
         self.clearFeedbackVersion = clearFeedbackVersion
+        self.usesSurfaceBackground = usesSurfaceBackground
+        self.bottomSafeAreaInset = bottomSafeAreaInset
         self.isResizing = isResizing
         self.onResizeChanged = onResizeChanged
         self.onResizeEnded = onResizeEnded
@@ -2612,7 +2698,14 @@ private struct IOSHistoryPanel: View {
     }
 
     private var emptyHistoryMessage: String {
-        localized(didClearHistoryInOverlay ? "history.emptyAfterClear" : "history.empty")
+        if didClearHistoryInOverlay || hadEntriesWhilePresented {
+            return ""
+        }
+        return localized("history.empty")
+    }
+
+    private var panelBackgroundColor: Color {
+        usesSurfaceBackground ? palette.surface : palette.historyBackground
     }
 
     var body: some View {
@@ -2630,7 +2723,7 @@ private struct IOSHistoryPanel: View {
                         .font(EnterCalcFont.appFont(size: metrics.panelSecondaryFontSize + 2))
                         .foregroundColor(palette.textSecondary)
                         .multilineTextAlignment(alignsEmptyStateToTop ? .leading : .center)
-                        .padding(.top, alignsEmptyStateToTop ? 100 : 0)
+                        .padding(.top, alignsEmptyStateToTop ? metrics.panelVerticalPadding : 0)
                         .padding(.leading, alignsEmptyStateToTop ? metrics.panelHorizontalPadding : 0)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignsEmptyStateToTop ? .topLeading : .center)
                 }
@@ -2688,11 +2781,11 @@ private struct IOSHistoryPanel: View {
         }
         .padding(.horizontal, metrics.panelHorizontalPadding)
         .padding(.top, 0)
-        .padding(.bottom, metrics.panelVerticalPadding)
+        .padding(.bottom, metrics.panelVerticalPadding + bottomSafeAreaInset)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(
             Rectangle()
-                .fill(palette.historyBackground)
+                .fill(panelBackgroundColor)
         )
         .overlay(
             Rectangle()
@@ -2700,6 +2793,7 @@ private struct IOSHistoryPanel: View {
         )
         .onChange(of: entries.count) { _, count in
             if count > 0 {
+                hadEntriesWhilePresented = true
                 didClearHistoryInOverlay = false
             }
         }
@@ -2710,6 +2804,9 @@ private struct IOSHistoryPanel: View {
             }
 
             didClearHistoryInOverlay = true
+        }
+        .onAppear {
+            hadEntriesWhilePresented = !entries.isEmpty
         }
         .contentShape(Rectangle())
     }
@@ -3111,7 +3208,7 @@ private enum IOSDeviceFamily {
 }
 
 private struct IOSLayoutMetrics {
-    static let minimumPadWindowSize = CGSize(width: 340, height: 540)
+    static let minimumPadWindowSize = CGSize(width: 340, height: 440)
     static let defaultPadWindowSize = minimumPadWindowSize
 
     let isPadWindow: Bool
@@ -3163,16 +3260,29 @@ private struct IOSLayoutMetrics {
     let titlebarLeadingInset: CGFloat
     let usesAdaptiveScaling: Bool
 
-    init(size: CGSize, safeAreaInsets: EdgeInsets, horizontalSizeClass: UserInterfaceSizeClass?, deviceFamily: IOSDeviceFamily) {
-        let isLandscape = size.width > size.height
-        let usesWidePadLayout = deviceFamily == .pad && isLandscape && horizontalSizeClass == .regular && size.width >= 700
+    init(
+        size: CGSize,
+        safeAreaInsets: EdgeInsets,
+        horizontalSizeClass: UserInterfaceSizeClass?,
+        deviceFamily: IOSDeviceFamily,
+        isLandscapePresentation: Bool,
+        screenReferenceSize: CGSize
+    ) {
+        let isGeometryLandscape = size.width > size.height
+        let landscapeScreenWidth = max(screenReferenceSize.width, screenReferenceSize.height)
+        let landscapeScreenHeight = min(screenReferenceSize.width, screenReferenceSize.height)
+        let isNarrowLandscapePadWindow = deviceFamily == .pad && isLandscapePresentation && size.width <= landscapeScreenWidth * 0.5
+        let usesWidePadLayout = deviceFamily == .pad && isLandscapePresentation && !isNarrowLandscapePadWindow
+        let isFullScreenWidePadLayout = usesWidePadLayout
+            && size.width >= landscapeScreenWidth * 0.97
+            && size.height >= landscapeScreenHeight * 0.97
         isPadWindow = deviceFamily == .pad
         let pageIndicatorReserve: CGFloat = isPadWindow ? 18 : 0
-        let needsLegacyPhoneBottomReserve = !isPadWindow && !isLandscape && size.height <= 750 && safeAreaInsets.bottom < 10
+        let needsLegacyPhoneBottomReserve = !isPadWindow && !isGeometryLandscape && size.height <= 750 && safeAreaInsets.bottom < 10
 
         if usesWidePadLayout {
             mode = .padWide
-        } else if isLandscape && !isPadWindow {
+        } else if isGeometryLandscape && !isPadWindow {
             mode = .phoneLandscape
         } else {
             mode = .phonePortrait
@@ -3283,7 +3393,7 @@ private struct IOSLayoutMetrics {
         case .padWide:
             outerPadding = max(18, safeAreaInsets.leading + 12)
             innerHorizontalPadding = 0
-            topPadding = max(14, safeAreaInsets.top + 10)
+            topPadding = safeAreaInsets.top + (isFullScreenWidePadLayout ? 10 : 0)
             bottomPadding = max(14, safeAreaInsets.bottom + 14)
             contentTopPadding = 0
             contentBottomPadding = 0
@@ -3312,8 +3422,8 @@ private struct IOSLayoutMetrics {
             buttonFontSize = min(max(unit * 0.38, 16), 32)
             buttonCornerRadius = min(max(unit * 0.24, 16), 24)
             surfaceCornerRadius = 26
-            historyPanelWidth = 0
-            overlayPanelWidth = min(max(size.width * (isLandscape ? 0.32 : 0.38), 320), min(maxSurfaceWidth, 420))
+            historyPanelWidth = min(max(size.width * 0.275, 225), 375)
+            overlayPanelWidth = min(max(size.width * (isGeometryLandscape ? 0.32 : 0.38), 320), min(maxSurfaceWidth, 420))
             panelSpacing = 14
             panelItemSpacing = 10
             panelHorizontalPadding = 12
@@ -3328,7 +3438,7 @@ private struct IOSLayoutMetrics {
             pageIndicatorVerticalSpacing = sectionSpacing
             portraitBottomReserveWithoutPagination = 0
             usesTitlebarHeader = false
-            usesInlineLandscapeHistory = false
+            usesInlineLandscapeHistory = true
             titlebarLeadingInset = 0
             usesAdaptiveScaling = false
         }
@@ -3379,6 +3489,10 @@ private struct IOSLayoutMetrics {
         mode != .padWide
     }
 
+    var usesLandscapeNavigationRail: Bool {
+        mode == .phoneLandscape || mode == .padWide
+    }
+
     var bottomOverlayPanelHeight: CGFloat {
         keypadHeight + sectionSpacing
     }
@@ -3393,11 +3507,11 @@ private struct IOSLayoutMetrics {
     }
 
     var showsHistoryButton: Bool {
-        mode != .phoneLandscape || !usesInlineLandscapeHistory
+        !usesInlineLandscapeHistory
     }
 
     var usesOverlayHistory: Bool {
-        mode != .phoneLandscape || !usesInlineLandscapeHistory
+        !usesInlineLandscapeHistory
     }
 
     var overlayAlignment: Alignment {
