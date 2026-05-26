@@ -211,8 +211,8 @@ struct EnterCalcIOSApp: App {
                 .keyboardShortcut(.escape, modifiers: [])
                 .disabled(actionContext == nil)
 
-                Button(localized("clear.commandBackspace")) {
-                    actionContext?.clear()
+                Button("AC") {
+                    actionContext?.clearAll()
                 }
                 .keyboardShortcut(.delete, modifiers: [.command])
                 .disabled(actionContext == nil)
@@ -332,7 +332,8 @@ struct EnterCalcIOSView: View {
             redo: { viewModel.redo() },
             canUndo: viewModel.canUndo,
             canRedo: viewModel.canRedo,
-            clear: { viewModel.clearAll() }
+            clear: { viewModel.clearEntry() },
+            clearAll: { viewModel.clearAll() }
         )
     }
 

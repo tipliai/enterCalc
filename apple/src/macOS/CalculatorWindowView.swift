@@ -117,7 +117,8 @@ struct CalculatorWindowView: View {
             redo: { viewModel.redo() },
             canUndo: viewModel.canUndo,
             canRedo: viewModel.canRedo,
-            clear: { viewModel.clearAll() }
+            clear: { viewModel.clearEntry() },
+            clearAll: { viewModel.clearAll() }
         )
     }
 
