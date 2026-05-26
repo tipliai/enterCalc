@@ -427,6 +427,7 @@ public final class CalculatorViewModel: ObservableObject {
 
     public func clearEntry() {
         let snapshot = beginUndoableChange()
+        let clearedEvaluatedResult = justEvaluated && pendingOperator == nil && !isExpressionMode
 
         if isPendingEntryClearedByClearButton {
             resetAllStateForClearAll()
@@ -464,7 +465,7 @@ public final class CalculatorViewModel: ObservableObject {
                 accumulator = nil
                 accumulatorToken = nil
                 shouldResetInputOnNextDigit = false
-                isPendingEntryClearedByClearButton = false
+                isPendingEntryClearedByClearButton = true
                 expression = ""
             } else {
                 currentInput = "0"
@@ -475,10 +476,11 @@ public final class CalculatorViewModel: ObservableObject {
         } else {
             currentInput = "0"
             currentToken = "0"
-            isPendingEntryClearedByClearButton = false
+            shouldResetInputOnNextDigit = true
+            isPendingEntryClearedByClearButton = true
         }
 
-        justEvaluated = false
+        justEvaluated = clearedEvaluatedResult
         isErrorState = false
         currentErrorKey = nil
         updateDisplay()
@@ -1759,7 +1761,7 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func updateDisplay() {
-        let plainDisplay = isPendingEntryClearedByClearButton ? "" : displayString(for: currentInput)
+        let plainDisplay = isPendingEntryClearedByClearButton && currentInput == "0" ? "" : displayString(for: currentInput)
         let header: String
         if isExpressionMode {
             header = expressionPreviewHeader()

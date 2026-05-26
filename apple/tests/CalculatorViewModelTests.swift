@@ -1749,9 +1749,62 @@ final class CalculatorViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.display, "9")
         XCTAssertEqual(viewModel.expressionDisplay, "")
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
 
+        viewModel.clearEntry()
+
+        XCTAssertEqual(viewModel.display, "0")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+        XCTAssertFalse(viewModel.shouldShowAllClearButton)
+
+        enter("7", into: viewModel)
         viewModel.evaluate()
-        XCTAssertEqual(viewModel.display, "9")
+
+        XCTAssertEqual(viewModel.display, "7")
+    }
+
+    func testClearAfterEqualsArmsAllClearForNextPress() {
+        let viewModel = CalculatorViewModel()
+
+        enter("195", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("65", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "260")
+
+        viewModel.clearEntry()
+
+        XCTAssertEqual(viewModel.display, "")
+        XCTAssertEqual(viewModel.expressionDisplay, "195 + 65 =")
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
+
+        viewModel.clearEntry()
+
+        XCTAssertEqual(viewModel.display, "0")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+        XCTAssertFalse(viewModel.shouldShowAllClearButton)
+
+        enter("7", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "7")
+    }
+
+    func testDigitAfterClearingEvaluatedResultStartsFreshCalculation() {
+        let viewModel = CalculatorViewModel()
+
+        enter("195", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("65", into: viewModel)
+        viewModel.evaluate()
+
+        viewModel.clearEntry()
+        enter("7", into: viewModel)
+
+        XCTAssertEqual(viewModel.display, "7")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+        XCTAssertFalse(viewModel.shouldShowAllClearButton)
     }
 
     func testClearAfterStandaloneSquareRootUsesAllClearBehavior() {
