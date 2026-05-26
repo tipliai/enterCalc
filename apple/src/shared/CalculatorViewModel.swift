@@ -874,13 +874,13 @@ public final class CalculatorViewModel: ObservableObject {
             completeUndoableChange(from: snapshot)
             return
         }
-        isPendingEntryClearedByClearButton = false
         switch parsePastedContent(trimmed) {
         case .value(let rawValue):
             guard let normalized = normalizePastedNumber(rawValue), let value = decimalValue(fromCanonicalString: normalized) else {
                 completeUndoableChange(from: snapshot)
                 return
             }
+            isPendingEntryClearedByClearButton = false
             let isReplacingPendingOperand = pendingOperator != nil || accumulator != nil
             currentInput = formattedPastedInput(fromCanonical: normalized, value: value)
             currentToken = displayString(for: currentInput)

@@ -1698,6 +1698,23 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.display, "42")
     }
 
+    func testMalformedPasteAfterPendingClearKeepsPendingClearState() {
+        let viewModel = CalculatorViewModel()
+
+        enter("5", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("3", into: viewModel)
+        viewModel.clearEntry()
+
+        let undoDepthBeforePaste = viewModel.undoDepth
+        pasteString("1e999999", into: viewModel)
+
+        XCTAssertEqual(viewModel.display, "")
+        XCTAssertEqual(viewModel.expressionDisplay, "5 +")
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
+        XCTAssertEqual(viewModel.undoDepth, undoDepthBeforePaste)
+    }
+
     // MARK: - Contextual Clear Button Behavior Tests
 
     func testClearEntryKeepsPendingOperation() {
