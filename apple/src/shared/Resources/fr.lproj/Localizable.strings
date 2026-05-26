@@ -42,6 +42,7 @@
 "undo" = "Annuler";
 "redo" = "Rétablir";
 "clear" = "Effacer";
+"clear.all.command" = "Tout effacer (AC)";
 "clear.commandBackspace" = "Effacer (Cmd+Retour arrière)";
 "screen.new" = "Nouvel écran";
 "screen.close" = "Fermer l’écran";

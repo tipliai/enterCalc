@@ -42,6 +42,7 @@
 "undo" = "Deshacer";
 "redo" = "Rehacer";
 "clear" = "Borrar";
+"clear.all.command" = "Borrar todo (AC)";
 "clear.commandBackspace" = "Borrar (Cmd+Retroceso)";
 "screen.new" = "Nueva pantalla";
 "screen.close" = "Cerrar pantalla";

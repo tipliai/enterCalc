@@ -42,6 +42,7 @@
 "undo" = "Rückgängig";
 "redo" = "Wiederholen";
 "clear" = "Löschen";
+"clear.all.command" = "Alles löschen (AC)";
 "clear.commandBackspace" = "Löschen (Cmd+Rücktaste)";
 "screen.new" = "Neuer Bildschirm";
 "screen.close" = "Bildschirm schließen";
