@@ -453,16 +453,10 @@ public final class CalculatorViewModel: ObservableObject {
                 isPendingEntryClearedByClearButton = true
                 expression = ""
             } else {
-                currentInput = "0"
-                currentToken = "0"
-                shouldResetInputOnNextDigit = true
-                isPendingEntryClearedByClearButton = true
+                setBlankPendingEntryState()
             }
         } else {
-            currentInput = "0"
-            currentToken = "0"
-            shouldResetInputOnNextDigit = true
-            isPendingEntryClearedByClearButton = true
+            setBlankPendingEntryState()
         }
 
         justEvaluated = false
@@ -503,8 +497,12 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     public func backspace() {
+        if currentErrorKey == "error.invalidInput" {
+            undo()
+            return
+        }
+
         let snapshot = beginUndoableChange()
-        isPendingEntryClearedByClearButton = false
         if isErrorState {
             resetAllStateForClearAll()
             updateDisplay()
@@ -518,22 +516,52 @@ public final class CalculatorViewModel: ObservableObject {
                 } else if removed == ")" {
                     openParenthesisCount += 1
                 }
-                if isExpressionNumberToken(removed),
-                   let normalized = normalizeDisplayNumberToken(removed) {
+                if expressionTokens.isEmpty {
+                    resetAllStateForClearAll()
+                } else if let last = expressionTokens.last,
+                          isExpressionNumberToken(last),
+                          let normalized = normalizeDisplayNumberToken(last) {
                     currentInput = normalized
-                    currentToken = removed
+                    currentToken = last
                     shouldResetInputOnNextDigit = false
+                    isPendingEntryClearedByClearButton = false
+
+                    if expressionTokens.count == 1, openParenthesisCount == 0 {
+                        expressionTokens.removeAll()
+                        isExpressionMode = false
+                        expression = ""
+                    }
                 }
+            } else {
+                resetAllStateForClearAll()
             }
             updateDisplay()
             completeUndoableChange(from: snapshot)
             return
         }
+        if shouldResetInputOnNextDigit, pendingOperator != nil {
+            removePendingOperatorPreservingLeftOperand(armAllClear: false)
+            updateDisplay()
+            completeUndoableChange(from: snapshot)
+            return
+        }
+
+        isPendingEntryClearedByClearButton = false
+
         if shouldResetInputOnNextDigit {
             currentInput = "0"
             shouldResetInputOnNextDigit = false
         } else if currentInput.count > 1 {
             currentInput.removeLast()
+        } else if currentInput != "0" {
+            if isExpressionMode || pendingOperator != nil {
+                setBlankPendingEntryState()
+            } else {
+                resetAllStateForClearAll()
+            }
+            updateDisplay()
+            completeUndoableChange(from: snapshot)
+            return
         } else {
             currentInput = "0"
         }
@@ -1720,6 +1748,25 @@ public final class CalculatorViewModel: ObservableObject {
 
     private var shouldUseAllClearBehavior: Bool {
         isPendingEntryClearedByClearButton || isStandaloneUnaryResult || isErrorState || isResultStateUsingAllClear || isInClearAllState
+    }
+
+    private func setBlankPendingEntryState() {
+        currentInput = "0"
+        currentToken = "0"
+        shouldResetInputOnNextDigit = true
+        isPendingEntryClearedByClearButton = true
+    }
+
+    private func removePendingOperatorPreservingLeftOperand(armAllClear: Bool) {
+        let lhsValue = accumulator ?? currentValue
+        currentInput = format(lhsValue)
+        currentToken = accumulatorToken ?? displayString(for: currentInput)
+        pendingOperator = nil
+        accumulator = nil
+        accumulatorToken = nil
+        shouldResetInputOnNextDigit = false
+        isPendingEntryClearedByClearButton = armAllClear
+        expression = ""
     }
 
     private func clearParenthesizedExpressionIfNeeded() -> Bool {

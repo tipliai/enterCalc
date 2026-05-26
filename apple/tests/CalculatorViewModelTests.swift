@@ -713,6 +713,23 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.expressionDisplay, "")
     }
 
+    func testBackspaceOnInvalidInputUndoesErrorOnce() {
+        let viewModel = CalculatorViewModel()
+
+        enter("9", into: viewModel)
+        viewModel.toggleSign()
+        viewModel.squareRoot()
+
+        XCTAssertTrue(viewModel.isErrorState)
+        XCTAssertEqual(viewModel.display, "Invalid input")
+
+        viewModel.backspace()
+
+        XCTAssertFalse(viewModel.isErrorState)
+        XCTAssertEqual(viewModel.display, "-9")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+    }
+
     func testReciprocalOfZeroSetsDivideByZeroError() {
         let viewModel = CalculatorViewModel()
 
@@ -1885,6 +1902,84 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.clearEntry()
 
         XCTAssertEqual(viewModel.undoDepth, undoDepthBeforeSecondClear + 1)
+    }
+
+    func testBackspaceCanRemovePendingDigitOperatorAndLeftOperand() {
+        let viewModel = CalculatorViewModel()
+
+        enter("9", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("3", into: viewModel)
+
+        viewModel.backspace()
+
+        XCTAssertEqual(viewModel.display, "")
+        XCTAssertEqual(viewModel.expressionDisplay, "9 +")
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
+
+        viewModel.backspace()
+
+        XCTAssertEqual(viewModel.display, "9")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+        XCTAssertFalse(viewModel.shouldShowAllClearButton)
+
+        viewModel.backspace()
+
+        XCTAssertEqual(viewModel.display, "0")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
+    }
+
+    func testBackspaceDeletingStandaloneDigitResetsToFreshAllClearState() {
+        let viewModel = CalculatorViewModel()
+
+        enter("3", into: viewModel)
+
+        viewModel.backspace()
+
+        XCTAssertEqual(viewModel.display, "0")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
+    }
+
+    func testBackspaceCanFullyUnwindParenthesizedExpression() {
+        let viewModel = CalculatorViewModel()
+
+        enter("9", into: viewModel)
+        viewModel.setOperator(.multiply)
+        viewModel.inputParentheses()
+        enter("3", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("1", into: viewModel)
+
+        viewModel.backspace()
+        XCTAssertEqual(viewModel.display, "")
+        XCTAssertEqual(viewModel.expressionDisplay, "9 × ( 3 +")
+
+        viewModel.backspace()
+        XCTAssertEqual(viewModel.display, "3")
+        XCTAssertEqual(viewModel.expressionDisplay, "9 × ( 3")
+
+        viewModel.backspace()
+        XCTAssertEqual(viewModel.display, "")
+        XCTAssertEqual(viewModel.expressionDisplay, "9 × ( 3")
+
+        viewModel.backspace()
+        XCTAssertEqual(viewModel.display, "")
+        XCTAssertEqual(viewModel.expressionDisplay, "9 × (")
+
+        viewModel.backspace()
+        XCTAssertEqual(viewModel.display, "")
+        XCTAssertEqual(viewModel.expressionDisplay, "9 ×")
+
+        viewModel.backspace()
+        XCTAssertEqual(viewModel.display, "9")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+
+        viewModel.backspace()
+        XCTAssertEqual(viewModel.display, "0")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
     }
 
     func testPasteAfterPendingClearShowsPastedValue() {
