@@ -237,6 +237,7 @@ struct EnterCalcIOSApp: App {
 }
 
 struct EnterCalcIOSView: View {
+    private let showsWindowSizeDebugOverlay = true
     @StateObject private var screenStore = CalculatorScreenStore(
         homeSettings: CalculatorScreenSettings(
             themeRawValue: AppTheme.system.rawValue,
@@ -390,12 +391,14 @@ struct EnterCalcIOSView: View {
     var body: some View {
         GeometryReader { geometry in
             let isLandscapePresentation = currentInterfaceOrientationIsLandscape(fallbackSize: geometry.size)
+            let screenReferenceSize = currentWindowSceneScreenSize(fallbackSize: geometry.size)
             let metrics = IOSLayoutMetrics(
                 size: geometry.size,
                 safeAreaInsets: geometry.safeAreaInsets,
                 horizontalSizeClass: horizontalSizeClass,
                 deviceFamily: currentDeviceFamily(),
-                isLandscapePresentation: isLandscapePresentation
+                isLandscapePresentation: isLandscapePresentation,
+                screenReferenceSize: screenReferenceSize
             )
 
             ZStack(alignment: .top) {
@@ -412,6 +415,16 @@ struct EnterCalcIOSView: View {
 
                 overlayPanels(metrics: metrics, containerSize: geometry.size)
                     .rotationEffect(.degrees(counterRotatesForUpsideDownPortrait ? 180 : 0))
+
+                if showsWindowSizeDebugOverlay && metrics.isPadWindow {
+                    windowSizeDebugOverlay(
+                        metrics: metrics,
+                        windowSize: geometry.size,
+                        safeAreaInsets: geometry.safeAreaInsets,
+                        screenReferenceSize: screenReferenceSize,
+                        isLandscapePresentation: isLandscapePresentation
+                    )
+                }
 
                 IOSHardwareKeyCaptureView(
                     isEnabled: scenePhase == .active && !showSettingsSheet,
@@ -1194,7 +1207,8 @@ private extension EnterCalcIOSView {
     ) -> some View {
         let railAlignment: Alignment = .topLeading
         let buttonAlignment: Alignment = .leading
-        let topRailInset: CGFloat = metrics.mode == .padWide ? 45 : 5
+        let topRailInset: CGFloat = metrics.mode == .padWide ? 35 : 5
+        let bottomRailInset: CGFloat = metrics.mode == .padWide ? 20 : 0
 
         VStack(spacing: 0) {
             pageActionButton(
@@ -1239,6 +1253,7 @@ private extension EnterCalcIOSView {
                 buttonSize: metrics.headerButtonSize + 4,
                 iconSize: metrics.headerIconFontSize + 2
             )
+            .padding(.bottom, bottomRailInset)
             .frame(maxWidth: .infinity, alignment: buttonAlignment)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: railAlignment)
@@ -2246,12 +2261,18 @@ private extension EnterCalcIOSView {
 #endif
     }
 
-    func currentInterfaceOrientationIsLandscape(fallbackSize: CGSize) -> Bool {
+    func activeWindowScene() -> UIWindowScene? {
 #if canImport(UIKit)
         let windowScenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        let activeWindowScene = windowScenes.first(where: { $0.activationState == .foregroundActive }) ?? windowScenes.first
+        return windowScenes.first(where: { $0.activationState == .foregroundActive }) ?? windowScenes.first
+#else
+        return nil
+#endif
+    }
 
-        if let interfaceOrientation = activeWindowScene?.interfaceOrientation,
+    func currentInterfaceOrientationIsLandscape(fallbackSize: CGSize) -> Bool {
+#if canImport(UIKit)
+        if let interfaceOrientation = activeWindowScene()?.interfaceOrientation,
            interfaceOrientation.isLandscape || interfaceOrientation.isPortrait {
             return interfaceOrientation.isLandscape
         }
@@ -2267,6 +2288,64 @@ private extension EnterCalcIOSView {
 #else
         return fallbackSize.width > fallbackSize.height
 #endif
+    }
+
+    func currentWindowSceneScreenSize(fallbackSize: CGSize) -> CGSize {
+#if canImport(UIKit)
+        activeWindowScene()?.screen.bounds.size ?? fallbackSize
+#else
+        fallbackSize
+#endif
+    }
+
+    func windowSizeDebugOverlay(
+        metrics: IOSLayoutMetrics,
+        windowSize: CGSize,
+        safeAreaInsets: EdgeInsets,
+        screenReferenceSize: CGSize,
+        isLandscapePresentation: Bool
+    ) -> some View {
+        let landscapeScreenWidth = max(screenReferenceSize.width, screenReferenceSize.height)
+        let wideModeThreshold = landscapeScreenWidth * 0.5
+        let landscapeLabel = isLandscapePresentation ? "yes" : "no"
+        let lines = [
+            "TEMP window debug",
+            "mode: \(debugName(for: metrics.mode))  landscape: \(landscapeLabel)",
+            "window: \(Int(windowSize.width.rounded())) x \(Int(windowSize.height.rounded()))",
+            "screen: \(Int(screenReferenceSize.width.rounded())) x \(Int(screenReferenceSize.height.rounded()))",
+            "wide threshold: \(Int(wideModeThreshold.rounded()))  top: \(Int(metrics.topPadding.rounded()))  safeTop: \(Int(safeAreaInsets.top.rounded()))"
+        ]
+
+        return VStack(alignment: .leading, spacing: 4) {
+            ForEach(lines, id: \.self) { line in
+                Text(line)
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color.white)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(10)
+        .background(Color.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.white.opacity(0.18), lineWidth: 1)
+        )
+        .padding(.top, 10)
+        .padding(.leading, 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    func debugName(for mode: IOSLayoutMode) -> String {
+        switch mode {
+        case .phonePortrait:
+            return "phonePortrait"
+        case .phoneLandscape:
+            return "phoneLandscape"
+        case .padWide:
+            return "padWide"
+        }
     }
 }
 
@@ -3161,7 +3240,7 @@ private enum IOSDeviceFamily {
 }
 
 private struct IOSLayoutMetrics {
-    static let minimumPadWindowSize = CGSize(width: 340, height: 540)
+    static let minimumPadWindowSize = CGSize(width: 340, height: 440)
     static let defaultPadWindowSize = minimumPadWindowSize
 
     let isPadWindow: Bool
@@ -3218,10 +3297,13 @@ private struct IOSLayoutMetrics {
         safeAreaInsets: EdgeInsets,
         horizontalSizeClass: UserInterfaceSizeClass?,
         deviceFamily: IOSDeviceFamily,
-        isLandscapePresentation: Bool
+        isLandscapePresentation: Bool,
+        screenReferenceSize: CGSize
     ) {
         let isGeometryLandscape = size.width > size.height
-        let usesWidePadLayout = deviceFamily == .pad && isLandscapePresentation
+        let landscapeScreenWidth = max(screenReferenceSize.width, screenReferenceSize.height)
+        let isNarrowLandscapePadWindow = deviceFamily == .pad && isLandscapePresentation && size.width <= landscapeScreenWidth * 0.5
+        let usesWidePadLayout = deviceFamily == .pad && isLandscapePresentation && !isNarrowLandscapePadWindow
         isPadWindow = deviceFamily == .pad
         let pageIndicatorReserve: CGFloat = isPadWindow ? 18 : 0
         let needsLegacyPhoneBottomReserve = !isPadWindow && !isGeometryLandscape && size.height <= 750 && safeAreaInsets.bottom < 10
@@ -3339,7 +3421,7 @@ private struct IOSLayoutMetrics {
         case .padWide:
             outerPadding = max(18, safeAreaInsets.leading + 12)
             innerHorizontalPadding = 0
-            topPadding = max(14, safeAreaInsets.top + 10)
+            topPadding = safeAreaInsets.top
             bottomPadding = max(14, safeAreaInsets.bottom + 14)
             contentTopPadding = 0
             contentBottomPadding = 0

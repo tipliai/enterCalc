@@ -768,9 +768,7 @@ struct CalculatorWindowView: View {
                 }
             } else {
                 if usesCompactHistoryOverlay {
-                    didClearHistoryOverlay = false
-                    closeHistoryOverlay()
-                    viewModel.clearHistory()
+                    clearHistoryAfterClosingOverlay()
                 } else {
                     didClearHistoryOverlay = true
                     viewModel.clearHistory()
@@ -936,7 +934,7 @@ struct CalculatorWindowView: View {
     }
 
     private func minimumHistoryOverlayHeight(maximumHeight: CGFloat) -> CGFloat {
-        min(maximumHeight, 160)
+        min(maximumHeight, 208)
     }
 
     private func maximumHistoryOverlayHeight(windowHeight: CGFloat) -> CGFloat {
@@ -967,6 +965,14 @@ struct CalculatorWindowView: View {
 
     private func closeHistoryOverlay() {
         setHistoryOverlayVisible(false)
+    }
+
+    private func clearHistoryAfterClosingOverlay() {
+        didClearHistoryOverlay = false
+        closeHistoryOverlay()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            viewModel.clearHistory()
+        }
     }
 
     private func toggleRoundingOverlay() {
