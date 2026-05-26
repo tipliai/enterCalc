@@ -68,6 +68,7 @@ struct CalculatorWindowView: View {
     @State private var isResizingKeypadHeight: Bool = false
     @State private var keypadResizeGestureStartMultiplier: Double = 1.0
     @State private var liveKeypadHeightMultiplier: Double? = nil
+
     private let minimumWindowWidthPoints: CGFloat = 280
     private let minimumWindowHeightPoints: CGFloat = 452
     private let fallbackBackingScaleFactor: CGFloat = 2
@@ -1115,13 +1116,15 @@ struct CalculatorWindowView: View {
         let errorMode = viewModel.isErrorState
         func isEnabled(title: String, kind: CalculatorButton.Kind) -> Bool {
             guard errorMode else { return true }
-            let allowedTitles: Set<String> = ["C", "( )", "⌫", ".", "0","1","2","3","4","5","6","7","8","9"]
+            let allowedTitles: Set<String> = ["C", "AC", "( )", "⌫", ".", "0","1","2","3","4","5","6","7","8","9"]
             if allowedTitles.contains(title) { return true }
             return kind == .number
         }
 
+        let clearButtonTitle = viewModel.shouldShowAllClearButton ? "AC" : "C"
+
         return [
-            ButtonItem(title: "C", kind: .function, action: { viewModel.clearAll() }, enabled: isEnabled(title: "C", kind: .function)),
+            ButtonItem(title: clearButtonTitle, kind: .function, action: { self.handleContextualClear() }, enabled: isEnabled(title: clearButtonTitle, kind: .function)),
             ButtonItem(title: "( )", kind: .function, action: { viewModel.inputParentheses() }, enabled: isEnabled(title: "( )", kind: .function)),
             ButtonItem(title: "%", kind: .function, action: { viewModel.applyPercent() }, enabled: isEnabled(title: "%", kind: .function)),
             ButtonItem(title: "⌫", kind: .function, action: { viewModel.backspace() }, enabled: isEnabled(title: "⌫", kind: .function)),
@@ -1151,6 +1154,10 @@ struct CalculatorWindowView: View {
                 enabled: isEnabled(title: windowSettings.usesEnterKeySymbol ? "⏎" : "=", kind: .accent)
             )
         ]
+    }
+
+    private func handleContextualClear() {
+        viewModel.clearEntry()
     }
 
     // MARK: - Colors

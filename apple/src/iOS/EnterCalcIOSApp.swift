@@ -310,6 +310,14 @@ struct EnterCalcIOSView: View {
         activeScreen.settings.usesEnterKeySymbol ? "⏎" : "="
     }
 
+    private var clearButtonTitle: String {
+        activeScreen.viewModel.shouldShowAllClearButton ? "AC" : "C"
+    }
+
+    private func handleContextualClear() {
+        activeScreen.viewModel.clearEntry()
+    }
+
     private var palette: Palette {
         activeTheme.palette(using: colorScheme)
     }
@@ -339,7 +347,7 @@ struct EnterCalcIOSView: View {
     private var rows: [[IOSCalcButton]] {
         [
             [
-                .function("C", action: { $0.clearAll() }),
+                .function(clearButtonTitle, action: { _ in self.handleContextualClear() }),
                 .function("( )", action: { $0.inputParentheses() }),
                 .function("%", action: { $0.applyPercent() }),
                 .function("⌫", action: { $0.backspace() })

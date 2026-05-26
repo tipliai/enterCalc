@@ -1680,4 +1680,116 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isErrorState)
         XCTAssertEqual(viewModel.display, "42")
     }
+
+    // MARK: - Contextual Clear Button Behavior Tests
+
+    func testClearEntryKeepsPendingOperation() {
+        let viewModel = CalculatorViewModel()
+        enter("5", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("3", into: viewModel)
+
+        viewModel.clearEntry()
+
+        // Display should be blank while RHS entry is cleared.
+        XCTAssertEqual(viewModel.display, "")
+        XCTAssertEqual(viewModel.expressionDisplay, "5 +")
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
+
+        // Enter a new value and evaluate - should still add to 5
+        enter("7", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "12")
+        XCTAssertFalse(viewModel.shouldShowAllClearButton)
+    }
+
+    func testClearAllRemovesPendingOperation() {
+        let viewModel = CalculatorViewModel()
+        enter("5", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("3", into: viewModel)
+
+        viewModel.clearEntry()
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
+
+        // Pressing clear again in blank pending-entry state should perform AC.
+        viewModel.clearEntry()
+
+        // Display should be cleared to 0
+        XCTAssertEqual(viewModel.display, "0")
+        XCTAssertFalse(viewModel.shouldShowAllClearButton)
+
+        // Enter a new value and evaluate - should NOT add to 5
+        enter("7", into: viewModel)
+        viewModel.evaluate()
+
+        // Result should be 7, not 12, since the operation was cleared
+        XCTAssertEqual(viewModel.display, "7")
+    }
+
+    func testClearEntryAfterOperationCanThenContinue() {
+        let viewModel = CalculatorViewModel()
+        enter("5", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("3", into: viewModel)
+        viewModel.clearEntry()
+        enter("7", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "12")
+    }
+
+    func testClearEntryRemovesPendingOperatorWhenNoRightHandEntry() {
+        let viewModel = CalculatorViewModel()
+        enter("9", into: viewModel)
+        viewModel.setOperator(.multiply)
+
+        viewModel.clearEntry()
+
+        XCTAssertEqual(viewModel.display, "9")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+
+        viewModel.evaluate()
+        XCTAssertEqual(viewModel.display, "9")
+    }
+
+    func testClearAfterStandaloneSquareRootUsesAllClearBehavior() {
+        let viewModel = CalculatorViewModel()
+        enter("8", into: viewModel)
+        viewModel.squareRoot()
+
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
+        viewModel.clearEntry()
+
+        XCTAssertEqual(viewModel.display, "0")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+        XCTAssertFalse(viewModel.shouldShowAllClearButton)
+    }
+
+    func testClearAfterStandaloneSquareUsesAllClearBehavior() {
+        let viewModel = CalculatorViewModel()
+        enter("8", into: viewModel)
+        viewModel.square()
+
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
+        viewModel.clearEntry()
+
+        XCTAssertEqual(viewModel.display, "0")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+        XCTAssertFalse(viewModel.shouldShowAllClearButton)
+    }
+
+    func testClearAfterStandaloneReciprocalUsesAllClearBehavior() {
+        let viewModel = CalculatorViewModel()
+        enter("8", into: viewModel)
+        viewModel.reciprocal()
+
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
+        viewModel.clearEntry()
+
+        XCTAssertEqual(viewModel.display, "0")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+        XCTAssertFalse(viewModel.shouldShowAllClearButton)
+    }
 }
