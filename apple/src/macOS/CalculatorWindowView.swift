@@ -290,7 +290,6 @@ struct CalculatorWindowView: View {
             maxHeight: .infinity,
             alignment: .top
         )
-        .padding(.bottom, 5)
         .coordinateSpace(name: calculatorContentCoordinateSpace)
         .overlayPreferenceValue(MemoryControlsBoundsKey.self) { anchor in
             GeometryReader { geo in
@@ -653,12 +652,11 @@ struct CalculatorWindowView: View {
             historyOverlayHeader(defaultHeight: defaultHeight, windowHeight: windowHeight)
 
             if viewModel.history.isEmpty {
-                let emptyHistoryMessage = macLocalized(didClearHistoryOverlay ? "history.emptyAfterClear" : "history.empty", bundle: currentLocalizationBundle)
-                if emptyHistoryMessage.isEmpty {
+                if didClearHistoryOverlay {
                     Color.clear
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Text(emptyHistoryMessage)
+                    Text(macLocalized("history.empty", bundle: currentLocalizationBundle))
                         .font(EnterCalcFont.subheadline)
                         .foregroundStyle(fadedForeground)
                         .multilineTextAlignment(.center)
@@ -927,10 +925,16 @@ struct CalculatorWindowView: View {
         let maximumHeight = maximumHistoryOverlayHeight(windowHeight: windowHeight)
         let minimumHeight = minimumHistoryOverlayHeight(maximumHeight: maximumHeight)
         guard let historyOverlayHeight else {
-            return minimumHeight
+            return defaultHistoryOverlayHeight(defaultHeight: defaultHeight, windowHeight: windowHeight)
         }
 
         return min(max(historyOverlayHeight, minimumHeight), maximumHeight)
+    }
+
+    private func defaultHistoryOverlayHeight(defaultHeight: CGFloat, windowHeight: CGFloat) -> CGFloat {
+        let maximumHeight = maximumHistoryOverlayHeight(windowHeight: windowHeight)
+        let minimumHeight = minimumHistoryOverlayHeight(maximumHeight: maximumHeight)
+        return min(defaultHeight, min(maximumHeight, minimumHeight * 1.5))
     }
 
     private func minimumHistoryOverlayHeight(maximumHeight: CGFloat) -> CGFloat {

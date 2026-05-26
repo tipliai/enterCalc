@@ -237,7 +237,6 @@ struct EnterCalcIOSApp: App {
 }
 
 struct EnterCalcIOSView: View {
-    private let showsWindowSizeDebugOverlay = true
     @StateObject private var screenStore = CalculatorScreenStore(
         homeSettings: CalculatorScreenSettings(
             themeRawValue: AppTheme.system.rawValue,
@@ -415,16 +414,6 @@ struct EnterCalcIOSView: View {
 
                 overlayPanels(metrics: metrics, containerSize: geometry.size)
                     .rotationEffect(.degrees(counterRotatesForUpsideDownPortrait ? 180 : 0))
-
-                if showsWindowSizeDebugOverlay && metrics.isPadWindow {
-                    windowSizeDebugOverlay(
-                        metrics: metrics,
-                        windowSize: geometry.size,
-                        safeAreaInsets: geometry.safeAreaInsets,
-                        screenReferenceSize: screenReferenceSize,
-                        isLandscapePresentation: isLandscapePresentation
-                    )
-                }
 
                 IOSHardwareKeyCaptureView(
                     isEnabled: scenePhase == .active && !showSettingsSheet,
@@ -808,9 +797,13 @@ private extension EnterCalcIOSView {
                         },
                         onClear: {
                             triggerHistoryClearFeedback(for: activeScreen)
-                            activeScreen.viewModel.clearHistory()
                             if metrics.mode == .phonePortrait {
                                 dismissHistoryOverlay()
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                    activeScreen.viewModel.clearHistory()
+                                }
+                            } else {
+                                activeScreen.viewModel.clearHistory()
                             }
                         },
                         onDismiss: { dismissHistoryOverlay() },
@@ -1208,7 +1201,7 @@ private extension EnterCalcIOSView {
         let railAlignment: Alignment = .topLeading
         let buttonAlignment: Alignment = .leading
         let topRailInset: CGFloat = metrics.mode == .padWide ? 35 : 5
-        let bottomRailInset: CGFloat = metrics.mode == .padWide ? 20 : 0
+        let bottomRailInset: CGFloat = metrics.mode == .padWide ? 15 : 0
 
         VStack(spacing: 0) {
             pageActionButton(
@@ -1611,6 +1604,7 @@ private extension EnterCalcIOSView {
             palette: palette,
             metrics: metrics,
             clearFeedbackVersion: historyClearFeedbackVersion(for: screen),
+            usesSurfaceBackground: activeTheme == .blue && metrics.usesInlineLandscapeHistory,
             onSelect: { entry in screen.viewModel.reuse(entry) },
             onClear: {
                 triggerHistoryClearFeedback(for: screen)
@@ -2168,12 +2162,20 @@ private extension EnterCalcIOSView {
         let panelHeight = resolvedHistoryOverlayHeight(for: screen, metrics: metrics, containerHeight: containerHeight)
 
         if metrics.usesBottomOverlaySheet {
-            content()
-                .frame(width: metrics.overlayPanelWidth, height: panelHeight)
-                .padding(.bottom, metrics.overlayBottomPadding)
-                .padding(.horizontal, metrics.mode == .phonePortrait ? metrics.outerPadding : 0)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+            if metrics.mode == .phonePortrait {
+                content()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: panelHeight)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .ignoresSafeArea(edges: .bottom)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else {
+                content()
+                    .frame(width: metrics.overlayPanelWidth, height: panelHeight)
+                    .padding(.bottom, metrics.overlayBottomPadding)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         } else {
             content()
                 .frame(width: metrics.overlayPanelWidth, height: panelHeight)
@@ -2229,7 +2231,7 @@ private extension EnterCalcIOSView {
         }
 
         guard let storedHeight = screen.historyOverlayHeight else {
-            return minimumHeight
+            return defaultHistoryOverlayHeight(metrics: metrics, containerHeight: containerHeight)
         }
 
         return clamp(CGFloat(storedHeight), to: minimumHeight...maximumHeight)
@@ -2241,7 +2243,8 @@ private extension EnterCalcIOSView {
 
     func defaultHistoryOverlayHeight(metrics: IOSLayoutMetrics, containerHeight: CGFloat) -> CGFloat {
         let maximumHeight = maximumHistoryOverlayHeight(metrics: metrics, containerHeight: containerHeight)
-        return minimumHistoryOverlayHeight(maximumHeight: maximumHeight)
+        let minimumHeight = minimumHistoryOverlayHeight(maximumHeight: maximumHeight)
+        return min(maximumHeight, minimumHeight * 1.5)
     }
 
     func minimumHistoryOverlayHeight(maximumHeight: CGFloat) -> CGFloat {
@@ -2298,55 +2301,6 @@ private extension EnterCalcIOSView {
 #endif
     }
 
-    func windowSizeDebugOverlay(
-        metrics: IOSLayoutMetrics,
-        windowSize: CGSize,
-        safeAreaInsets: EdgeInsets,
-        screenReferenceSize: CGSize,
-        isLandscapePresentation: Bool
-    ) -> some View {
-        let landscapeScreenWidth = max(screenReferenceSize.width, screenReferenceSize.height)
-        let wideModeThreshold = landscapeScreenWidth * 0.5
-        let landscapeLabel = isLandscapePresentation ? "yes" : "no"
-        let lines = [
-            "TEMP window debug",
-            "mode: \(debugName(for: metrics.mode))  landscape: \(landscapeLabel)",
-            "window: \(Int(windowSize.width.rounded())) x \(Int(windowSize.height.rounded()))",
-            "screen: \(Int(screenReferenceSize.width.rounded())) x \(Int(screenReferenceSize.height.rounded()))",
-            "wide threshold: \(Int(wideModeThreshold.rounded()))  top: \(Int(metrics.topPadding.rounded()))  safeTop: \(Int(safeAreaInsets.top.rounded()))"
-        ]
-
-        return VStack(alignment: .leading, spacing: 4) {
-            ForEach(lines, id: \.self) { line in
-                Text(line)
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
-                    .foregroundStyle(Color.white)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .padding(10)
-        .background(Color.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.white.opacity(0.18), lineWidth: 1)
-        )
-        .padding(.top, 10)
-        .padding(.leading, 10)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
-    func debugName(for mode: IOSLayoutMode) -> String {
-        switch mode {
-        case .phonePortrait:
-            return "phonePortrait"
-        case .phoneLandscape:
-            return "phoneLandscape"
-        case .padWide:
-            return "padWide"
-        }
-    }
 }
 
 private struct IOSSettingsSheet: View {
@@ -2689,6 +2643,7 @@ private struct IOSHistoryPanel: View {
     let palette: Palette
     let metrics: IOSLayoutMetrics
     let clearFeedbackVersion: Int
+    let usesSurfaceBackground: Bool
     let isResizing: Bool
     let onResizeChanged: ((DragGesture.Value) -> Void)?
     let onResizeEnded: (() -> Void)?
@@ -2699,6 +2654,7 @@ private struct IOSHistoryPanel: View {
     let onCopyOperationEntry: (HistoryEntry) -> Void
     @Environment(\.colorScheme) private var colorScheme
     @State private var didClearHistoryInOverlay: Bool = false
+    @State private var hadEntriesWhilePresented: Bool = false
 
     private var showsCloseButton: Bool {
         metrics.mode == .phonePortrait
@@ -2709,6 +2665,7 @@ private struct IOSHistoryPanel: View {
         palette: Palette,
         metrics: IOSLayoutMetrics,
         clearFeedbackVersion: Int = 0,
+        usesSurfaceBackground: Bool = false,
         isResizing: Bool = false,
         onResizeChanged: ((DragGesture.Value) -> Void)? = nil,
         onResizeEnded: (() -> Void)? = nil,
@@ -2722,6 +2679,7 @@ private struct IOSHistoryPanel: View {
         self.palette = palette
         self.metrics = metrics
         self.clearFeedbackVersion = clearFeedbackVersion
+        self.usesSurfaceBackground = usesSurfaceBackground
         self.isResizing = isResizing
         self.onResizeChanged = onResizeChanged
         self.onResizeEnded = onResizeEnded
@@ -2741,7 +2699,14 @@ private struct IOSHistoryPanel: View {
     }
 
     private var emptyHistoryMessage: String {
-        localized(didClearHistoryInOverlay ? "history.emptyAfterClear" : "history.empty")
+        if didClearHistoryInOverlay || hadEntriesWhilePresented {
+            return ""
+        }
+        return localized("history.empty")
+    }
+
+    private var panelBackgroundColor: Color {
+        usesSurfaceBackground ? palette.surface : palette.historyBackground
     }
 
     var body: some View {
@@ -2821,7 +2786,7 @@ private struct IOSHistoryPanel: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(
             Rectangle()
-                .fill(palette.historyBackground)
+                .fill(panelBackgroundColor)
         )
         .overlay(
             Rectangle()
@@ -2829,6 +2794,7 @@ private struct IOSHistoryPanel: View {
         )
         .onChange(of: entries.count) { _, count in
             if count > 0 {
+                hadEntriesWhilePresented = true
                 didClearHistoryInOverlay = false
             }
         }
@@ -2839,6 +2805,9 @@ private struct IOSHistoryPanel: View {
             }
 
             didClearHistoryInOverlay = true
+        }
+        .onAppear {
+            hadEntriesWhilePresented = !entries.isEmpty
         }
         .contentShape(Rectangle())
     }
