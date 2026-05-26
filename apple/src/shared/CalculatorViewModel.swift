@@ -844,22 +844,28 @@ public final class CalculatorViewModel: ObservableObject {
 
     public func pasteFromPasteboard() {
         let snapshot = beginUndoableChange()
-        isPendingEntryClearedByClearButton = false
         let string: String?
         #if os(macOS)
         string = NSPasteboard.general.string(forType: .string)
         #else
         string = UIPasteboard.general.string
         #endif
-        guard let string = string else { return }
+        guard let string = string else {
+            completeUndoableChange(from: snapshot)
+            return
+        }
         let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count <= Limits.maxPasteCharacters else {
             completeUndoableChange(from: snapshot)
             return
         }
+        isPendingEntryClearedByClearButton = false
         switch parsePastedContent(trimmed) {
         case .value(let rawValue):
-            guard let normalized = normalizePastedNumber(rawValue), let value = decimalValue(fromCanonicalString: normalized) else { return }
+            guard let normalized = normalizePastedNumber(rawValue), let value = decimalValue(fromCanonicalString: normalized) else {
+                completeUndoableChange(from: snapshot)
+                return
+            }
             let isReplacingPendingOperand = pendingOperator != nil || accumulator != nil
             currentInput = formattedPastedInput(fromCanonical: normalized, value: value)
             currentToken = displayString(for: currentInput)
