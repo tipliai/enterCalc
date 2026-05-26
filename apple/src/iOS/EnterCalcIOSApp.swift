@@ -1077,7 +1077,11 @@ private extension EnterCalcIOSView {
     @ViewBuilder
     func layoutBody(metrics: IOSLayoutMetrics) -> some View {
         let usesLandscapeNavigationRail = metrics.usesLandscapeNavigationRail
-        let landscapeRailWidth = usesLandscapeNavigationRail ? metrics.headerButtonSize + 4 : 0
+        let fullLandscapeRailWidth = metrics.headerButtonSize + 4
+        let padWideLandscapeRailWidth = fullLandscapeRailWidth * 0.5 + 13
+        let landscapeRailWidth = usesLandscapeNavigationRail
+            ? (metrics.mode == .padWide ? padWideLandscapeRailWidth : fullLandscapeRailWidth)
+            : 0
         let pageSpacing = metrics.usesInlineLandscapeHistory
             ? metrics.historyPanelWidth + metrics.outerPadding * 2
             : (usesLandscapeNavigationRail ? max(metrics.sectionSpacing * 4, metrics.outerPadding * 1.5) : 0)
@@ -1198,8 +1202,10 @@ private extension EnterCalcIOSView {
         screen: CalculatorScreenSession,
         showsPaginationIndicator: Bool
     ) -> some View {
-        let railAlignment: Alignment = .topLeading
-        let buttonAlignment: Alignment = .leading
+        let railButtonSize = metrics.mode == .padWide ? metrics.headerButtonSize * 0.5 + 7 : metrics.headerButtonSize + 4
+        let padWideRailIconOffsetX: CGFloat = metrics.mode == .padWide ? 14 : 0
+        let railAlignment: Alignment = metrics.mode == .padWide ? .top : .topLeading
+        let buttonAlignment: Alignment = metrics.mode == .padWide ? .trailing : .leading
         let topRailInset: CGFloat = metrics.mode == .padWide ? 35 : 5
         let bottomRailInset: CGFloat = metrics.mode == .padWide ? 15 : 0
 
@@ -1207,10 +1213,11 @@ private extension EnterCalcIOSView {
             pageActionButton(
                 metrics: metrics,
                 screen: screen,
-                buttonSize: metrics.headerButtonSize + 4,
+                buttonSize: railButtonSize,
                 iconSize: metrics.headerIconFontSize + 2
             )
             .padding(.top, topRailInset)
+            .offset(x: padWideRailIconOffsetX, y: metrics.mode == .padWide ? 5 : 0)
             .frame(maxWidth: .infinity, alignment: buttonAlignment)
 
             if metrics.usesInlineLandscapeHistory && !screen.viewModel.history.isEmpty {
@@ -1218,14 +1225,15 @@ private extension EnterCalcIOSView {
                     metrics: metrics,
                     screen: screen
                 )
-                .padding(.top, max(8, metrics.sectionSpacing))
+                .padding(.top, max(8, metrics.sectionSpacing) + (metrics.mode == .padWide ? 20 : 0))
+                .offset(x: padWideRailIconOffsetX)
                 .frame(maxWidth: .infinity, alignment: buttonAlignment)
             }
 
             if screen.settings.disablesSwipeDownToRound {
                 roundingButton(
                     metrics: metrics,
-                    buttonSize: metrics.headerButtonSize + 4,
+                    buttonSize: railButtonSize,
                     iconSize: metrics.headerIconFontSize + 2
                 )
                 .frame(maxWidth: .infinity, alignment: buttonAlignment)
@@ -1235,7 +1243,7 @@ private extension EnterCalcIOSView {
 
             if showsPaginationIndicator {
                 paginationIndicator(metrics: metrics)
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, alignment: buttonAlignment)
             }
 
             Spacer(minLength: metrics.sectionSpacing)
@@ -1243,10 +1251,11 @@ private extension EnterCalcIOSView {
             settingsButton(
                 metrics: metrics,
                 screen: screen,
-                buttonSize: metrics.headerButtonSize + 4,
+                buttonSize: railButtonSize,
                 iconSize: metrics.headerIconFontSize + 2
             )
             .padding(.bottom, bottomRailInset)
+            .offset(x: padWideRailIconOffsetX, y: metrics.mode == .padWide ? -3 : 0)
             .frame(maxWidth: .infinity, alignment: buttonAlignment)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: railAlignment)
@@ -1257,7 +1266,7 @@ private extension EnterCalcIOSView {
         metrics: IOSLayoutMetrics,
         screen: CalculatorScreenSession
     ) -> some View {
-        let buttonSize = metrics.headerButtonSize + 4
+        let buttonSize = metrics.mode == .padWide ? metrics.headerButtonSize * 0.5 + 7 : metrics.headerButtonSize + 4
         let iconSize = metrics.headerIconFontSize + 2
 
         Button {
@@ -3271,8 +3280,12 @@ private struct IOSLayoutMetrics {
     ) {
         let isGeometryLandscape = size.width > size.height
         let landscapeScreenWidth = max(screenReferenceSize.width, screenReferenceSize.height)
+        let landscapeScreenHeight = min(screenReferenceSize.width, screenReferenceSize.height)
         let isNarrowLandscapePadWindow = deviceFamily == .pad && isLandscapePresentation && size.width <= landscapeScreenWidth * 0.5
         let usesWidePadLayout = deviceFamily == .pad && isLandscapePresentation && !isNarrowLandscapePadWindow
+        let isFullScreenWidePadLayout = usesWidePadLayout
+            && size.width >= landscapeScreenWidth * 0.97
+            && size.height >= landscapeScreenHeight * 0.97
         isPadWindow = deviceFamily == .pad
         let pageIndicatorReserve: CGFloat = isPadWindow ? 18 : 0
         let needsLegacyPhoneBottomReserve = !isPadWindow && !isGeometryLandscape && size.height <= 750 && safeAreaInsets.bottom < 10
@@ -3390,7 +3403,7 @@ private struct IOSLayoutMetrics {
         case .padWide:
             outerPadding = max(18, safeAreaInsets.leading + 12)
             innerHorizontalPadding = 0
-            topPadding = safeAreaInsets.top
+            topPadding = safeAreaInsets.top + (isFullScreenWidePadLayout ? 10 : 0)
             bottomPadding = max(14, safeAreaInsets.bottom + 14)
             contentTopPadding = 0
             contentBottomPadding = 0
