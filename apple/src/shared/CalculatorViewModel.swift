@@ -241,7 +241,7 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     public var shouldShowAllClearButton: Bool {
-        isPendingEntryClearedByClearButton || isStandaloneUnaryResult
+        isErrorState || isPendingEntryClearedByClearButton || isStandaloneUnaryResult
     }
 
     var undoDepth: Int {
@@ -441,6 +441,12 @@ public final class CalculatorViewModel: ObservableObject {
 
         if isErrorState {
             clearAll()
+            completeUndoableChange(from: snapshot)
+            return
+        }
+
+        if clearParenthesizedExpressionIfNeeded() {
+            updateDisplay()
             completeUndoableChange(from: snapshot)
             return
         }
@@ -1679,6 +1685,54 @@ public final class CalculatorViewModel: ObservableObject {
             return false
         }
         return currentToken.hasPrefix("sqr(") || currentToken.hasPrefix("√(") || currentToken.hasPrefix("1/(")
+    }
+
+    private func clearParenthesizedExpressionIfNeeded() -> Bool {
+        guard isExpressionMode,
+              let openIndex = expressionTokens.lastIndex(of: "(") else {
+            return false
+        }
+
+        let prefix = Array(expressionTokens[..<openIndex])
+        if prefix.isEmpty {
+            currentInput = "0"
+            accumulator = nil
+            pendingOperator = nil
+            lastOperator = nil
+            lastOperand = nil
+            lastResultSummary = ""
+            expression = ""
+            shouldResetInputOnNextDigit = false
+            justEvaluated = false
+            isErrorState = false
+            currentErrorKey = nil
+            accumulatorToken = nil
+            currentToken = "0"
+            lastOperandToken = nil
+            expressionTokens.removeAll()
+            openParenthesisCount = 0
+            isExpressionMode = false
+            isPendingEntryClearedByClearButton = false
+            isResultRoundingEnabled = false
+            resultRoundingPrecision = 4
+            return true
+        }
+
+        expressionTokens = prefix
+        openParenthesisCount = expressionTokens.reduce(into: 0) { count, token in
+            if token == "(" {
+                count += 1
+            }
+        }
+        isExpressionMode = true
+        currentInput = "0"
+        currentToken = "0"
+        shouldResetInputOnNextDigit = true
+        justEvaluated = false
+        isPendingEntryClearedByClearButton = true
+        isErrorState = false
+        currentErrorKey = nil
+        return true
     }
 
     private func updateDisplay() {

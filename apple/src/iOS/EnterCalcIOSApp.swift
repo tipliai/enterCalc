@@ -211,7 +211,7 @@ struct EnterCalcIOSApp: App {
                 .keyboardShortcut(.escape, modifiers: [])
                 .disabled(actionContext == nil)
 
-                Button("AC") {
+                Button("All Clear (AC)") {
                     actionContext?.clearAll()
                 }
                 .keyboardShortcut(.delete, modifiers: [.command])

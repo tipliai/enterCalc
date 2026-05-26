@@ -1792,4 +1792,27 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.expressionDisplay, "")
         XCTAssertFalse(viewModel.shouldShowAllClearButton)
     }
+
+    func testClearInsideParenthesesRollsBackToOuterOperation() {
+        let viewModel = CalculatorViewModel()
+
+        enter("9", into: viewModel)
+        viewModel.setOperator(.multiply)
+        viewModel.inputParentheses()
+        enter("985", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("1", into: viewModel)
+
+        viewModel.clearEntry()
+
+        XCTAssertEqual(viewModel.display, "")
+        XCTAssertEqual(viewModel.expressionDisplay, "9 ×")
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
+
+        viewModel.clearEntry()
+
+        XCTAssertEqual(viewModel.display, "0")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+        XCTAssertFalse(viewModel.shouldShowAllClearButton)
+    }
 }
