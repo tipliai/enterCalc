@@ -1701,7 +1701,7 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.evaluate()
 
         XCTAssertEqual(viewModel.display, "12")
-        XCTAssertFalse(viewModel.shouldShowAllClearButton)
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
     }
 
     func testClearAllRemovesPendingOperation() {
@@ -1718,7 +1718,7 @@ final class CalculatorViewModelTests: XCTestCase {
 
         // Display should be cleared to 0
         XCTAssertEqual(viewModel.display, "0")
-        XCTAssertFalse(viewModel.shouldShowAllClearButton)
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
 
         // Enter a new value and evaluate - should NOT add to 5
         enter("7", into: viewModel)
@@ -1755,7 +1755,7 @@ final class CalculatorViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.display, "0")
         XCTAssertEqual(viewModel.expressionDisplay, "")
-        XCTAssertFalse(viewModel.shouldShowAllClearButton)
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
 
         enter("7", into: viewModel)
         viewModel.evaluate()
@@ -1763,7 +1763,15 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.display, "7")
     }
 
-    func testClearAfterEqualsArmsAllClearForNextPress() {
+    func testInitialStateShowsAllClearButton() {
+        let viewModel = CalculatorViewModel()
+
+        XCTAssertEqual(viewModel.display, "0")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
+    }
+
+    func testClearAfterEqualsUsesAllClearImmediately() {
         let viewModel = CalculatorViewModel()
 
         enter("195", into: viewModel)
@@ -1772,10 +1780,6 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.evaluate()
 
         XCTAssertEqual(viewModel.display, "260")
-
-        viewModel.clearEntry()
-
-        XCTAssertEqual(viewModel.display, "")
         XCTAssertEqual(viewModel.expressionDisplay, "195 + 65 =")
         XCTAssertTrue(viewModel.shouldShowAllClearButton)
 
@@ -1783,7 +1787,7 @@ final class CalculatorViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.display, "0")
         XCTAssertEqual(viewModel.expressionDisplay, "")
-        XCTAssertFalse(viewModel.shouldShowAllClearButton)
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
 
         enter("7", into: viewModel)
         viewModel.evaluate()
@@ -1791,7 +1795,7 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.display, "7")
     }
 
-    func testDigitAfterClearingEvaluatedResultStartsFreshCalculation() {
+    func testDigitAfterAllClearFromEvaluatedResultStartsFreshCalculation() {
         let viewModel = CalculatorViewModel()
 
         enter("195", into: viewModel)
@@ -1817,7 +1821,7 @@ final class CalculatorViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.display, "0")
         XCTAssertEqual(viewModel.expressionDisplay, "")
-        XCTAssertFalse(viewModel.shouldShowAllClearButton)
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
     }
 
     func testClearAfterStandaloneSquareUsesAllClearBehavior() {
@@ -1830,7 +1834,7 @@ final class CalculatorViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.display, "0")
         XCTAssertEqual(viewModel.expressionDisplay, "")
-        XCTAssertFalse(viewModel.shouldShowAllClearButton)
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
     }
 
     func testClearAfterStandaloneReciprocalUsesAllClearBehavior() {
@@ -1843,7 +1847,7 @@ final class CalculatorViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.display, "0")
         XCTAssertEqual(viewModel.expressionDisplay, "")
-        XCTAssertFalse(viewModel.shouldShowAllClearButton)
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
     }
 
     func testClearInsideParenthesesRollsBackToOuterOperation() {
@@ -1866,7 +1870,7 @@ final class CalculatorViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.display, "0")
         XCTAssertEqual(viewModel.expressionDisplay, "")
-        XCTAssertFalse(viewModel.shouldShowAllClearButton)
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
     }
 
     func testSecondClearFromBlankPendingEntryAddsSingleUndoStep() {

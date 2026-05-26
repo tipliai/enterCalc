@@ -241,7 +241,7 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     public var shouldShowAllClearButton: Bool {
-        isErrorState || isPendingEntryClearedByClearButton || isStandaloneUnaryResult
+        isErrorState || isPendingEntryClearedByClearButton || isStandaloneUnaryResult || isResultStateUsingAllClear || isInClearAllState
     }
 
     var undoDepth: Int {
@@ -427,23 +427,8 @@ public final class CalculatorViewModel: ObservableObject {
 
     public func clearEntry() {
         let snapshot = beginUndoableChange()
-        let clearedEvaluatedResult = justEvaluated && pendingOperator == nil && !isExpressionMode
 
-        if isPendingEntryClearedByClearButton {
-            resetAllStateForClearAll()
-            updateDisplay()
-            completeUndoableChange(from: snapshot)
-            return
-        }
-
-        if isStandaloneUnaryResult {
-            resetAllStateForClearAll()
-            updateDisplay()
-            completeUndoableChange(from: snapshot)
-            return
-        }
-
-        if isErrorState {
+        if shouldUseAllClearBehavior {
             resetAllStateForClearAll()
             updateDisplay()
             completeUndoableChange(from: snapshot)
@@ -480,7 +465,7 @@ public final class CalculatorViewModel: ObservableObject {
             isPendingEntryClearedByClearButton = true
         }
 
-        justEvaluated = clearedEvaluatedResult
+        justEvaluated = false
         isErrorState = false
         currentErrorKey = nil
         updateDisplay()
@@ -1708,6 +1693,33 @@ public final class CalculatorViewModel: ObservableObject {
             return false
         }
         return currentToken.hasPrefix("sqr(") || currentToken.hasPrefix("√(") || currentToken.hasPrefix("1/(")
+    }
+
+    private var isResultStateUsingAllClear: Bool {
+        justEvaluated && pendingOperator == nil && !isExpressionMode
+    }
+
+    private var isInClearAllState: Bool {
+        currentInput == "0"
+            && currentToken == "0"
+            && accumulator == nil
+            && pendingOperator == nil
+            && lastOperator == nil
+            && lastOperand == nil
+            && accumulatorToken == nil
+            && lastOperandToken == nil
+            && expression.isEmpty
+            && lastResultSummary.isEmpty
+            && expressionTokens.isEmpty
+            && openParenthesisCount == 0
+            && !isExpressionMode
+            && !justEvaluated
+            && !isPendingEntryClearedByClearButton
+            && !isStandaloneUnaryResult
+    }
+
+    private var shouldUseAllClearBehavior: Bool {
+        isPendingEntryClearedByClearButton || isStandaloneUnaryResult || isErrorState || isResultStateUsingAllClear || isInClearAllState
     }
 
     private func clearParenthesizedExpressionIfNeeded() -> Bool {
