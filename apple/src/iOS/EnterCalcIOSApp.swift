@@ -55,6 +55,7 @@ private enum IOSActionHaptics {
 import EnterCalcCore
 
 extension Notification.Name {
+    static let enterCalcIOSToggleHistoryPanel = Notification.Name("EnterCalc.iOS.ToggleHistoryPanel")
     static let enterCalcIOSToggleRoundingPanel = Notification.Name("EnterCalc.iOS.ToggleRoundingPanel")
 }
 
@@ -202,9 +203,7 @@ struct EnterCalcIOSApp: App {
                 }
                 .keyboardShortcut("z", modifiers: [.command, .shift])
                 .disabled(actionContext?.canRedo != true)
-            }
 
-            CommandGroup(after: .undoRedo) {
                 Button(localized("clear")) {
                     actionContext?.clear()
                 }
@@ -219,6 +218,13 @@ struct EnterCalcIOSApp: App {
             }
 
             CommandGroup(after: .toolbar) {
+                Button {
+                    NotificationCenter.default.post(name: .enterCalcIOSToggleHistoryPanel, object: nil)
+                } label: {
+                    Label(localized("history.toggle"), systemImage: "clock.arrow.circlepath")
+                }
+                .keyboardShortcut("h", modifiers: [.command, .shift])
+
                 Button {
                     NotificationCenter.default.post(name: .enterCalcIOSToggleRoundingPanel, object: nil)
                 } label: {
@@ -500,6 +506,12 @@ struct EnterCalcIOSView: View {
                 guard UIDevice.current.userInterfaceIdiom == .pad else { return }
                 #endif
                 toggleOverlay(.rounding)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .enterCalcIOSToggleHistoryPanel)) { _ in
+                #if canImport(UIKit)
+                guard UIDevice.current.userInterfaceIdiom == .pad else { return }
+                #endif
+                toggleOverlay(.history)
             }
         }
     }
