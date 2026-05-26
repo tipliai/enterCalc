@@ -25,6 +25,8 @@ final class CalculatorViewModelTests: XCTestCase {
         let roundingPrecision: Int
         let expectedRoundedDisplay: String
         let expectedRoundedOperation: String
+        let expectedRoundedCopiedOperation: String
+        let expectedStoredRoundedExpression: String
         let expectedRoundedCopyResult: String
     }
 
@@ -53,9 +55,11 @@ final class CalculatorViewModelTests: XCTestCase {
                 expectedDisplay: "3.888",
                 roundingInput: "3.005",
                 roundingPrecision: 2,
-                expectedRoundedDisplay: "3.01",
-                expectedRoundedOperation: "round(3.005, 2) ≈ 3.01",
-                expectedRoundedCopyResult: "3.01"
+                expectedRoundedDisplay: "3",
+                expectedRoundedOperation: "=round(3.005, 1) ≈",
+                expectedRoundedCopiedOperation: "=round(3.005,1)",
+                expectedStoredRoundedExpression: "round(3.005, 2) ≈",
+                expectedRoundedCopyResult: "3"
             ),
             StyleFixture(
                 style: .european,
@@ -65,9 +69,11 @@ final class CalculatorViewModelTests: XCTestCase {
                 expectedDisplay: "3,888",
                 roundingInput: "3,005",
                 roundingPrecision: 2,
-                expectedRoundedDisplay: "3,01",
-                expectedRoundedOperation: "round(3,005; 2) ≈ 3,01",
-                expectedRoundedCopyResult: "3,01"
+                expectedRoundedDisplay: "3",
+                expectedRoundedOperation: "=round(3,005; 1) ≈",
+                expectedRoundedCopiedOperation: "=round(3,005;1)",
+                expectedStoredRoundedExpression: "round(3,005; 2) ≈",
+                expectedRoundedCopyResult: "3"
             ),
             StyleFixture(
                 style: .french,
@@ -77,9 +83,11 @@ final class CalculatorViewModelTests: XCTestCase {
                 expectedDisplay: "3,888",
                 roundingInput: "3,005",
                 roundingPrecision: 2,
-                expectedRoundedDisplay: "3,01",
-                expectedRoundedOperation: "round(3,005; 2) ≈ 3,01",
-                expectedRoundedCopyResult: "3,01"
+                expectedRoundedDisplay: "3",
+                expectedRoundedOperation: "=round(3,005; 1) ≈",
+                expectedRoundedCopiedOperation: "=round(3,005;1)",
+                expectedStoredRoundedExpression: "round(3,005; 2) ≈",
+                expectedRoundedCopyResult: "3"
             ),
             StyleFixture(
                 style: .swiss,
@@ -89,9 +97,11 @@ final class CalculatorViewModelTests: XCTestCase {
                 expectedDisplay: "3'234.6",
                 roundingInput: "3.005",
                 roundingPrecision: 2,
-                expectedRoundedDisplay: "3.01",
-                expectedRoundedOperation: "round(3.005, 2) ≈ 3.01",
-                expectedRoundedCopyResult: "3.01"
+                expectedRoundedDisplay: "3",
+                expectedRoundedOperation: "=round(3.005, 1) ≈",
+                expectedRoundedCopiedOperation: "=round(3.005,1)",
+                expectedStoredRoundedExpression: "round(3.005, 2) ≈",
+                expectedRoundedCopyResult: "3"
             ),
             StyleFixture(
                 style: .indian,
@@ -101,9 +111,11 @@ final class CalculatorViewModelTests: XCTestCase {
                 expectedDisplay: "12,34,569",
                 roundingInput: "12,34,567.8912",
                 roundingPrecision: 3,
-                expectedRoundedDisplay: "12,34,567.891",
-                expectedRoundedOperation: "round(12,34,567.8912, 3) ≈ 12,34,567.891",
-                expectedRoundedCopyResult: "12,34,567.891"
+                expectedRoundedDisplay: "12,34,567.9",
+                expectedRoundedOperation: "=round(1234567.8912, 1) ≈",
+                expectedRoundedCopiedOperation: "=round(1234567.8912,1)",
+                expectedStoredRoundedExpression: "round(12,34,567.8912, 3) ≈",
+                expectedRoundedCopyResult: "12,34,567.9"
             )
         ]
     }
@@ -347,19 +359,20 @@ final class CalculatorViewModelTests: XCTestCase {
                 let viewModel = CalculatorViewModel(numberFormatStyle: fixture.style)
 
                 pasteString(fixture.roundingInput, into: viewModel)
-                viewModel.beginResultRounding(defaultPrecision: fixture.roundingPrecision)
+                viewModel.beginResultRounding()
+                viewModel.setResultRoundingPrecision(fixture.roundingPrecision)
 
                 XCTAssertEqual(viewModel.display, fixture.expectedRoundedDisplay)
                 XCTAssertEqual(viewModel.expressionDisplay, fixture.expectedRoundedOperation)
 
                 viewModel.copyOperationToPasteboard()
-                XCTAssertEqual(clipboardString(), fixture.expectedRoundedOperation)
+                XCTAssertEqual(clipboardString(), fixture.expectedRoundedCopiedOperation)
 
                 viewModel.commitResultRoundingInteraction()
 
                 let savedEntry = try XCTUnwrap(viewModel.history.first)
-                XCTAssertEqual(savedEntry.expression, fixture.expectedRoundedOperation.components(separatedBy: " ≈ ").first! + " ≈")
-                XCTAssertEqual(savedEntry.displayExpression, fixture.expectedRoundedOperation.components(separatedBy: " ≈ ").first! + " ≈")
+                XCTAssertEqual(savedEntry.expression, fixture.expectedStoredRoundedExpression)
+                XCTAssertEqual(savedEntry.displayExpression, fixture.expectedRoundedOperation)
                 XCTAssertEqual(savedEntry.result, fixture.expectedRoundedDisplay)
                 XCTAssertEqual(savedEntry.displayResult, fixture.expectedRoundedDisplay)
 
@@ -367,7 +380,7 @@ final class CalculatorViewModelTests: XCTestCase {
                 XCTAssertEqual(clipboardString(), fixture.expectedRoundedCopyResult)
 
                 viewModel.copyOperationToPasteboard(savedEntry)
-                XCTAssertEqual(clipboardString(), fixture.expectedRoundedOperation)
+                XCTAssertEqual(clipboardString(), fixture.expectedRoundedCopiedOperation)
 
                 let restored = CalculatorViewModel(numberFormatStyle: fixture.style)
                 pasteString(fixture.expectedRoundedOperation, into: restored)
@@ -1154,12 +1167,13 @@ final class CalculatorViewModelTests: XCTestCase {
         let viewModel = CalculatorViewModel()
 
         pasteString("9.32227", into: viewModel)
-        viewModel.beginResultRounding(defaultPrecision: 4)
-        XCTAssertEqual(viewModel.display, "9.3223")
+        viewModel.beginResultRounding()
+        viewModel.setResultRoundingPrecision(4)
+        XCTAssertEqual(viewModel.display, "9.3")
 
         viewModel.copyToPasteboard()
 
-        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "9.3223")
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "9.3")
     }
 
     func testCommitResultRoundingDoesNotAppendHistoryForIncompletePendingOperation() {
@@ -1167,42 +1181,108 @@ final class CalculatorViewModelTests: XCTestCase {
 
         enter("12", into: viewModel)
         viewModel.setOperator(.add)
-        viewModel.beginResultRounding(defaultPrecision: 4)
+        viewModel.beginResultRounding()
+        viewModel.setResultRoundingPrecision(4)
         viewModel.commitResultRoundingInteraction()
 
         XCTAssertTrue(viewModel.history.isEmpty)
     }
 
-    func testOpenThenRemoveResultRoundingDoesNotAppendHistory() {
+    func testOpenThenCloseResultRoundingDoesNotAppendHistory() {
         let viewModel = CalculatorViewModel()
 
         pasteString("9.32227", into: viewModel)
-        viewModel.beginResultRounding(defaultPrecision: 4)
-        viewModel.removeResultRounding()
+        viewModel.beginResultRounding()
         viewModel.commitResultRoundingInteraction()
 
         XCTAssertTrue(viewModel.history.isEmpty)
         XCTAssertEqual(viewModel.display, "9.32227")
+        XCTAssertFalse(viewModel.isResultRoundingEnabled)
     }
 
-    func testExactRoundingUsesEqualsAndPreservesZeroPadding() throws {
+    func testExactRoundingUsesEqualsAndPreservesSelectedSignificantDigits() throws {
         let viewModel = CalculatorViewModel()
 
         pasteString("5", into: viewModel)
-        viewModel.beginResultRounding(defaultPrecision: 3)
+        viewModel.beginResultRounding()
+        viewModel.setResultRoundingPrecision(3)
 
-        XCTAssertEqual(viewModel.display, "5.000")
-        XCTAssertEqual(viewModel.expressionDisplay, "round(5, 3) = 5.000")
+        XCTAssertEqual(viewModel.display, "5")
+        XCTAssertEqual(viewModel.expressionDisplay, "=round(5, 0)")
 
         viewModel.commitResultRoundingInteraction()
 
         let entry = try XCTUnwrap(viewModel.history.first)
         XCTAssertEqual(entry.expression, "round(5, 3)")
-        XCTAssertEqual(entry.result, "5.000")
-        XCTAssertEqual(entry.displayResult, "5.000")
+        XCTAssertEqual(entry.result, "5")
+        XCTAssertEqual(entry.displayResult, "5")
+        XCTAssertEqual(entry.displayExpression, "=round(5, 0)")
 
         viewModel.copyOperationToPasteboard(entry)
-        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "round(5, 3) = 5.000")
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "=round(5,0)")
+    }
+
+    func testResultRoundingLevelsRoundFromLeastSignificantDigit() {
+        let viewModel = CalculatorViewModel()
+
+        pasteString("54321", into: viewModel)
+        viewModel.beginResultRounding()
+        viewModel.setResultRoundingPrecision(1)
+        XCTAssertEqual(viewModel.display, "54,320")
+
+        viewModel.setResultRoundingPrecision(2)
+        XCTAssertEqual(viewModel.display, "54,300")
+
+        viewModel.setResultRoundingPrecision(5)
+        XCTAssertEqual(viewModel.display, "50,000")
+
+        viewModel.removeResultRounding()
+        XCTAssertEqual(viewModel.display, "54,321")
+
+        pasteString("1.5678", into: viewModel)
+        viewModel.beginResultRounding()
+        viewModel.setResultRoundingPrecision(1)
+        XCTAssertEqual(viewModel.display, "1.568")
+
+        viewModel.setResultRoundingPrecision(2)
+        XCTAssertEqual(viewModel.display, "1.57")
+
+        viewModel.setResultRoundingPrecision(8)
+        XCTAssertEqual(viewModel.display, "2")
+
+        viewModel.removeResultRounding()
+        XCTAssertEqual(viewModel.display, "1.5678")
+    }
+
+    func testResultRoundingCollapsesEvaluatedExpressionToCurrentTotal() {
+        let viewModel = CalculatorViewModel()
+
+        enter("2", into: viewModel)
+        viewModel.setOperator(.add)
+        pasteString("2.33", into: viewModel)
+        viewModel.evaluate()
+
+        viewModel.beginResultRounding()
+        viewModel.setResultRoundingPrecision(1)
+
+        XCTAssertEqual(viewModel.display, "4.3")
+        XCTAssertEqual(viewModel.expressionDisplay, "=round(4.33, 1) ≈")
+    }
+
+    func testBackspaceUpdatesRoundedOperationBaseValue() {
+        let viewModel = CalculatorViewModel()
+
+        enter("2", into: viewModel)
+        viewModel.setOperator(.add)
+        pasteString("2.33", into: viewModel)
+        viewModel.evaluate()
+        viewModel.beginResultRounding()
+        viewModel.setResultRoundingPrecision(1)
+
+        viewModel.backspace()
+
+        XCTAssertEqual(viewModel.display, "0")
+        XCTAssertEqual(viewModel.expressionDisplay, "=round(0, 0)")
     }
 
     func testCopyOperationThenPasteReplaysTheOperation() {

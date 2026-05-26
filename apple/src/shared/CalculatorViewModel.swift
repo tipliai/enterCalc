@@ -178,12 +178,6 @@ public final class CalculatorViewModel: ObservableObject {
             roundingInteractionInitialEnabled = isResultRoundingEnabled
             roundingInteractionInitialPrecision = resultRoundingPrecision
         }
-
-        if !isResultRoundingEnabled {
-            isResultRoundingEnabled = true
-            resultRoundingPrecision = normalizedRoundingPrecision(defaultPrecision)
-        }
-        updateDisplay()
     }
 
     public func setResultRoundingPrecision(_ precision: Int) {
@@ -1449,6 +1443,7 @@ public final class CalculatorViewModel: ObservableObject {
         let historyExpression: String
         let historyResult: String
         let displayResult: String
+        let displayExpression: String
         if isResultRoundingEnabled {
             let roundedResult = roundedDisplayString(fromStoredNumber: result, precision: resultRoundingPrecision)
             let relationSymbol = roundingRelationSymbol(fromStoredNumber: result, precision: resultRoundingPrecision)
@@ -1459,6 +1454,12 @@ public final class CalculatorViewModel: ObservableObject {
             }
             historyResult = roundedResult
             displayResult = roundedResult
+            displayExpression = roundedOperationDisplayString(
+                baseExpression: expression,
+                sourceValue: result,
+                precision: resultRoundingPrecision,
+                relationSymbol: relationSymbol
+            )
         } else {
             historyExpression = expression
             if result.localizedCaseInsensitiveContains("e") {
@@ -1471,16 +1472,17 @@ public final class CalculatorViewModel: ObservableObject {
                 historyResult = result
                 displayResult = displayString(for: result)
             }
+            displayExpression = groupedExpressionString(expression)
         }
 
         let boundedExpression = String(historyExpression.prefix(Limits.maxHistoryExpressionCharacters))
         let boundedResult = String(historyResult.prefix(Limits.maxHistoryResultCharacters))
-        let displayExpression = groupedExpressionString(boundedExpression)
+        let boundedDisplayExpression = String(displayExpression.prefix(Limits.maxHistoryExpressionCharacters))
         history.insert(
             HistoryEntry(
                 expression: boundedExpression,
                 result: boundedResult,
-                displayExpression: displayExpression,
+                displayExpression: boundedDisplayExpression,
                 displayResult: displayResult
             ),
             at: 0
@@ -1622,7 +1624,8 @@ public final class CalculatorViewModel: ObservableObject {
     private func currentOperationCopyString() -> String? {
         if isResultRoundingEnabled {
             let roundedOperation = expressionDisplay.trimmingCharacters(in: .whitespacesAndNewlines)
-            return roundedOperation.isEmpty ? nil : roundedOperation
+            let compactOperation = compactRoundedOperationCopyString(roundedOperation)
+            return compactOperation.isEmpty ? nil : compactOperation
         }
 
         let currentExpression = expressionDisplay.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1641,6 +1644,9 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func operationCopyString(expression: String, result: String) -> String {
+        if expression.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("=round(") {
+            return compactRoundedOperationCopyString(expression)
+        }
         if expression.contains("≈") {
             if expression.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("≈") {
                 return "\(expression) \(result)"
@@ -1648,6 +1654,18 @@ public final class CalculatorViewModel: ObservableObject {
             return expression
         }
         return "\(expression) = \(result)"
+    }
+
+    private func compactRoundedOperationCopyString(_ expression: String) -> String {
+        let trimmed = expression.trimmingCharacters(in: .whitespacesAndNewlines)
+        let withoutApproximation: String
+        if trimmed.hasSuffix("≈") {
+            withoutApproximation = String(trimmed.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+        } else {
+            withoutApproximation = trimmed
+        }
+
+        return withoutApproximation.filter { !$0.isWhitespace }
     }
 
     private func writeStringToPasteboard(_ string: String) {
@@ -1849,7 +1867,12 @@ public final class CalculatorViewModel: ObservableObject {
         display = roundedDisplay
         let baseExpression = baseExpressionForRounding(from: header)
         let relationSymbol = roundingRelationSymbol(fromStoredNumber: currentInput, precision: resultRoundingPrecision)
-        expressionDisplay = groupedExpressionString("round(\(baseExpression)\(numberFormatStyle.spreadsheetArgumentSeparator) \(resultRoundingPrecision)) \(relationSymbol) \(roundedDisplay)")
+        expressionDisplay = roundedOperationDisplayString(
+            baseExpression: baseExpression,
+            sourceValue: currentInput,
+            precision: resultRoundingPrecision,
+            relationSymbol: relationSymbol
+        )
     }
 
     /// Attempt to extract a numeric string from pasted content, preferring the active style and
@@ -2248,15 +2271,29 @@ public final class CalculatorViewModel: ObservableObject {
 
         history = history.map {
             let displayResult: String
+            let displayExpression: String
             if $0.expression.contains("round(") {
                 displayResult = $0.result
+                if let rounded = parseRoundedOperation($0.expression),
+                   let sourceValue = evaluateExpressionString(rounded.baseExpression) {
+                    let relationSymbol = $0.expression.contains("≈") ? "≈" : "="
+                    displayExpression = roundedOperationDisplayString(
+                        baseExpression: rounded.baseExpression,
+                        sourceValue: sourceValue,
+                        precision: rounded.precision,
+                        relationSymbol: relationSymbol
+                    )
+                } else {
+                    displayExpression = groupedExpressionString($0.expression)
+                }
             } else {
                 displayResult = displayString(for: $0.result)
+                displayExpression = groupedExpressionString($0.expression)
             }
             return HistoryEntry(
                 expression: $0.expression,
                 result: $0.result,
-                displayExpression: groupedExpressionString($0.expression),
+                displayExpression: displayExpression,
                 displayResult: displayResult
             )
         }
@@ -2361,64 +2398,23 @@ public final class CalculatorViewModel: ObservableObject {
 
     private func roundedDisplayString(fromStoredNumber raw: String, precision: Int) -> String {
         guard !shouldUseScientificNotation(for: raw),
-              var value = parseStoredNumber(raw) else {
+              let value = parseStoredNumber(raw) else {
             return displayString(for: raw)
         }
 
-        var rounded = Decimal.zero
-        NSDecimalRound(&rounded, &value, normalizedRoundingPrecision(precision), .plain)
-
-        var roundedText = decimalNumberString(from: rounded)
-        if normalizedRoundingPrecision(precision) == 0 {
-            if let dotIndex = roundedText.firstIndex(of: ".") {
-                roundedText = String(roundedText[..<dotIndex])
-            }
-            return groupedNumberString(roundedText)
-        }
-
-        if !roundedText.contains(".") {
-            roundedText.append(".")
-        }
-
-        let currentFractionLength = roundedText.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false).count > 1
-            ? roundedText.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false)[1].count
-            : 0
-        if currentFractionLength < normalizedRoundingPrecision(precision) {
-            roundedText.append(String(repeating: "0", count: normalizedRoundingPrecision(precision) - currentFractionLength))
-        }
-
+        let rounded = roundedDecimal(from: value, precision: precision)
+        let roundedText = roundedString(from: rounded, precision: precision)
         return groupedNumberString(roundedText)
     }
 
     private func roundedValueString(precision: Int) -> String {
         guard !shouldUseScientificNotation(for: currentInput),
-              var value = parseStoredNumber(currentInput) else {
+              let value = parseStoredNumber(currentInput) else {
             return currentInput
         }
 
-        var rounded = Decimal.zero
-        NSDecimalRound(&rounded, &value, normalizedRoundingPrecision(precision), .plain)
-
-        var roundedText = decimalNumberString(from: rounded)
-        if normalizedRoundingPrecision(precision) == 0 {
-            if let dotIndex = roundedText.firstIndex(of: ".") {
-                roundedText = String(roundedText[..<dotIndex])
-            }
-            return roundedText
-        }
-
-        if !roundedText.contains(".") {
-            roundedText.append(".")
-        }
-
-        let currentFractionLength = roundedText.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false).count > 1
-            ? roundedText.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false)[1].count
-            : 0
-        if currentFractionLength < normalizedRoundingPrecision(precision) {
-            roundedText.append(String(repeating: "0", count: normalizedRoundingPrecision(precision) - currentFractionLength))
-        }
-
-        return roundedText
+        let rounded = roundedDecimal(from: value, precision: precision)
+        return roundedString(from: rounded, precision: precision)
     }
 
     private func roundingRelationSymbol(fromStoredNumber raw: String, precision: Int) -> String {
@@ -2426,10 +2422,35 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func isRoundingApproximate(fromStoredNumber raw: String, precision: Int) -> Bool {
-        guard var original = parseStoredNumber(raw) else { return false }
-        var rounded = Decimal.zero
-        NSDecimalRound(&rounded, &original, normalizedRoundingPrecision(precision), .plain)
+        guard !shouldUseScientificNotation(for: raw),
+              let original = parseStoredNumber(raw) else { return false }
+        let rounded = roundedDecimal(from: original, precision: precision)
         return rounded != original
+    }
+
+    private func roundedDecimal(from value: Decimal, precision: Int) -> Decimal {
+        let normalizedPrecision = normalizedRoundingPrecision(precision)
+        guard value != 0 else { return 0 }
+
+        let availableDigits = max(1, significantDigitCount(in: decimalNumberString(from: value)))
+        let effectiveLevels = min(normalizedPrecision, max(availableDigits - 1, 0))
+        let retainedDigits = max(availableDigits - effectiveLevels, 1)
+
+        let absoluteValue = abs(NSDecimalNumber(decimal: value).doubleValue)
+        guard absoluteValue.isFinite, absoluteValue > 0 else {
+            return value
+        }
+
+        let magnitude = floor(log10(absoluteValue))
+        let scale = retainedDigits - Int(magnitude) - 1
+        var working = value
+        var rounded = Decimal.zero
+        NSDecimalRound(&rounded, &working, scale, .plain)
+        return rounded
+    }
+
+    private func roundedString(from value: Decimal, precision _: Int) -> String {
+        return decimalNumberString(from: value)
     }
 
     private func appendRoundedHistoryEventIfNeeded() {
@@ -2480,6 +2501,13 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func baseExpressionForRounding(from header: String) -> String {
+        if !isExpressionMode, pendingOperator == nil {
+            let standaloneValue = currentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !standaloneValue.isEmpty {
+                return standaloneValue
+            }
+        }
+
         let trimmed = header.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return currentToken
@@ -2497,28 +2525,102 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func normalizedRoundingPrecision(_ precision: Int) -> Int {
-        min(max(precision, 0), Limits.maxInputDigits)
+        min(max(precision, 1), Limits.maxInputDigits)
     }
 
     private func parseRoundedOperation(_ raw: String) -> (baseExpression: String, precision: Int)? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix("round(") else { return nil }
+        let isDisplayRoundOperation = trimmed.hasPrefix("=round(")
+        let normalized = isDisplayRoundOperation ? String(trimmed.dropFirst()) : trimmed
+        guard normalized.hasPrefix("round(") else { return nil }
 
-        guard let closeIndex = roundedOperationClosingParenthesis(in: trimmed) else {
+        guard let closeIndex = roundedOperationClosingParenthesis(in: normalized) else {
             return nil
         }
 
-        let argumentRange = trimmed.index(trimmed.startIndex, offsetBy: 6)..<closeIndex
-        let arguments = String(trimmed[argumentRange])
+        let argumentRange = normalized.index(normalized.startIndex, offsetBy: 6)..<closeIndex
+        let arguments = String(normalized[argumentRange])
         guard let (expressionPart, precisionPart) = splitRoundedOperationArguments(arguments) else {
             return nil
         }
 
-        guard !expressionPart.isEmpty, let precision = Int(precisionPart) else {
+        guard !expressionPart.isEmpty, let parsedPrecision = Int(precisionPart) else {
             return nil
         }
 
-        return (expressionPart, normalizedRoundingPrecision(precision))
+        if isDisplayRoundOperation {
+            return (
+                expressionPart,
+                roundingPrecision(fromDisplayedScale: parsedPrecision, baseExpression: expressionPart)
+            )
+        }
+
+        return (expressionPart, normalizedRoundingPrecision(parsedPrecision))
+    }
+
+    private func roundedOperationDisplayString(baseExpression: String, sourceValue: String, precision: Int, relationSymbol: String) -> String {
+        let displayExpression = ungroupedExpressionString(baseExpression)
+        let scale = spreadsheetRoundScale(fromStoredNumber: sourceValue, precision: precision)
+        let prefix = "=round(\(displayExpression)\(numberFormatStyle.spreadsheetArgumentSeparator) \(scale))"
+        return relationSymbol == "≈" ? "\(prefix) ≈" : prefix
+    }
+
+    private func spreadsheetRoundScale(fromStoredNumber raw: String, precision: Int) -> Int {
+        guard let value = parseStoredNumber(raw) else { return 0 }
+        return spreadsheetRoundScale(from: value, precision: precision)
+    }
+
+    private func spreadsheetRoundScale(from value: Decimal, precision: Int) -> Int {
+        guard value != 0 else { return 0 }
+
+        let normalizedPrecision = normalizedRoundingPrecision(precision)
+        let availableDigits = max(1, significantDigitCount(in: decimalNumberString(from: value)))
+        let effectiveLevels = min(normalizedPrecision, max(availableDigits - 1, 0))
+        let retainedDigits = max(availableDigits - effectiveLevels, 1)
+
+        let absoluteValue = abs(NSDecimalNumber(decimal: value).doubleValue)
+        guard absoluteValue.isFinite, absoluteValue > 0 else { return 0 }
+
+        let magnitude = floor(log10(absoluteValue))
+        return retainedDigits - Int(magnitude) - 1
+    }
+
+    private func roundingPrecision(fromDisplayedScale scale: Int, baseExpression: String) -> Int {
+        guard let evaluated = evaluateExpressionString(baseExpression),
+              let value = parseStoredNumber(evaluated),
+              value != 0 else {
+            return 1
+        }
+
+        let availableDigits = max(1, significantDigitCount(in: decimalNumberString(from: value)))
+        let absoluteValue = abs(NSDecimalNumber(decimal: value).doubleValue)
+        guard absoluteValue.isFinite, absoluteValue > 0 else { return 1 }
+
+        let magnitude = floor(log10(absoluteValue))
+        let retainedDigits = max(scale + Int(magnitude) + 1, 1)
+        let effectiveLevels = max(availableDigits - retainedDigits, 0)
+        return normalizedRoundingPrecision(max(effectiveLevels, 1))
+    }
+
+    private func ungroupedExpressionString(_ expression: String) -> String {
+        let groupingSeparators = numberFormatStyle.groupingSeparatorCharacters
+        let characters = Array(expression)
+        var result = String()
+        result.reserveCapacity(characters.count)
+
+        for index in characters.indices {
+            let character = characters[index]
+            if groupingSeparators.contains(character) {
+                let previous = index > characters.startIndex ? characters[characters.index(before: index)] : nil
+                let next = index < characters.index(before: characters.endIndex) ? characters[characters.index(after: index)] : nil
+                if previous?.isNumber == true && next?.isNumber == true {
+                    continue
+                }
+            }
+            result.append(character)
+        }
+
+        return result
     }
 
     private func roundedOperationClosingParenthesis(in raw: String) -> String.Index? {

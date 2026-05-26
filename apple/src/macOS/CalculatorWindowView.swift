@@ -692,7 +692,7 @@ struct CalculatorWindowView: View {
         .padding(.horizontal, 5)
         .padding(.top, 0)
         .padding(.bottom, 8)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .top)
         .background(memoryOverlayBackgroundColor)
         .clipShape(
             UnevenRoundedRectangle(
@@ -887,21 +887,24 @@ struct CalculatorWindowView: View {
     private func roundingOverlay() -> some View {
         MacRoundingPanel(
             palette: palette,
+            overlayBackgroundColor: memoryOverlayBackgroundColor,
+            isEnabled: viewModel.isResultRoundingEnabled,
             precision: viewModel.resultRoundingPrecision,
             maxPrecision: viewModel.maxResultRoundingPrecision,
             localizationBundle: currentLocalizationBundle,
-            onPrecisionChanged: { precision in
-                viewModel.setResultRoundingPrecision(precision)
+            onSelectionChanged: { digits in
+                if let digits {
+                    viewModel.setResultRoundingPrecision(digits)
+                } else {
+                    viewModel.removeResultRounding()
+                }
             },
-            onPrecisionCommit: {
-                closeRoundingOverlay()
-            },
-            onRemove: {
+            onDisableAndDismiss: {
                 viewModel.removeResultRounding()
                 closeRoundingOverlay()
-            }
+            },
+            onDismiss: { closeRoundingOverlay() }
         )
-        .padding(.bottom, -8)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -988,6 +991,45 @@ struct CalculatorWindowView: View {
         setRoundingOverlayVisible(false)
     }
 
+    private func openRoundingOverlayFromKeyboard() {
+        guard !showRoundingOverlay else { return }
+        setRoundingOverlayVisible(true)
+    }
+
+    private func adjustRoundingSelectionFromKeyboard(delta: Int) -> Bool {
+        guard showRoundingOverlay else { return false }
+
+        let currentStep = viewModel.isResultRoundingEnabled ? viewModel.resultRoundingPrecision : 0
+        let maximumStep = viewModel.maxResultRoundingPrecision
+        let nextStep = min(max(currentStep + delta, 0), maximumStep)
+
+        guard nextStep != currentStep else { return true }
+
+        if nextStep == 0 {
+            viewModel.removeResultRounding()
+        } else {
+            viewModel.setResultRoundingPrecision(nextStep)
+        }
+
+        return true
+    }
+
+    private func handleRoundingOverlayKey(_ event: NSEvent) -> Bool {
+        guard showRoundingOverlay else { return false }
+
+        switch event.keyCode {
+        case 126, 36, 76:
+            closeRoundingOverlay()
+            return true
+        case 51, 53, 117:
+            viewModel.removeResultRounding()
+            closeRoundingOverlay()
+            return true
+        default:
+            return false
+        }
+    }
+
     private func toggleHistoryVisibility() {
         withAnimation {
             userToggledHistory = true
@@ -1034,6 +1076,10 @@ struct CalculatorWindowView: View {
         var handled = false
         let isCommand = event.modifierFlags.contains(.command)
 
+        if handleRoundingOverlayKey(event) {
+            return true
+        }
+
         if isCommand {
             if event.keyCode == 51 { // Cmd + Backspace = clear all
                 viewModel.clearAll()
@@ -1053,6 +1099,13 @@ struct CalculatorWindowView: View {
 
         // Keypad support by keyCode
         switch event.keyCode {
+        case 123:
+            return adjustRoundingSelectionFromKeyboard(delta: -1)
+        case 124:
+            return adjustRoundingSelectionFromKeyboard(delta: 1)
+        case 125:
+            openRoundingOverlayFromKeyboard()
+            return true
         case 82: viewModel.inputDigit("0"); return true
         case 83: viewModel.inputDigit("1"); return true
         case 84: viewModel.inputDigit("2"); return true
@@ -1801,138 +1854,231 @@ private struct SettingsSheet: View {
 
 private struct MacRoundingPanel: View {
     let palette: Palette
+    let overlayBackgroundColor: Color
+    let isEnabled: Bool
     let precision: Int
     let maxPrecision: Int
     let localizationBundle: Bundle?
-    let onPrecisionChanged: (Int) -> Void
-    let onPrecisionCommit: () -> Void
-    let onRemove: () -> Void
+    let onSelectionChanged: (Int?) -> Void
+    let onDisableAndDismiss: () -> Void
+    let onDismiss: () -> Void
     @State private var sliderValue: Double
-    @State private var changedDuringInteraction: Bool = false
+    @State private var isTrashHovering: Bool = false
+    @State private var isCloseHovering: Bool = false
 
     private static let exponentialK: Double = -0.15234446585900155
     private static let exponentialDomainMax: Double = 16
+    private static let offStepIndex: Int = 0
 
-    private var allPrecisions: [Int] {
-        guard maxPrecision >= 0 else { return [] }
-        return Array(0...min(maxPrecision, Int(Self.exponentialDomainMax)))
+    private var maximumStepIndex: Int {
+        min(maxPrecision, Int(Self.exponentialDomainMax))
+    }
+
+    private var allStepIndices: [Int] {
+        Array(Self.offStepIndex...maximumStepIndex)
     }
 
     init(
         palette: Palette,
+        overlayBackgroundColor: Color,
+        isEnabled: Bool,
         precision: Int,
         maxPrecision: Int,
         localizationBundle: Bundle?,
-        onPrecisionChanged: @escaping (Int) -> Void,
-        onPrecisionCommit: @escaping () -> Void,
-        onRemove: @escaping () -> Void
+        onSelectionChanged: @escaping (Int?) -> Void,
+        onDisableAndDismiss: @escaping () -> Void,
+        onDismiss: @escaping () -> Void
     ) {
         self.palette = palette
+        self.overlayBackgroundColor = overlayBackgroundColor
+        self.isEnabled = isEnabled
         self.precision = precision
         self.maxPrecision = max(0, maxPrecision)
         self.localizationBundle = localizationBundle
-        self.onPrecisionChanged = onPrecisionChanged
-        self.onPrecisionCommit = onPrecisionCommit
-        self.onRemove = onRemove
-        let initialPosition = MacRoundingPanel.sliderPosition(for: precision, maxPrecision: max(0, maxPrecision))
+        self.onSelectionChanged = onSelectionChanged
+        self.onDisableAndDismiss = onDisableAndDismiss
+        self.onDismiss = onDismiss
+        let initialPosition = MacRoundingPanel.sliderPosition(
+            for: MacRoundingPanel.stepIndex(isEnabled: isEnabled, precision: precision, maxPrecision: max(0, maxPrecision))
+        )
         _sliderValue = State(initialValue: initialPosition)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(macLocalized("rounding.title", bundle: localizationBundle))
-                .font(EnterCalcFont.subheadline)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .center)
+            roundingOverlayHeader
 
             Slider(
                 value: Binding(
                     get: { sliderValue },
                     set: { newValue in
                         let clamped = min(max(newValue, 0), 1)
-                        let snappedPrecision = precision(for: clamped)
-                        let snappedPosition = sliderPosition(for: snappedPrecision)
+                        let snappedStepIndex = stepIndex(for: clamped)
+                        let snappedPosition = sliderPosition(for: snappedStepIndex)
                         guard snappedPosition != sliderValue else { return }
                         sliderValue = snappedPosition
-                        changedDuringInteraction = true
-                        onPrecisionChanged(snappedPrecision)
+                        onSelectionChanged(digits(for: snappedStepIndex))
                     }
                 ),
-                in: 0...1,
-                onEditingChanged: { isEditing in
-                    if !isEditing, changedDuringInteraction {
-                        changedDuringInteraction = false
-                        onPrecisionCommit()
-                    }
-                }
+                in: 0...1
             )
 
             GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    ForEach(allPrecisions, id: \.self) { value in
-                        Capsule(style: .continuous)
-                            .fill(Color.secondary.opacity(0.35))
-                            .frame(width: 2, height: 5)
-                            .offset(x: tickOffset(for: value, width: geometry.size.width))
+                ZStack(alignment: .topLeading) {
+                    ForEach(allStepIndices, id: \.self) { stepIndex in
+                        if stepIndex == Self.offStepIndex {
+                            Image(systemName: "power")
+                                .font(.system(size: NSFont.smallSystemFontSize))
+                                .foregroundStyle(.secondary)
+                                .offset(x: offIconOffset(width: geometry.size.width), y: -3)
+                        } else {
+                            Capsule(style: .continuous)
+                                .fill(Color.secondary.opacity(0.35))
+                                .frame(width: 2, height: 5)
+                                .offset(x: tickOffset(for: stepIndex, width: geometry.size.width))
+                        }
                     }
                 }
             }
-            .frame(height: 8)
-
-            Button(role: .destructive) {
-                onRemove()
-            } label: {
-                Text(macLocalized("rounding.remove", bundle: localizationBundle))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(palette.accent)
+            .frame(height: 26)
         }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(palette.historyBackground)
+        .padding(.horizontal, 5)
+        .padding(.top, 0)
+        .padding(.bottom, 8)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(overlayBackgroundColor)
+        .clipShape(
+            UnevenRoundedRectangle(
+                topLeadingRadius: 10,
+                bottomLeadingRadius: 0,
+                bottomTrailingRadius: 0,
+                topTrailingRadius: 10,
+                style: .continuous
+            )
         )
+        .padding(.horizontal, -8)
+        .padding(.bottom, -8)
         .onChange(of: precision) { _, newValue in
-            sliderValue = sliderPosition(for: newValue)
+            sliderValue = sliderPosition(for: Self.stepIndex(isEnabled: isEnabled, precision: newValue, maxPrecision: maxPrecision))
+        }
+        .onChange(of: isEnabled) { _, newValue in
+            sliderValue = sliderPosition(for: Self.stepIndex(isEnabled: newValue, precision: precision, maxPrecision: maxPrecision))
         }
     }
 
-    private func sliderPosition(for precision: Int) -> Double {
-        Self.sliderPosition(for: precision, maxPrecision: maxPrecision)
+    private var roundingOverlayHeader: some View {
+        let headerControlSize: CGFloat = 32
+
+        return ZStack {
+            Text(macLocalized("rounding.title", bundle: localizationBundle))
+                .font(EnterCalcFont.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            HStack(spacing: 0) {
+                disableAndDismissButton
+                Spacer(minLength: 0)
+                dismissButton
+            }
+        }
+        .frame(height: headerControlSize)
     }
 
-    private func precision(for normalizedPosition: Double) -> Int {
+    private var dismissButton: some View {
+        Button(action: onDismiss) {
+            Image(systemName: "xmark")
+                .frame(width: 16, height: 16, alignment: .center)
+                .padding(8)
+                .background(isCloseHovering ? palette.headerHover : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(palette.textSecondary)
+        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .help(macLocalized("close", bundle: localizationBundle))
+        .accessibilityLabel(Text(macLocalized("close", bundle: localizationBundle)))
+        .onHover { hovering in
+            isCloseHovering = hovering
+        }
+    }
+
+    private var disableAndDismissButton: some View {
+        Button(action: onDisableAndDismiss) {
+            Image(systemName: "trash")
+                .frame(width: 16, height: 16, alignment: .center)
+                .padding(8)
+                .background(isTrashHovering ? palette.headerHover : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(palette.textSecondary)
+        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .help(macLocalized("rounding.remove", bundle: localizationBundle))
+        .accessibilityLabel(Text(macLocalized("rounding.remove", bundle: localizationBundle)))
+        .onHover { hovering in
+            isTrashHovering = hovering
+            if hovering {
+                NSCursor.disappearingItem.set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
+    }
+
+    private func sliderPosition(for stepIndex: Int) -> Double {
+        Self.sliderPosition(for: stepIndex)
+    }
+
+    private func stepIndex(for normalizedPosition: Double) -> Int {
         let clamped = min(max(normalizedPosition, 0), 1)
-        if allPrecisions.isEmpty {
-            return 0
+        if allStepIndices.isEmpty {
+            return Self.offStepIndex
         }
 
-        var nearestPrecision = allPrecisions[0]
-        var nearestDistance = abs(clamped - sliderPosition(for: nearestPrecision))
+        var nearestStepIndex = allStepIndices[0]
+        var nearestDistance = abs(clamped - sliderPosition(for: nearestStepIndex))
 
-        for candidate in allPrecisions.dropFirst() {
+        for candidate in allStepIndices.dropFirst() {
             let candidateDistance = abs(clamped - sliderPosition(for: candidate))
             if candidateDistance < nearestDistance {
                 nearestDistance = candidateDistance
-                nearestPrecision = candidate
+                nearestStepIndex = candidate
             }
         }
 
-        return nearestPrecision
+        return nearestStepIndex
     }
 
-    private func tickOffset(for precision: Int, width: CGFloat) -> CGFloat {
-        let sliderLeftPadding: CGFloat = 1
-        let sliderUsableWidth = max(0, width - sliderLeftPadding * 2)
-        let normalized = sliderPosition(for: precision)
-        return sliderLeftPadding + CGFloat(normalized) * sliderUsableWidth
+    private func digits(for stepIndex: Int) -> Int? {
+        guard stepIndex != Self.offStepIndex else { return nil }
+        return min(stepIndex, min(maxPrecision, Int(Self.exponentialDomainMax)))
     }
 
-    private static func sliderPosition(for precision: Int, maxPrecision: Int) -> Double {
-        let boundedPrecision = min(max(precision, 0), max(0, maxPrecision))
-        let value = Double(boundedPrecision)
+    private func tickOffset(for stepIndex: Int, width: CGFloat) -> CGFloat {
+        markerOffset(for: stepIndex, width: width, markerWidth: 2)
+    }
+
+    private static func stepIndex(isEnabled: Bool, precision: Int, maxPrecision: Int) -> Int {
+        guard isEnabled else { return offStepIndex }
+        return min(max(precision, 1), min(maxPrecision, Int(exponentialDomainMax)))
+    }
+
+    private func offIconOffset(width: CGFloat) -> CGFloat {
+        markerOffset(for: Self.offStepIndex, width: width, markerWidth: 14)
+    }
+
+    private func markerOffset(for stepIndex: Int, width: CGFloat, markerWidth: CGFloat) -> CGFloat {
+        let trackLeadingInset: CGFloat = 10
+        let trackTrailingInset: CGFloat = 10
+        let usableWidth = max(width - trackLeadingInset - trackTrailingInset, 0)
+        let centerX = trackLeadingInset + CGFloat(sliderPosition(for: stepIndex)) * usableWidth
+        return centerX - markerWidth * 0.5
+    }
+
+    private static func sliderPosition(for stepIndex: Int) -> Double {
+        let boundedStepIndex = min(max(stepIndex, 0), Int(exponentialDomainMax))
+        let value = Double(boundedStepIndex)
         let denominator = exp(exponentialK * exponentialDomainMax) - 1
         if denominator == 0 {
             return 0
