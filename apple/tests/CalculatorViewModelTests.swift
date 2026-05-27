@@ -2425,7 +2425,14 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.inputDigit("9")
 
         XCTAssertEqual(viewModel.display, "195")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
         XCTAssertEqual(viewModel.displayEditCaretBoundaryIndex, 2)
+
+        viewModel.clearDisplayEditCursor()
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "195")
+        XCTAssertEqual(viewModel.expressionDisplay, "195 =")
     }
 
     func testDisplayEditCursorNormalizesGroupedCurrentInputBeforeInsertion() {
@@ -2488,6 +2495,22 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.evaluate()
 
         XCTAssertEqual(viewModel.display, "19,239")
+    }
+
+    func testDisplayEditCursorCanModifyOperandInsideParenthesesExpressionMode() {
+        let viewModel = CalculatorViewModel()
+
+        viewModel.inputParenthesis("(")
+        enter("1234", into: viewModel)
+
+        XCTAssertTrue(viewModel.canDirectlyEditDisplay)
+
+        viewModel.setDisplayEditCursor(displayBoundaryIndex: 3)
+        viewModel.inputDigit("9")
+
+        XCTAssertEqual(viewModel.display, "12,934")
+        XCTAssertEqual(viewModel.expressionDisplay, "( 12,934")
+        XCTAssertEqual(viewModel.displayEditCaretBoundaryIndex, 4)
     }
 
     func testSetOperatorExitsDisplayEditModeAndStartsFreshPendingOperand() {

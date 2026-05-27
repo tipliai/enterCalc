@@ -242,7 +242,6 @@ public final class CalculatorViewModel: ObservableObject {
 
     public var canDirectlyEditDisplay: Bool {
         guard !isErrorState,
-              !isExpressionMode,
               !isResultRoundingEnabled else {
             return false
         }
@@ -433,6 +432,7 @@ public final class CalculatorViewModel: ObservableObject {
         }
         isErrorState = false
         if let cursorIndex = activeDisplayEditCursorIndex {
+            resetPostEvaluateStateForDirectDisplayEditingIfNeeded()
             insertDigitIntoCurrentInput(digit, at: cursorIndex)
         } else if currentInput == "0" {
             currentInput = digit
@@ -472,6 +472,7 @@ public final class CalculatorViewModel: ObservableObject {
         isErrorState = false
         let decimalSeparator = numberFormatStyle.decimalSeparator
         if let cursorIndex = activeDisplayEditCursorIndex {
+            resetPostEvaluateStateForDirectDisplayEditingIfNeeded()
             insertDecimalIntoCurrentInput(at: cursorIndex)
         } else if !currentInput.contains(decimalSeparator), !currentInput.contains("."), currentInputDigitCount < Limits.maxInputDigits {
             currentInput.append(contentsOf: decimalSeparator)
@@ -658,6 +659,7 @@ public final class CalculatorViewModel: ObservableObject {
         isPendingEntryClearedByClearButton = false
 
         if let cursorIndex = activeDisplayEditCursorIndex {
+            resetPostEvaluateStateForDirectDisplayEditingIfNeeded()
             deleteDigitBeforeDisplayCursor(cursorIndex)
             shouldPreserveTypedCurrencyInput = activeCurrencySymbol != nil
             setCurrentTokenToCurrentInput()
@@ -2365,6 +2367,22 @@ public final class CalculatorViewModel: ObservableObject {
             accumulator = currentValue
             accumulatorToken = currentToken
         }
+    }
+
+    private func resetPostEvaluateStateForDirectDisplayEditingIfNeeded() {
+        guard justEvaluated else { return }
+
+        // Editing a previously evaluated result creates a fresh input state,
+        // so stale operation summary/repeat-equals metadata must be cleared.
+        accumulator = nil
+        accumulatorToken = nil
+        lastOperator = nil
+        lastOperand = nil
+        lastOperandToken = nil
+        lastResultSummary = ""
+        expression = ""
+        justEvaluated = false
+        shouldResetInputOnNextDigit = false
     }
 
     public func refreshLocalization() {
