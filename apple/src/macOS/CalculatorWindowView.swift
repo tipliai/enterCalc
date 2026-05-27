@@ -483,6 +483,7 @@ struct CalculatorWindowView: View {
 
     private var display: some View {
         let basicFontSize: CGFloat = 12
+        let operationLineMinScaleFactor = CalculatorDisplayMetrics.operationLineMinScaleFactor(for: basicFontSize)
 
         return VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .trailing, spacing: 4) {
@@ -492,7 +493,7 @@ struct CalculatorWindowView: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
                     .lineLimit(1)
                     .allowsTightening(true)
-                    .minimumScaleFactor(0.35)
+                    .minimumScaleFactor(operationLineMinScaleFactor)
 
                 if viewModel.canDirectlyEditDisplay {
                     EditableDisplayResultText(
