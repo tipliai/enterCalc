@@ -633,6 +633,47 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.history.first?.result, "15")
     }
 
+    func testPercentInsideParenthesizedExpressionStaysVisibleUntilEvaluate() {
+        let viewModel = CalculatorViewModel()
+
+        enter("1", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("2", into: viewModel)
+        viewModel.setOperator(.multiply)
+        viewModel.inputParenthesis("(")
+        enter("100", into: viewModel)
+        viewModel.applyPercent()
+
+        XCTAssertEqual(viewModel.display, "100%")
+        XCTAssertEqual(viewModel.expressionDisplay, "1 + 2 × ( 100%")
+
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "3")
+        XCTAssertEqual(viewModel.expressionDisplay, "1 + 2 × ( 100% ) =")
+        XCTAssertEqual(viewModel.history.first?.expression, "1 + 2 × ( 100% )")
+        XCTAssertEqual(viewModel.history.first?.result, "3")
+    }
+
+    func testPercentInsideParenthesizedExpressionEvaluatesAsDecimalPercent() {
+        let viewModel = CalculatorViewModel()
+
+        enter("1", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("5", into: viewModel)
+        viewModel.setOperator(.multiply)
+        viewModel.inputParenthesis("(")
+        enter("200", into: viewModel)
+        viewModel.applyPercent()
+        viewModel.inputParenthesis(")")
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "11")
+        XCTAssertEqual(viewModel.expressionDisplay, "1 + 5 × ( 200% ) =")
+        XCTAssertEqual(viewModel.history.first?.expression, "1 + 5 × ( 200% )")
+        XCTAssertEqual(viewModel.history.first?.result, "11")
+    }
+
     func testPercentConvertsCurrentInputToDecimalValue() {
         let viewModel = CalculatorViewModel()
 
@@ -755,7 +796,7 @@ final class CalculatorViewModelTests: XCTestCase {
         enter("10", into: viewModel)
         viewModel.applyPercent()
 
-        XCTAssertEqual(viewModel.display, "0.1")
+        XCTAssertEqual(viewModel.display, "10%")
         XCTAssertEqual(viewModel.expressionDisplay, "10 ÷ 10%")
 
         viewModel.evaluate()
@@ -774,7 +815,7 @@ final class CalculatorViewModelTests: XCTestCase {
         enter("15", into: viewModel)
         viewModel.applyPercent()
 
-        XCTAssertEqual(viewModel.display, "0.15")
+        XCTAssertEqual(viewModel.display, "15%")
         XCTAssertEqual(viewModel.expressionDisplay, "100 × 15%")
 
         viewModel.evaluate()
@@ -783,6 +824,25 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.expressionDisplay, "100 × 15% =")
         XCTAssertEqual(viewModel.history.first?.expression, "100 × 15%")
         XCTAssertEqual(viewModel.history.first?.result, "15")
+    }
+
+    func testDivisionWithTwoHundredPercentKeepsPercentVisibleUntilEvaluate() {
+        let viewModel = CalculatorViewModel()
+
+        enter("5", into: viewModel)
+        viewModel.setOperator(.divide)
+        enter("200", into: viewModel)
+        viewModel.applyPercent()
+
+        XCTAssertEqual(viewModel.display, "200%")
+        XCTAssertEqual(viewModel.expressionDisplay, "5 ÷ 200%")
+
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "2.5")
+        XCTAssertEqual(viewModel.expressionDisplay, "5 ÷ 200% =")
+        XCTAssertEqual(viewModel.history.first?.expression, "5 ÷ 200%")
+        XCTAssertEqual(viewModel.history.first?.result, "2.5")
     }
 
     func testPercentAfterStandalonePercentUsesStandaloneSemantics() {
@@ -1630,7 +1690,7 @@ final class CalculatorViewModelTests: XCTestCase {
         enter("115", into: viewModel)
         viewModel.applyPercent()
 
-        XCTAssertEqual(viewModel.display, "1.15")
+        XCTAssertEqual(viewModel.display, "115%")
         XCTAssertEqual(viewModel.expressionDisplay, "$100 × 115%")
 
         viewModel.evaluate()
@@ -1649,7 +1709,7 @@ final class CalculatorViewModelTests: XCTestCase {
         enter("60", into: viewModel)
         viewModel.applyPercent()
 
-        XCTAssertEqual(viewModel.display, "0.6")
+        XCTAssertEqual(viewModel.display, "60%")
         XCTAssertEqual(viewModel.expressionDisplay, "€93.33 ÷ 60%")
 
         viewModel.evaluate()

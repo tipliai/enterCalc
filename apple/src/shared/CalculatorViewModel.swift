@@ -364,6 +364,7 @@ public final class CalculatorViewModel: ObservableObject {
     private var currentToken: String = "0"
     private var accumulatorToken: String?
     private var lastOperandToken: String?
+    private var pendingParenthesisExpressionSeedTokens: [String]?
     private var expressionTokens: [String] = []
     private var openParenthesisCount: Int = 0
     private var isExpressionMode = false
@@ -708,6 +709,7 @@ public final class CalculatorViewModel: ObservableObject {
         let snapshot = beginUndoableChange()
         finishDirectDisplayEditingIfNeeded()
         isPendingEntryClearedByClearButton = false
+        pendingParenthesisExpressionSeedTokens = nil
         if isExpressionMode {
             if !shouldResetInputOnNextDigit {
                 appendCurrentTokenToExpressionIfNeeded()
@@ -737,7 +739,12 @@ public final class CalculatorViewModel: ObservableObject {
             return
         }
 
-        if let _ = pendingOperator, !shouldResetInputOnNextDigit {
+        if let existingPending = pendingOperator, !shouldResetInputOnNextDigit {
+            if (existingPending == .add || existingPending == .subtract),
+               (op == .multiply || op == .divide) {
+                let lhsToken = accumulatorToken ?? currentToken
+                pendingParenthesisExpressionSeedTokens = [lhsToken, existingPending.symbol, currentToken, op.symbol]
+            }
             performPendingOperation(addToHistory: false)
             if isErrorState {
                 completeUndoableChange(from: snapshot)
@@ -1319,6 +1326,25 @@ public final class CalculatorViewModel: ObservableObject {
 
     private func enterExpressionModeIfNeeded() {
         guard !isExpressionMode else { return }
+        if let seedTokens = pendingParenthesisExpressionSeedTokens,
+           pendingOperator != nil,
+           shouldResetInputOnNextDigit {
+            isExpressionMode = true
+            expressionTokens = seedTokens
+            openParenthesisCount = 0
+            lastOperator = nil
+            lastOperand = nil
+            lastOperandToken = nil
+            pendingParenthesisExpressionSeedTokens = nil
+            pendingOperator = nil
+            accumulator = nil
+            accumulatorToken = nil
+            shouldResetInputOnNextDigit = true
+            justEvaluated = false
+            return
+        }
+
+        pendingParenthesisExpressionSeedTokens = nil
         let didHavePendingOperator = pendingOperator != nil
         let wasEnteringRightOperand = didHavePendingOperator && !shouldResetInputOnNextDigit
         let rightOperandToken = currentToken
@@ -1358,8 +1384,15 @@ public final class CalculatorViewModel: ObservableObject {
 
     private func appendCurrentTokenToExpressionIfNeeded() {
         guard !shouldResetInputOnNextDigit else { return }
-        guard let normalized = normalizeDisplayNumberToken(currentToken) else { return }
-        let displayToken = displayString(for: normalized)
+        let displayToken: String
+        if currentToken.hasSuffix("%") {
+            displayToken = currentToken
+        } else if let normalized = normalizeDisplayNumberToken(currentToken) {
+            displayToken = displayString(for: normalized)
+        } else {
+            return
+        }
+
         if let last = expressionTokens.last, isExpressionNumberToken(last) {
             expressionTokens[expressionTokens.count - 1] = displayToken
         } else {
@@ -1369,9 +1402,16 @@ public final class CalculatorViewModel: ObservableObject {
 
     private func expressionPreviewHeader() -> String {
         var previewTokens = expressionTokens
-        if !shouldResetInputOnNextDigit,
-           let normalized = normalizeDisplayNumberToken(currentToken) {
-            let displayToken = displayString(for: normalized)
+        if !shouldResetInputOnNextDigit {
+            let displayToken: String
+            if currentToken.hasSuffix("%") {
+                displayToken = currentToken
+            } else if let normalized = normalizeDisplayNumberToken(currentToken) {
+                displayToken = displayString(for: normalized)
+            } else {
+                return previewTokens.joined(separator: " ")
+            }
+
             if let last = previewTokens.last, isExpressionNumberToken(last) {
                 previewTokens[previewTokens.count - 1] = displayToken
             } else if previewTokens.last != ")" {
@@ -1424,6 +1464,15 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func expressionTokenValue(_ token: String, unaryDepth: Int) -> Result<Decimal, ExpressionEvaluationError> {
+        if token.hasSuffix("%") {
+            let baseToken = String(token.dropLast())
+            if let normalizedBase = normalizeDisplayNumberToken(baseToken),
+               let baseValue = decimalValue(fromCanonicalString: normalizedBase) {
+                return .success(baseValue / 100)
+            }
+            return .failure(.invalidInput)
+        }
+
         if let normalized = normalizeDisplayNumberToken(token),
            let value = decimalValue(fromCanonicalString: normalized) {
             return .success(value)
@@ -2646,17 +2695,15 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private var shouldDisplayPercentTokenAsMainDisplay: Bool {
-        guard currentToken.hasSuffix("%"),
-              let pendingOperator else {
+        guard currentToken.hasSuffix("%") else {
             return false
         }
 
-        switch pendingOperator {
-        case .add, .subtract:
+        if isExpressionMode && !shouldResetInputOnNextDigit {
             return true
-        case .multiply, .divide:
-            return false
         }
+
+        return pendingOperator != nil
     }
 
     private var accumulatorUsesStandalonePercentToken: Bool {
