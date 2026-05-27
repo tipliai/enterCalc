@@ -287,7 +287,7 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private static let supportedCurrencySymbolCharacters = Set("$€£¥₹₩₽¢฿₺₫₴₪₦₱₲₡₵₭₮₤₳₸₼₾₣₠₧₯₿")
-    private static let minimumCurrencyFractionDigits = 2
+    private static let minimumRoundedCurrencyFractionDigits = 2
 
     // Human-readable token for the current input, including unary wrappers (e.g., "√(4)").
     private var currentToken: String = "0"
@@ -438,7 +438,7 @@ public final class CalculatorViewModel: ObservableObject {
             if !isExpressionMode {
                 expression = currentToken
             }
-        } else if pendingOperandShouldKeepPercentToken || activeCurrencySymbol != nil {
+        } else if pendingOperandShouldKeepPercentToken || pendingOperatorShouldKeepPercentToken || activeCurrencySymbol != nil {
             currentToken = percentToken
         } else {
             currentToken = displayString(for: currentInput)
@@ -869,7 +869,8 @@ public final class CalculatorViewModel: ObservableObject {
         }
         let clipboardValue = clipboardNumberString(
             from: valueToClipboard,
-            preserveTrailingZeros: !isResultRoundingEnabled && shouldPreserveTypedCurrencyInput
+            preserveTrailingZeros: (!isResultRoundingEnabled && shouldPreserveTypedCurrencyInput)
+                || (isResultRoundingEnabled && activeCurrencySymbol != nil)
         ) ?? display
         writeStringToPasteboard(clipboardValue)
     }
@@ -1888,9 +1889,14 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func updateDisplay() {
+        let shouldUseCurrencyForCurrentDisplay = !(activeCurrencySymbol != nil && currentToken.hasSuffix("%"))
         let plainDisplay = isPendingEntryClearedByClearButton && currentInput == "0"
             ? ""
-            : displayString(for: currentInput, preserveTrailingZeros: shouldPreserveTypedCurrencyInput)
+            : displayString(
+                for: currentInput,
+                useActiveCurrency: shouldUseCurrencyForCurrentDisplay,
+                preserveTrailingZeros: shouldPreserveTypedCurrencyInput
+            )
         let header: String
         if isExpressionMode {
             header = expressionPreviewHeader()
@@ -2259,6 +2265,17 @@ public final class CalculatorViewModel: ObservableObject {
         pendingOperator != nil && accumulatorUsesStandalonePercentToken
     }
 
+    private var pendingOperatorShouldKeepPercentToken: Bool {
+        guard let pendingOperator else { return false }
+
+        switch pendingOperator {
+        case .multiply, .divide:
+            return true
+        case .add, .subtract:
+            return false
+        }
+    }
+
     private var accumulatorUsesStandalonePercentToken: Bool {
         accumulatorToken?.hasSuffix("%") == true
     }
@@ -2463,11 +2480,8 @@ public final class CalculatorViewModel: ObservableObject {
     ) -> String {
         if preserveTrailingZeros,
            let normalized = normalizedCurrencyNumberString(from: raw),
-           let decimalIndex = normalized.firstIndex(of: ".") {
-            let fraction = String(normalized[normalized.index(after: decimalIndex)...])
-            if fraction.isEmpty || fraction.count >= Self.minimumCurrencyFractionDigits {
-                return useGrouping ? groupedNumberString(normalized) : localizedNumericString(normalized)
-            }
+           normalized.contains(".") {
+            return useGrouping ? groupedNumberString(normalized) : localizedNumericString(normalized)
         }
 
         return localizedFixedScaleString(from: value, scale: currencyFractionScale(for: raw), useGrouping: useGrouping)
@@ -2504,6 +2518,15 @@ public final class CalculatorViewModel: ObservableObject {
         return localizedNumericString(canonical)
     }
 
+    private func canonicalFixedScaleString(from value: Decimal, scale: Int) -> String {
+        let localized = localizedFixedScaleString(from: value, scale: scale, useGrouping: false)
+        if numberFormatStyle.decimalSeparator == "." {
+            return localized
+        }
+
+        return localized.replacingOccurrences(of: numberFormatStyle.decimalSeparator, with: ".")
+    }
+
     private func decorateCurrencyAmount(_ amount: String, with symbol: String) -> String {
         if amount.hasPrefix("-") || amount.hasPrefix("−") {
             return "-\(symbol)\(String(amount.dropFirst()))"
@@ -2517,11 +2540,11 @@ public final class CalculatorViewModel: ObservableObject {
             ?? normalizeNumberStringUsingAnyStyle(raw, treatPercentAsMultiplier: false, excluding: numberFormatStyle)
     }
 
-    private func currencyFractionScale(for raw: String) -> Int {
+    private func currencyFractionScale(for raw: String, minimumFractionDigits: Int = 0) -> Int {
         guard let normalized = normalizedCurrencyNumberString(from: raw),
               let decimalIndex = normalized.firstIndex(of: ".")
         else {
-            return 0
+            return minimumFractionDigits
         }
 
         let fraction = String(normalized[normalized.index(after: decimalIndex)...])
@@ -2532,7 +2555,7 @@ public final class CalculatorViewModel: ObservableObject {
             trimmedFraction.removeLast()
         }
 
-        return max(Self.minimumCurrencyFractionDigits, trimmedFraction.count)
+        return max(minimumFractionDigits, trimmedFraction.count)
     }
 
     private func storedHistoryResultString(from raw: String) -> String {
@@ -2602,8 +2625,11 @@ public final class CalculatorViewModel: ObservableObject {
         }
 
         let rounded = roundedDecimal(from: value, precision: precision)
-        let roundedText = decimalNumberString(from: rounded)
-        return displayString(for: roundedText)
+        let minimumCurrencyFractionDigits = effectiveCurrencySymbol(for: raw, useActiveCurrency: true) == nil
+            ? 0
+            : Self.minimumRoundedCurrencyFractionDigits
+        let roundedText = roundedStoredNumberString(from: rounded, minimumCurrencyFractionDigits: minimumCurrencyFractionDigits)
+        return displayString(for: roundedText, preserveTrailingZeros: minimumCurrencyFractionDigits > 0)
     }
 
     private func roundedValueString(precision: Int) -> String {
@@ -2613,7 +2639,20 @@ public final class CalculatorViewModel: ObservableObject {
         }
 
         let rounded = roundedDecimal(from: value, precision: precision)
-        return decimalNumberString(from: rounded)
+        let minimumCurrencyFractionDigits = effectiveCurrencySymbol(for: currentInput, useActiveCurrency: true) == nil
+            ? 0
+            : Self.minimumRoundedCurrencyFractionDigits
+        return roundedStoredNumberString(from: rounded, minimumCurrencyFractionDigits: minimumCurrencyFractionDigits)
+    }
+
+    private func roundedStoredNumberString(from value: Decimal, minimumCurrencyFractionDigits: Int) -> String {
+        let roundedText = decimalNumberString(from: value)
+        guard minimumCurrencyFractionDigits > 0 else {
+            return roundedText
+        }
+
+        let scale = currencyFractionScale(for: roundedText, minimumFractionDigits: minimumCurrencyFractionDigits)
+        return canonicalFixedScaleString(from: value, scale: scale)
     }
 
     private func roundingRelationSymbol(fromStoredNumber raw: String, precision: Int) -> String {

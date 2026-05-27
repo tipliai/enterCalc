@@ -672,12 +672,35 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.setOperator(.divide)
         enter("10", into: viewModel)
         viewModel.applyPercent()
+
+        XCTAssertEqual(viewModel.display, "0.1")
+        XCTAssertEqual(viewModel.expressionDisplay, "10 ÷ 10%")
+
         viewModel.evaluate()
 
         XCTAssertEqual(viewModel.display, "100")
-        XCTAssertEqual(viewModel.expressionDisplay, "10 ÷ 0.1 =")
-        XCTAssertEqual(viewModel.history.first?.expression, "10 ÷ 0.1")
+        XCTAssertEqual(viewModel.expressionDisplay, "10 ÷ 10% =")
+        XCTAssertEqual(viewModel.history.first?.expression, "10 ÷ 10%")
         XCTAssertEqual(viewModel.history.first?.result, "100")
+    }
+
+    func testPercentMatchesCalculatorForMultiplication() {
+        let viewModel = CalculatorViewModel()
+
+        enter("100", into: viewModel)
+        viewModel.setOperator(.multiply)
+        enter("15", into: viewModel)
+        viewModel.applyPercent()
+
+        XCTAssertEqual(viewModel.display, "0.15")
+        XCTAssertEqual(viewModel.expressionDisplay, "100 × 15%")
+
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "15")
+        XCTAssertEqual(viewModel.expressionDisplay, "100 × 15% =")
+        XCTAssertEqual(viewModel.history.first?.expression, "100 × 15%")
+        XCTAssertEqual(viewModel.history.first?.result, "15")
     }
 
     func testPercentAfterStandalonePercentUsesStandaloneSemantics() {
@@ -1243,6 +1266,26 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(NSPasteboard.general.string(forType: .string), "=round(5,0)")
     }
 
+    func testCurrencyRoundingDisplaysTwoDecimalsWithoutNormalPadding() throws {
+        let viewModel = CalculatorViewModel()
+
+        pasteString("$5", into: viewModel)
+        XCTAssertEqual(viewModel.display, "$5")
+
+        viewModel.beginResultRounding()
+        viewModel.setResultRoundingPrecision(3)
+
+        XCTAssertEqual(viewModel.display, "$5.00")
+
+        viewModel.copyToPasteboard()
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "$5.00")
+
+        viewModel.commitResultRoundingInteraction()
+
+        let entry = try XCTUnwrap(viewModel.history.first)
+        XCTAssertEqual(entry.displayResult, "$5.00")
+    }
+
     func testResultRoundingLevelsRoundFromLeastSignificantDigit() {
         let viewModel = CalculatorViewModel()
 
@@ -1331,7 +1374,7 @@ final class CalculatorViewModelTests: XCTestCase {
         let viewModel = CalculatorViewModel()
         viewModel.pasteFromPasteboard()
 
-        XCTAssertEqual(viewModel.display, "$1,234.50")
+        XCTAssertEqual(viewModel.display, "$1,234.5")
         XCTAssertFalse(viewModel.isErrorState)
     }
 
@@ -1339,17 +1382,17 @@ final class CalculatorViewModelTests: XCTestCase {
         let viewModel = CalculatorViewModel()
 
         pasteString("$12.3", into: viewModel)
-        XCTAssertEqual(viewModel.display, "$12.30")
+        XCTAssertEqual(viewModel.display, "$12.3")
 
         viewModel.setOperator(.add)
         enter("1", into: viewModel)
-        XCTAssertEqual(viewModel.expressionDisplay, "$12.30 + $1")
+        XCTAssertEqual(viewModel.expressionDisplay, "$12.3 + $1")
 
         viewModel.evaluate()
 
-        XCTAssertEqual(viewModel.display, "$13.30")
-        XCTAssertEqual(viewModel.history.first?.displayExpression, "$12.30 + $1")
-        XCTAssertEqual(viewModel.history.first?.displayResult, "$13.30")
+        XCTAssertEqual(viewModel.display, "$13.3")
+        XCTAssertEqual(viewModel.history.first?.displayExpression, "$12.3 + $1")
+        XCTAssertEqual(viewModel.history.first?.displayResult, "$13.3")
 
         viewModel.clearAll()
         XCTAssertEqual(viewModel.display, "0")
@@ -1401,13 +1444,13 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.inputDecimal()
         enter("2", into: viewModel)
 
-        XCTAssertEqual(viewModel.display, "$1.20")
+        XCTAssertEqual(viewModel.display, "$1.2")
 
         viewModel.setOperator(.add)
         enter("2", into: viewModel)
         viewModel.evaluate()
 
-        XCTAssertEqual(viewModel.display, "$3.20")
+        XCTAssertEqual(viewModel.display, "$3.2")
     }
 
     func testTypingCurrencyZerosPreservesLiveFractionPrecision() {
@@ -1418,7 +1461,7 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.display, "$0.")
 
         viewModel.inputDigit("0")
-        XCTAssertEqual(viewModel.display, "$0.00")
+        XCTAssertEqual(viewModel.display, "$0.0")
 
         viewModel.inputDigit("0")
         viewModel.inputDigit("0")
@@ -1439,10 +1482,10 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.inputDecimal()
         enter("2", into: viewModel)
 
-        XCTAssertEqual(viewModel.display, "₿1.20")
+        XCTAssertEqual(viewModel.display, "₿1.2")
 
         viewModel.copyToPasteboard()
-        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "₿1.20")
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "₿1.2")
     }
 
     func testPastingBitcoinCurrencyPreservesExtendedFractionPrecision() {
@@ -1471,11 +1514,11 @@ final class CalculatorViewModelTests: XCTestCase {
         let viewModel = CalculatorViewModel(numberFormatStyle: .french)
 
         pasteString("€1,2", into: viewModel)
-        XCTAssertEqual(viewModel.display, "€1,20")
+        XCTAssertEqual(viewModel.display, "€1,2")
 
         viewModel.copyToPasteboard()
 
-        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "€1,20")
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "€1,2")
     }
 
     func testCurrencyModePercentOverridesCurrencyInMultiplyExpression() {
@@ -1486,6 +1529,7 @@ final class CalculatorViewModelTests: XCTestCase {
         enter("115", into: viewModel)
         viewModel.applyPercent()
 
+        XCTAssertEqual(viewModel.display, "1.15")
         XCTAssertEqual(viewModel.expressionDisplay, "$100 × 115%")
 
         viewModel.evaluate()
@@ -1504,6 +1548,7 @@ final class CalculatorViewModelTests: XCTestCase {
         enter("60", into: viewModel)
         viewModel.applyPercent()
 
+        XCTAssertEqual(viewModel.display, "0.6")
         XCTAssertEqual(viewModel.expressionDisplay, "€93.33 ÷ 60%")
 
         viewModel.evaluate()
