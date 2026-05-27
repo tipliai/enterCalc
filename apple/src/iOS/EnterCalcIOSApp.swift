@@ -66,6 +66,15 @@ struct IOSHardwareKeyEvent {
     let modifierFlags: UIKeyModifierFlags
 }
 
+private func debugKeyCharacters(_ text: String?) -> String {
+    guard let text else { return "nil" }
+    if text.isEmpty { return "\"\"[]" }
+    let scalarList = text.unicodeScalars
+        .map { "U+\(String($0.value, radix: 16, uppercase: true))" }
+        .joined(separator: ",")
+    return "\"\(text)\"[\(scalarList)]"
+}
+
 struct IOSHardwareKeyCaptureView: UIViewRepresentable {
     let isEnabled: Bool
     let onKeyPress: (IOSHardwareKeyEvent) -> Bool
@@ -125,7 +134,14 @@ final class IOSHardwareKeyCaptureUIView: UIView {
                 modifierFlags: key.modifierFlags
             )
 
-            if onKeyPress?(keyEvent) != true {
+            DebugLog.emit(
+                "KEY",
+                "iOS press received code:\(key.keyCode.rawValue) modifiers:\(key.modifierFlags.rawValue) chars:\(debugKeyCharacters(key.characters)) charsNoMods:\(debugKeyCharacters(key.charactersIgnoringModifiers))"
+            )
+            let handled = onKeyPress?(keyEvent) == true
+            DebugLog.emit("KEY", "iOS press handled:\(handled)")
+
+            if !handled {
                 unhandledPresses.insert(press)
             }
         }
@@ -619,6 +635,10 @@ private extension EnterCalcIOSView {
     func handleHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
         let unsupportedModifiers = event.modifierFlags.intersection([.command, .control])
         guard unsupportedModifiers.isEmpty else {
+            DebugLog.emit(
+                "KEY",
+                "iOS key ignored due to modifiers code:\(event.keyCode?.rawValue.description ?? "nil") modifiers:\(event.modifierFlags.rawValue)"
+            )
             return false
         }
 
@@ -632,13 +652,33 @@ private extension EnterCalcIOSView {
 
         let chars = event.charactersIgnoringModifiers ?? ""
         let inputChars = event.characters ?? chars
+        let insertFunctionCharacter = Character(UnicodeScalar(0xF727)!)
+        let isInsertLikeHIDUsage = event.keyCode.map { code in
+            // Apple keyboards can report the physical Insert key as Help (0x75).
+            code.rawValue == 0x49 || code.rawValue == 0x75
+        } ?? false
+        let isInsertKey = isInsertLikeHIDUsage
+            || chars.contains(insertFunctionCharacter)
+            || inputChars.contains(insertFunctionCharacter)
+        DebugLog.emit(
+            "KEY",
+            "iOS key route code:\(event.keyCode?.rawValue.description ?? "nil") chars:\(debugKeyCharacters(event.charactersIgnoringModifiers)) input:\(debugKeyCharacters(event.characters)) insert:\(isInsertKey) overlay:\(String(describing: activeOverlay)) canEdit:\(viewModel.canDirectlyEditDisplay)"
+        )
 
-        // HID usage 0x49 (Insert) enters direct display editing when no overlay is visible.
-        if activeOverlay == nil, event.keyCode?.rawValue == 0x49 {
-            guard viewModel.canDirectlyEditDisplay else { return true }
+        // Insert enters direct display editing and places the caret at the trailing boundary.
+        if activeOverlay == nil, isInsertKey {
+            guard viewModel.canDirectlyEditDisplay else {
+                DebugLog.emit("KEY", "iOS insert detected but direct display editing is unavailable")
+                return true
+            }
             let trailingBoundary = Array(viewModel.display).count
             viewModel.setDisplayEditCursor(displayBoundaryIndex: trailingBoundary)
+            DebugLog.emit("KEY", "iOS insert enabled display editing at boundary:\(trailingBoundary)")
             return true
+        }
+
+        if isInsertKey {
+            DebugLog.emit("KEY", "iOS insert detected but blocked by active overlay:\(String(describing: activeOverlay))")
         }
 
         switch event.keyCode {

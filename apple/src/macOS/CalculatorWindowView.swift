@@ -113,6 +113,15 @@ struct CalculatorWindowView: View {
         DebugLog.emit("UI", message)
     }
 
+    private func debugKeyCharacters(_ text: String?) -> String {
+        guard let text else { return "nil" }
+        if text.isEmpty { return "\"\"[]" }
+        let scalarList = text.unicodeScalars
+            .map { "U+\(String($0.value, radix: 16, uppercase: true))" }
+            .joined(separator: ",")
+        return "\"\(text)\"[\(scalarList)]"
+    }
+
     private var actionContext: CalculatorActionContext {
         CalculatorActionContext(
             copy: { copyCurrentResultToPasteboard() },
@@ -1186,8 +1195,16 @@ struct CalculatorWindowView: View {
 
     @discardableResult
     private func handleKey(_ event: NSEvent) -> Bool {
-        guard let chars = event.charactersIgnoringModifiers else { return false }
+        let chars = event.charactersIgnoringModifiers ?? ""
         let inputChars = event.characters ?? chars
+        let insertFunctionCharacter = Character(UnicodeScalar(NSInsertFunctionKey)!)
+        let isInsertKey = event.keyCode == 114
+            || chars.contains(insertFunctionCharacter)
+            || inputChars.contains(insertFunctionCharacter)
+        DebugLog.emit(
+            "KEY",
+            "macOS key route keyCode:\(event.keyCode) modifiers:\(event.modifierFlags.rawValue) chars:\(debugKeyCharacters(event.charactersIgnoringModifiers)) input:\(debugKeyCharacters(event.characters)) insert:\(isInsertKey) overlay:\(String(describing: activeOverlay)) canEdit:\(viewModel.canDirectlyEditDisplay)"
+        )
         var handled = false
         let isCommand = event.modifierFlags.contains(.command)
 
@@ -1216,11 +1233,19 @@ struct CalculatorWindowView: View {
             return true
         }
 
-        if activeOverlay == nil, event.keyCode == 114 { // Insert
-            guard viewModel.canDirectlyEditDisplay else { return true }
+        if activeOverlay == nil, isInsertKey {
+            guard viewModel.canDirectlyEditDisplay else {
+                DebugLog.emit("KEY", "macOS insert detected but direct display editing is unavailable")
+                return true
+            }
             let trailingBoundary = Array(viewModel.display).count
             viewModel.setDisplayEditCursor(displayBoundaryIndex: trailingBoundary)
+            DebugLog.emit("KEY", "macOS insert enabled display editing at boundary:\(trailingBoundary)")
             return true
+        }
+
+        if isInsertKey {
+            DebugLog.emit("KEY", "macOS insert detected but blocked by active overlay:\(String(describing: activeOverlay))")
         }
 
         // Keypad support by keyCode
