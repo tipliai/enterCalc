@@ -83,9 +83,9 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private enum ParsedPasteContent {
-        case value(String)
-        case replay([PasteReplayStep])
-        case roundedReplay(steps: [PasteReplayStep], precision: Int)
+        case value(String, currencySymbol: String?)
+        case replay([PasteReplayStep], currencySymbol: String?)
+        case roundedReplay(steps: [PasteReplayStep], precision: Int, currencySymbol: String?)
     }
 
     private enum ExpressionEvaluationError: Error {
@@ -131,7 +131,9 @@ public final class CalculatorViewModel: ObservableObject {
         let isExpressionMode: Bool
         let isResultRoundingEnabled: Bool
         let resultRoundingPrecision: Int
+        let activeCurrencySymbol: String?
         let isPendingEntryClearedByClearButton: Bool
+        let shouldPreserveTypedCurrencyInput: Bool
     }
 
     @Published public private(set) var display: String = "0"
@@ -146,6 +148,7 @@ public final class CalculatorViewModel: ObservableObject {
     @Published public private(set) var usesClassicPercentBehavior: Bool = false
     @Published public private(set) var isResultRoundingEnabled: Bool = false
     @Published public private(set) var resultRoundingPrecision: Int = 4
+    @Published public private(set) var activeCurrencySymbol: String?
     private var currentErrorKey: String? = nil
 
     private var currentInput: String = "0"
@@ -162,6 +165,7 @@ public final class CalculatorViewModel: ObservableObject {
     private var roundingInteractionSnapshot: CalculatorSnapshot?
     private var roundingInteractionInitialEnabled: Bool?
     private var roundingInteractionInitialPrecision: Int?
+    private var shouldPreserveTypedCurrencyInput = false
 
     public init(numberFormatStyle: NumberFormatStyle = .western, usesScientificNotation: Bool = true) {
         self.numberFormatStyle = numberFormatStyle
@@ -282,6 +286,9 @@ public final class CalculatorViewModel: ObservableObject {
         parseStoredNumber(currentInput).map { NSDecimalNumber(decimal: $0).doubleValue } ?? 0
     }
 
+    private static let supportedCurrencySymbolCharacters = Set("$€£¥₹₩₽¢฿₺₫₴₪₦₱₲₡₵₭₮₤₳₸₼₾₣₠₧₯₿")
+    private static let minimumCurrencyFractionDigits = 2
+
     // Human-readable token for the current input, including unary wrappers (e.g., "√(4)").
     private var currentToken: String = "0"
     private var accumulatorToken: String?
@@ -357,8 +364,21 @@ public final class CalculatorViewModel: ObservableObject {
         } else if currentInputDigitCount < Limits.maxInputDigits {
             currentInput.append(digit)
         }
+        shouldPreserveTypedCurrencyInput = activeCurrencySymbol != nil
         setCurrentTokenToCurrentInput()
         updateDisplay()
+        completeUndoableChange(from: snapshot)
+    }
+
+    public func inputCurrencySymbol(_ symbol: String) {
+        guard symbol != "¢", Self.isSupportedCurrencySymbol(symbol) else { return }
+        let snapshot = beginUndoableChange()
+        if isErrorState {
+            resetStateForNewEntry()
+        }
+        isPendingEntryClearedByClearButton = false
+        activeCurrencySymbol = symbol
+        refreshCurrentSessionDisplayTokens()
         completeUndoableChange(from: snapshot)
     }
 
@@ -377,6 +397,7 @@ public final class CalculatorViewModel: ObservableObject {
         if !currentInput.contains(decimalSeparator), !currentInput.contains("."), currentInputDigitCount < Limits.maxInputDigits {
             currentInput.append(contentsOf: decimalSeparator)
         }
+        shouldPreserveTypedCurrencyInput = activeCurrencySymbol != nil
         setCurrentTokenToCurrentInput()
         updateDisplay()
         completeUndoableChange(from: snapshot)
@@ -391,6 +412,7 @@ public final class CalculatorViewModel: ObservableObject {
         } else if currentInput != "0" {
             currentInput = "-" + currentInput
         }
+        shouldPreserveTypedCurrencyInput = activeCurrencySymbol != nil
         setCurrentTokenToCurrentInput()
         updateDisplay()
         completeUndoableChange(from: snapshot)
@@ -401,15 +423,23 @@ public final class CalculatorViewModel: ObservableObject {
         let snapshot = beginUndoableChange()
         isPendingEntryClearedByClearButton = false
         let operandToken = currentToken
+        let percentOperandToken = activeCurrencySymbol == nil
+            ? operandToken
+            : displayString(for: currentInput, useActiveCurrency: false)
+        let percentToken = boundedDisplayToken(
+            "\(percentOperandToken)%",
+            fallback: displayString(for: currentInput, useActiveCurrency: activeCurrencySymbol == nil)
+        )
         let percentValue = resolvedPercentValue()
         currentInput = format(percentValue)
+        shouldPreserveTypedCurrencyInput = false
         if pendingOperator == nil {
-            currentToken = boundedDisplayToken("\(operandToken)%", fallback: groupedNumberString(currentInput))
+            currentToken = percentToken
             if !isExpressionMode {
                 expression = currentToken
             }
-        } else if pendingOperandShouldKeepPercentToken {
-            currentToken = boundedDisplayToken("\(operandToken)%", fallback: groupedNumberString(currentInput))
+        } else if pendingOperandShouldKeepPercentToken || activeCurrencySymbol != nil {
+            currentToken = percentToken
         } else {
             currentToken = displayString(for: currentInput)
         }
@@ -486,8 +516,10 @@ public final class CalculatorViewModel: ObservableObject {
         openParenthesisCount = 0
         isExpressionMode = false
         isPendingEntryClearedByClearButton = false
+        shouldPreserveTypedCurrencyInput = false
         isResultRoundingEnabled = false
         resultRoundingPrecision = 4
+        activeCurrencySymbol = nil
     }
 
     public func backspace() {
@@ -835,7 +867,11 @@ public final class CalculatorViewModel: ObservableObject {
         } else {
             valueToClipboard = currentInput
         }
-        writeStringToPasteboard(clipboardNumberString(from: valueToClipboard) ?? display)
+        let clipboardValue = clipboardNumberString(
+            from: valueToClipboard,
+            preserveTrailingZeros: !isResultRoundingEnabled && shouldPreserveTypedCurrencyInput
+        ) ?? display
+        writeStringToPasteboard(clipboardValue)
     }
 
     public func copyOperationToPasteboard() {
@@ -869,14 +905,18 @@ public final class CalculatorViewModel: ObservableObject {
             return
         }
         switch parsePastedContent(trimmed) {
-        case .value(let rawValue):
+        case .value(let rawValue, let currencySymbol):
             guard let normalized = normalizePastedNumber(rawValue), let value = decimalValue(fromCanonicalString: normalized) else {
                 completeUndoableChange(from: snapshot)
                 return
             }
+            if let currencySymbol {
+                activeCurrencySymbol = currencySymbol
+            }
             isPendingEntryClearedByClearButton = false
             let isReplacingPendingOperand = pendingOperator != nil || accumulator != nil
             currentInput = formattedPastedInput(fromCanonical: normalized, value: value)
+            shouldPreserveTypedCurrencyInput = false
             currentToken = displayString(for: currentInput)
             if !isReplacingPendingOperand {
                 expression = ""
@@ -894,10 +934,13 @@ public final class CalculatorViewModel: ObservableObject {
             currentErrorKey = nil
             isResultRoundingEnabled = false
             updateDisplay()
-        case .replay(let steps):
+        case .replay(let steps, let currencySymbol):
             let tempModel = CalculatorViewModel(numberFormatStyle: numberFormatStyle, usesScientificNotation: usesScientificNotation)
             tempModel.suppressHistoryTracking = true
             tempModel.setClassicPercentBehaviorEnabled(usesClassicPercentBehavior)
+            if let currencySymbol {
+                tempModel.inputCurrencySymbol(currencySymbol)
+            }
             for step in steps {
                 tempModel.applyPasteReplayStep(step)
                 if tempModel.isErrorState {
@@ -906,10 +949,13 @@ public final class CalculatorViewModel: ObservableObject {
             }
             adoptPastedState(from: tempModel)
             isResultRoundingEnabled = false
-        case .roundedReplay(let steps, let precision):
+        case .roundedReplay(let steps, let precision, let currencySymbol):
             let tempModel = CalculatorViewModel(numberFormatStyle: numberFormatStyle, usesScientificNotation: usesScientificNotation)
             tempModel.suppressHistoryTracking = true
             tempModel.setClassicPercentBehaviorEnabled(usesClassicPercentBehavior)
+            if let currencySymbol {
+                tempModel.inputCurrencySymbol(currencySymbol)
+            }
             for step in steps {
                 tempModel.applyPasteReplayStep(step)
                 if tempModel.isErrorState {
@@ -924,13 +970,16 @@ public final class CalculatorViewModel: ObservableObject {
 
     public func reuse(_ entry: HistoryEntry) {
         let snapshot = beginUndoableChange()
+        activeCurrencySymbol = explicitCurrencySymbol(in: entry.expression) ?? explicitCurrencySymbol(in: entry.result)
         if let rounded = parseRoundedOperation(entry.expression),
            let recalculated = evaluateExpressionString(rounded.baseExpression) {
             currentInput = recalculated
+            shouldPreserveTypedCurrencyInput = false
             setResultRoundingPrecision(rounded.precision)
             lastResultSummary = "\(rounded.baseExpression) ="
         } else {
-            currentInput = entry.result
+            currentInput = normalizePastedNumber(entry.result) ?? entry.result
+            shouldPreserveTypedCurrencyInput = false
             isResultRoundingEnabled = false
             lastResultSummary = "\(entry.expression) ="
         }
@@ -984,6 +1033,7 @@ public final class CalculatorViewModel: ObservableObject {
         }
         let formatted = format(value)
         currentInput = formatted
+        shouldPreserveTypedCurrencyInput = false
         currentToken = displayString(for: formatted)
         shouldResetInputOnNextDigit = true
         justEvaluated = false
@@ -1462,16 +1512,8 @@ public final class CalculatorViewModel: ObservableObject {
             )
         } else {
             historyExpression = expression
-            if result.localizedCaseInsensitiveContains("e") {
-                historyResult = result
-                displayResult = result
-            } else if let value = parseStoredNumber(result) {
-                historyResult = decimalNumberString(from: value)
-                displayResult = format(value)
-            } else {
-                historyResult = result
-                displayResult = displayString(for: result)
-            }
+            historyResult = storedHistoryResultString(from: result)
+            displayResult = displayString(for: historyResult, useActiveCurrency: false)
             displayExpression = groupedExpressionString(expression)
         }
 
@@ -1586,7 +1628,9 @@ public final class CalculatorViewModel: ObservableObject {
             isExpressionMode: isExpressionMode,
             isResultRoundingEnabled: isResultRoundingEnabled,
             resultRoundingPrecision: resultRoundingPrecision,
-            isPendingEntryClearedByClearButton: isPendingEntryClearedByClearButton
+            activeCurrencySymbol: activeCurrencySymbol,
+            isPendingEntryClearedByClearButton: isPendingEntryClearedByClearButton,
+            shouldPreserveTypedCurrencyInput: shouldPreserveTypedCurrencyInput
         )
     }
 
@@ -1614,7 +1658,9 @@ public final class CalculatorViewModel: ObservableObject {
         isExpressionMode = snapshot.isExpressionMode
         isResultRoundingEnabled = snapshot.isResultRoundingEnabled
         resultRoundingPrecision = snapshot.resultRoundingPrecision
+        activeCurrencySymbol = snapshot.activeCurrencySymbol
         isPendingEntryClearedByClearButton = snapshot.isPendingEntryClearedByClearButton
+        shouldPreserveTypedCurrencyInput = snapshot.shouldPreserveTypedCurrencyInput
         trimToNewestEntries(&history, maxCount: Limits.maxStoredHistoryEntries)
         trimToNewestEntries(&memoryEntries, maxCount: Limits.maxStoredMemoryEntries)
         trimToRecentSnapshots(&undoStack, maxCount: Limits.maxUndoDepth)
@@ -1665,7 +1711,9 @@ public final class CalculatorViewModel: ObservableObject {
             withoutApproximation = trimmed
         }
 
-        return withoutApproximation.filter { !$0.isWhitespace }
+        return withoutApproximation.filter {
+            !$0.isWhitespace && !Self.supportedCurrencySymbolCharacters.contains($0)
+        }
     }
 
     private func writeStringToPasteboard(_ string: String) {
@@ -1723,7 +1771,9 @@ public final class CalculatorViewModel: ObservableObject {
         isExpressionMode = other.isExpressionMode
         isResultRoundingEnabled = other.isResultRoundingEnabled
         resultRoundingPrecision = other.resultRoundingPrecision
+        activeCurrencySymbol = other.activeCurrencySymbol
         isPendingEntryClearedByClearButton = other.isPendingEntryClearedByClearButton
+        shouldPreserveTypedCurrencyInput = other.shouldPreserveTypedCurrencyInput
     }
 
     private func makeExpressionPreview() -> String {
@@ -1838,7 +1888,9 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func updateDisplay() {
-        let plainDisplay = isPendingEntryClearedByClearButton && currentInput == "0" ? "" : displayString(for: currentInput)
+        let plainDisplay = isPendingEntryClearedByClearButton && currentInput == "0"
+            ? ""
+            : displayString(for: currentInput, preserveTrailingZeros: shouldPreserveTypedCurrencyInput)
         let header: String
         if isExpressionMode {
             header = expressionPreviewHeader()
@@ -1878,56 +1930,37 @@ public final class CalculatorViewModel: ObservableObject {
     /// Attempt to extract a numeric string from pasted content, preferring the active style and
     /// falling back to other supported styles when the pasted format differs.
     private func normalizePastedNumber(_ raw: String) -> String? {
-        let stripped = stripCommonCurrencySymbols(from: raw)
-        return normalizeNumberString(stripped, treatPercentAsMultiplier: true)
-            ?? normalizeNumberStringUsingAnyStyle(stripped, treatPercentAsMultiplier: true, excluding: numberFormatStyle)
-    }
-
-    private func stripCommonCurrencySymbols(from raw: String) -> String {
-        var working = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                let currencySymbols = CharacterSet(charactersIn: "$€£¥₹₩₽¢฿₺₫₴₪₦₱₲₡")
-
-        while let first = working.first,
-                            first.unicodeScalars.allSatisfy({ currencySymbols.contains($0) }) {
-            working.removeFirst()
-            working = working.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        while let last = working.last,
-                            last.unicodeScalars.allSatisfy({ currencySymbols.contains($0) }) {
-            working.removeLast()
-            working = working.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        return working
+        return normalizeNumberString(raw, treatPercentAsMultiplier: true)
+            ?? normalizeNumberStringUsingAnyStyle(raw, treatPercentAsMultiplier: true, excluding: numberFormatStyle)
     }
 
     private func parsePastedContent(_ raw: String) -> ParsedPasteContent {
         guard raw.count <= Limits.maxPasteCharacters else {
-            return .value("")
+            return .value("", currencySymbol: nil)
         }
+        let currencySymbol = explicitCurrencySymbol(in: raw)
         let normalizedRaw = raw.replacingOccurrences(of: "≈", with: "=")
         if let rounded = parseRoundedOperation(normalizedRaw),
            let steps = parseReplaySteps(rounded.baseExpression) {
-            return .roundedReplay(steps: steps + [.evaluate], precision: rounded.precision)
+            return .roundedReplay(steps: steps + [.evaluate], precision: rounded.precision, currencySymbol: currencySymbol)
         }
 
         let parts = normalizedRaw.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
         if parts.count == 2 {
             let lhs = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
             if let steps = parseReplaySteps(lhs) {
-                return .replay(steps + [.evaluate])
+                return .replay(steps + [.evaluate], currencySymbol: currencySymbol)
             }
 
             let rhs = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
-            return .value(rhs.isEmpty ? lhs : rhs)
+            return .value(rhs.isEmpty ? lhs : rhs, currencySymbol: currencySymbol)
         }
 
         if containsReplaySyntax(normalizedRaw), let steps = parseReplaySteps(normalizedRaw) {
-            return .replay(steps)
+            return .replay(steps, currencySymbol: currencySymbol)
         }
 
-        return .value(normalizedRaw)
+        return .value(normalizedRaw, currencySymbol: currencySymbol)
     }
 
     private func containsReplaySyntax(_ raw: String) -> Bool {
@@ -2022,6 +2055,12 @@ public final class CalculatorViewModel: ObservableObject {
             index = raw.index(after: index)
         }
 
+        while index < raw.endIndex,
+              Self.supportedCurrencySymbolCharacters.contains(raw[index]),
+              raw[index] != "¢" {
+            index = raw.index(after: index)
+        }
+
         while index < raw.endIndex {
             let character = raw[index]
             if character.isNumber {
@@ -2029,6 +2068,9 @@ public final class CalculatorViewModel: ObservableObject {
                 index = raw.index(after: index)
             } else if character == "." || character == "," || character == "'" || character.isWhitespace {
                 index = raw.index(after: index)
+            } else if character == "¢" {
+                index = raw.index(after: index)
+                break
             } else {
                 break
             }
@@ -2146,6 +2188,7 @@ public final class CalculatorViewModel: ObservableObject {
         openParenthesisCount = 0
         isExpressionMode = false
         isPendingEntryClearedByClearButton = false
+        shouldPreserveTypedCurrencyInput = false
     }
 
     private func setError(_ messageKey: String) {
@@ -2170,10 +2213,11 @@ public final class CalculatorViewModel: ObservableObject {
         openParenthesisCount = 0
         isExpressionMode = false
         isPendingEntryClearedByClearButton = false
+        shouldPreserveTypedCurrencyInput = false
     }
 
     private func setCurrentTokenToCurrentInput() {
-        let formatted = displayString(for: currentInput)
+        let formatted = displayString(for: currentInput, preserveTrailingZeros: shouldPreserveTypedCurrencyInput)
         currentToken = boundedDisplayToken(formatted, fallback: formatted)
     }
 
@@ -2199,6 +2243,7 @@ public final class CalculatorViewModel: ObservableObject {
         if let preservedCurrentInput {
             currentInput = format(preservedCurrentInput)
         }
+        shouldPreserveTypedCurrencyInput = false
         refreshFormattedState()
     }
 
@@ -2249,6 +2294,7 @@ public final class CalculatorViewModel: ObservableObject {
 
         if let value = parseStoredNumber(currentInput) {
             currentInput = format(value)
+            shouldPreserveTypedCurrencyInput = false
             setCurrentTokenToCurrentInput()
         }
 
@@ -2273,7 +2319,7 @@ public final class CalculatorViewModel: ObservableObject {
             let displayResult: String
             let displayExpression: String
             if $0.expression.contains("round(") {
-                displayResult = $0.result
+                displayResult = displayString(for: $0.result, useActiveCurrency: false)
                 if let rounded = parseRoundedOperation($0.expression),
                    let sourceValue = evaluateExpressionString(rounded.baseExpression) {
                     let relationSymbol = $0.expression.contains("≈") ? "≈" : "="
@@ -2287,7 +2333,7 @@ public final class CalculatorViewModel: ObservableObject {
                     displayExpression = groupedExpressionString($0.expression)
                 }
             } else {
-                displayResult = displayString(for: $0.result)
+                displayResult = displayString(for: $0.result, useActiveCurrency: false)
                 displayExpression = groupedExpressionString($0.expression)
             }
             return HistoryEntry(
@@ -2296,6 +2342,29 @@ public final class CalculatorViewModel: ObservableObject {
                 displayExpression: displayExpression,
                 displayResult: displayResult
             )
+        }
+
+        updateDisplay()
+    }
+
+    private func refreshCurrentSessionDisplayTokens() {
+        if let value = parseStoredNumber(currentInput), !isErrorState {
+            currentInput = format(value)
+            shouldPreserveTypedCurrencyInput = false
+            setCurrentTokenToCurrentInput()
+        }
+
+        if let accumulator {
+            accumulatorToken = displayString(for: format(accumulator))
+        }
+
+        if let lastOperand {
+            lastOperandToken = displayString(for: format(lastOperand))
+        }
+
+        expressionTokens = expressionTokens.map { token in
+            guard let normalized = normalizeDisplayNumberToken(token) else { return token }
+            return displayString(for: normalized)
         }
 
         updateDisplay()
@@ -2327,7 +2396,25 @@ public final class CalculatorViewModel: ObservableObject {
         parseStoredNumber(raw).map(decimalNumberString(from:))
     }
 
-    private func clipboardNumberString(from raw: String) -> String? {
+    private func clipboardNumberString(from raw: String, preserveTrailingZeros: Bool = false) -> String? {
+        if let currencySymbol = effectiveCurrencySymbol(for: raw, useActiveCurrency: true) {
+            if shouldUseScientificNotation(for: raw) {
+                let numeric = raw.localizedCaseInsensitiveContains("e")
+                    ? localizedNumericString(raw)
+                    : displayString(for: raw, useActiveCurrency: false)
+                return decorateCurrencyAmount(numeric, with: currencySymbol)
+            }
+
+            guard let value = parseStoredNumber(raw) else { return nil }
+            let amount = currencyAmountString(
+                from: value,
+                raw: raw,
+                useGrouping: false,
+                preserveTrailingZeros: preserveTrailingZeros
+            )
+            return decorateCurrencyAmount(amount, with: currencySymbol)
+        }
+
         if raw.localizedCaseInsensitiveContains("e") {
             return raw
         }
@@ -2340,10 +2427,15 @@ public final class CalculatorViewModel: ObservableObject {
         return canonical.replacingOccurrences(of: ".", with: numberFormatStyle.decimalSeparator)
     }
 
-    private func displayString(for raw: String) -> String {
+    private func displayString(for raw: String, useActiveCurrency: Bool = true, preserveTrailingZeros: Bool = false) -> String {
         guard let value = parseStoredNumber(raw) else { return raw }
+        let currencySymbol = effectiveCurrencySymbol(for: raw, useActiveCurrency: useActiveCurrency)
         if shouldUseScientificNotation(for: raw) {
-            return formatScientific(value)
+            let scientific = formatScientific(value)
+            if let currencySymbol {
+                return decorateCurrencyAmount(scientific, with: currencySymbol)
+            }
+            return scientific
         }
         let normalizedRaw: String
         if raw.localizedCaseInsensitiveContains("e") {
@@ -2351,16 +2443,123 @@ public final class CalculatorViewModel: ObservableObject {
         } else {
             normalizedRaw = raw
         }
+        if let currencySymbol {
+            let amount = currencyAmountString(
+                from: value,
+                raw: raw,
+                useGrouping: true,
+                preserveTrailingZeros: preserveTrailingZeros
+            )
+            return decorateCurrencyAmount(amount, with: currencySymbol)
+        }
         return groupedNumberString(normalizedRaw)
+    }
+
+    private func currencyAmountString(
+        from value: Decimal,
+        raw: String,
+        useGrouping: Bool,
+        preserveTrailingZeros: Bool
+    ) -> String {
+        if preserveTrailingZeros,
+           let normalized = normalizedCurrencyNumberString(from: raw),
+           let decimalIndex = normalized.firstIndex(of: ".") {
+            let fraction = String(normalized[normalized.index(after: decimalIndex)...])
+            if fraction.isEmpty || fraction.count >= Self.minimumCurrencyFractionDigits {
+                return useGrouping ? groupedNumberString(normalized) : localizedNumericString(normalized)
+            }
+        }
+
+        return localizedFixedScaleString(from: value, scale: currencyFractionScale(for: raw), useGrouping: useGrouping)
+    }
+
+    private func localizedNumericString(_ raw: String) -> String {
+        if numberFormatStyle.decimalSeparator == "." {
+            return raw
+        }
+
+        return raw.replacingOccurrences(of: ".", with: numberFormatStyle.decimalSeparator)
+    }
+
+    private func localizedFixedScaleString(from value: Decimal, scale: Int, useGrouping: Bool) -> String {
+        var working = value
+        var rounded = Decimal.zero
+        NSDecimalRound(&rounded, &working, scale, .plain)
+
+        var canonical = decimalNumberString(from: rounded)
+        if scale > 0 {
+            let parts = canonical.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false)
+            if parts.count == 1 {
+                canonical.append(".")
+                canonical.append(String(repeating: "0", count: scale))
+            } else if parts[1].count < scale {
+                canonical.append(String(repeating: "0", count: scale - parts[1].count))
+            }
+        }
+
+        if useGrouping {
+            return groupedNumberString(canonical)
+        }
+
+        return localizedNumericString(canonical)
+    }
+
+    private func decorateCurrencyAmount(_ amount: String, with symbol: String) -> String {
+        if amount.hasPrefix("-") || amount.hasPrefix("−") {
+            return "-\(symbol)\(String(amount.dropFirst()))"
+        }
+
+        return "\(symbol)\(amount)"
+    }
+
+    private func normalizedCurrencyNumberString(from raw: String) -> String? {
+        normalizeNumberString(raw, treatPercentAsMultiplier: false)
+            ?? normalizeNumberStringUsingAnyStyle(raw, treatPercentAsMultiplier: false, excluding: numberFormatStyle)
+    }
+
+    private func currencyFractionScale(for raw: String) -> Int {
+        guard let normalized = normalizedCurrencyNumberString(from: raw),
+              let decimalIndex = normalized.firstIndex(of: ".")
+        else {
+            return 0
+        }
+
+        let fraction = String(normalized[normalized.index(after: decimalIndex)...])
+        guard !fraction.isEmpty else { return 0 }
+
+        var trimmedFraction = fraction
+        while trimmedFraction.last == "0" {
+            trimmedFraction.removeLast()
+        }
+
+        return max(Self.minimumCurrencyFractionDigits, trimmedFraction.count)
+    }
+
+    private func storedHistoryResultString(from raw: String) -> String {
+        guard let currencySymbol = effectiveCurrencySymbol(for: raw, useActiveCurrency: true),
+              !raw.localizedCaseInsensitiveContains("e"),
+              let value = parseStoredNumber(raw) else {
+            if raw.localizedCaseInsensitiveContains("e") {
+                return raw
+            }
+            if let value = parseStoredNumber(raw) {
+                return decimalNumberString(from: value)
+            }
+            return raw
+        }
+
+        let amount = localizedFixedScaleString(from: value, scale: currencyFractionScale(for: raw), useGrouping: false)
+        return decorateCurrencyAmount(amount, with: currencySymbol)
     }
 
     private func shouldUseScientificNotation(for raw: String) -> Bool {
         guard usesScientificNotation else { return false }
-        if raw == "0" { return false }
-        let digitCount = significantDigitCount(in: raw)
-        return raw.localizedCaseInsensitiveContains("e")
+        let numericRaw = normalizeNumberString(raw, treatPercentAsMultiplier: false) ?? raw
+        if numericRaw == "0" { return false }
+        let digitCount = significantDigitCount(in: numericRaw)
+        return numericRaw.localizedCaseInsensitiveContains("e")
             || digitCount > Limits.maxInputDigits
-            || requiresScientificNotationForSmallMagnitude(in: raw)
+            || requiresScientificNotationForSmallMagnitude(in: numericRaw)
     }
 
     private func significantDigitCount(in raw: String) -> Int {
@@ -2404,7 +2603,7 @@ public final class CalculatorViewModel: ObservableObject {
 
         let rounded = roundedDecimal(from: value, precision: precision)
         let roundedText = decimalNumberString(from: rounded)
-        return groupedNumberString(roundedText)
+        return displayString(for: roundedText)
     }
 
     private func roundedValueString(precision: Int) -> String {
@@ -2555,7 +2754,7 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func roundedOperationDisplayString(baseExpression: String, sourceValue: String, precision: Int, relationSymbol: String) -> String {
-        let displayExpression = ungroupedExpressionString(baseExpression)
+        let displayExpression = ungroupedExpressionString(groupedExpressionString(baseExpression))
         let scale = spreadsheetRoundScale(fromStoredNumber: sourceValue, precision: precision)
         let prefix = "=round(\(displayExpression)\(numberFormatStyle.spreadsheetArgumentSeparator) \(scale))"
         return relationSymbol == "≈" ? "\(prefix) ≈" : prefix
@@ -2812,7 +3011,8 @@ public final class CalculatorViewModel: ObservableObject {
 
     private func normalizeNumberString(_ raw: String, treatPercentAsMultiplier: Bool, style: NumberFormatStyle? = nil) -> String? {
         let activeStyle = style ?? numberFormatStyle
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let currencyContext = currencyInputContext(from: raw) else { return nil }
+        let trimmed = currencyContext.rawNumber.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
         let allowed = CharacterSet(charactersIn: "0123456789.,-−+eE %'\u{00A0}\u{202F}")
@@ -2839,6 +3039,7 @@ public final class CalculatorViewModel: ObservableObject {
             ) else {
                 return nil
             }
+            shouldPreserveTypedCurrencyInput = activeCurrencySymbol != nil
             return normalizedMantissa + "e" + exponent.lowercased()
         }
 
@@ -2883,7 +3084,76 @@ public final class CalculatorViewModel: ObservableObject {
             return decimalNumberString(from: percentValue / 100)
         }
 
+        if currencyContext.treatAsCents {
+            let centsValue = NSDecimalNumber(string: normalized, locale: Locale(identifier: "en_US_POSIX"))
+            guard centsValue != .notANumber else { return nil }
+            return decimalNumberString(from: centsValue.decimalValue / 100)
+        }
+
         return normalized
+    }
+
+    private static func isSupportedCurrencySymbol(_ value: String) -> Bool {
+        value.count == 1 && value.allSatisfy { supportedCurrencySymbolCharacters.contains($0) }
+    }
+
+    private func explicitCurrencySymbol(in raw: String) -> String? {
+        for character in raw {
+            if character == "¢" {
+                return "$"
+            }
+            if Self.supportedCurrencySymbolCharacters.contains(character) {
+                return String(character)
+            }
+        }
+        return nil
+    }
+
+    private func effectiveCurrencySymbol(for raw: String, useActiveCurrency: Bool) -> String? {
+        explicitCurrencySymbol(in: raw) ?? (useActiveCurrency ? activeCurrencySymbol : nil)
+    }
+
+    private func currencyInputContext(from raw: String) -> (symbol: String?, rawNumber: String, treatAsCents: Bool)? {
+        var working = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !working.isEmpty else { return nil }
+
+        var sign = ""
+        if working.hasPrefix("+") {
+            working.removeFirst()
+            working = working.trimmingCharacters(in: .whitespacesAndNewlines)
+        } else if working.hasPrefix("-") || working.hasPrefix("−") {
+            sign = "-"
+            working.removeFirst()
+            working = working.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        var symbol: String?
+        while let first = working.first, Self.supportedCurrencySymbolCharacters.contains(first), first != "¢" {
+            symbol = symbol ?? String(first)
+            working.removeFirst()
+            working = working.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        if sign.isEmpty, working.hasPrefix("+") {
+            working.removeFirst()
+            working = working.trimmingCharacters(in: .whitespacesAndNewlines)
+        } else if sign.isEmpty, working.hasPrefix("-") || working.hasPrefix("−") {
+            sign = "-"
+            working.removeFirst()
+            working = working.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        var treatAsCents = false
+        if working.hasSuffix("¢") {
+            working.removeLast()
+            working = working.trimmingCharacters(in: .whitespacesAndNewlines)
+            symbol = "$"
+            treatAsCents = true
+        } else if let last = working.last, Self.supportedCurrencySymbolCharacters.contains(last) {
+            return nil
+        }
+
+        return (symbol, sign + working, treatAsCents)
     }
 
     private func normalizeNumberStringUsingAnyStyle(

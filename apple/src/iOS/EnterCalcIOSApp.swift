@@ -608,7 +608,7 @@ private extension EnterCalcIOSView {
     }
 
     func handleHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
-        let unsupportedModifiers = event.modifierFlags.intersection([.command, .alternate, .control])
+        let unsupportedModifiers = event.modifierFlags.intersection([.command, .control])
         guard unsupportedModifiers.isEmpty else {
             return false
         }
@@ -668,6 +668,9 @@ private extension EnterCalcIOSView {
             return true
         case "%":
             viewModel.applyPercent()
+            return true
+        case "$", "€", "£", "¥", "₹", "₩", "₽", "฿", "₺", "₫", "₴", "₪", "₦", "₱", "₲", "₡", "₵", "₭", "₮", "₤", "₳", "₸", "₼", "₾", "₣", "₠", "₧", "₯", "₿":
+            viewModel.inputCurrencySymbol(inputChars)
             return true
         case "=":
             viewModel.evaluate()
