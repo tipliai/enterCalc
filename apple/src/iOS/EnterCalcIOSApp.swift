@@ -2726,8 +2726,7 @@ private struct IOSRoundingPanel: View {
     }
 
     private func tickOffset(for stepIndex: Int, width: CGFloat) -> CGFloat {
-        let compressedWidth = max(width - 11, 0)
-        return CGFloat(sliderPosition(for: stepIndex)) * compressedWidth - 1
+        markerOffset(for: stepIndex, width: width, markerWidth: 2)
     }
 
     private static func stepIndex(isEnabled: Bool, precision: Int, maxPrecision: Int) -> Int {
@@ -2740,7 +2739,10 @@ private struct IOSRoundingPanel: View {
     }
 
     private func markerOffset(for stepIndex: Int, width: CGFloat, markerWidth: CGFloat) -> CGFloat {
-        let centerX = CGFloat(sliderPosition(for: stepIndex)) * width
+        let trackLeadingInset: CGFloat = 10
+        let trackTrailingInset: CGFloat = 10
+        let usableWidth = max(width - trackLeadingInset - trackTrailingInset, 0)
+        let centerX = trackLeadingInset + CGFloat(sliderPosition(for: stepIndex)) * usableWidth
         return centerX - markerWidth * 0.5
     }
 
