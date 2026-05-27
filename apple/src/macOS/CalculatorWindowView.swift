@@ -1216,6 +1216,13 @@ struct CalculatorWindowView: View {
             return true
         }
 
+        if activeOverlay == nil, event.keyCode == 114 { // Insert
+            guard viewModel.canDirectlyEditDisplay else { return true }
+            let trailingBoundary = Array(viewModel.display).count
+            viewModel.setDisplayEditCursor(displayBoundaryIndex: trailingBoundary)
+            return true
+        }
+
         // Keypad support by keyCode
         switch event.keyCode {
         case 123:

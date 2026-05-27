@@ -633,6 +633,14 @@ private extension EnterCalcIOSView {
         let chars = event.charactersIgnoringModifiers ?? ""
         let inputChars = event.characters ?? chars
 
+        // HID usage 0x49 (Insert) enters direct display editing when no overlay is visible.
+        if activeOverlay == nil, event.keyCode?.rawValue == 0x49 {
+            guard viewModel.canDirectlyEditDisplay else { return true }
+            let trailingBoundary = Array(viewModel.display).count
+            viewModel.setDisplayEditCursor(displayBoundaryIndex: trailingBoundary)
+            return true
+        }
+
         switch event.keyCode {
         case .keyboardDownArrow:
             openRoundingOverlayFromKeyboard()
