@@ -261,6 +261,7 @@ public final class CalculatorViewModel: ObservableObject {
             return
         }
 
+        prepareCurrentInputForDirectDisplayEditing()
         let mapping = displayBoundaryToRawCursorMapping()
         guard mapping.indices.contains(displayBoundaryIndex) else { return }
         displayEditCursorIndex = mapping[displayBoundaryIndex]
@@ -281,6 +282,9 @@ public final class CalculatorViewModel: ObservableObject {
             return false
         }
 
+        if displayEditCursorIndex == nil {
+            prepareCurrentInputForDirectDisplayEditing()
+        }
         let currentIndex = activeDisplayEditCursorIndex ?? currentInput.count
         let nextIndex = normalizedDisplayEditCursorIndex(currentIndex - 1)
         let didMove = nextIndex != currentIndex || displayEditCursorIndex == nil
@@ -295,6 +299,9 @@ public final class CalculatorViewModel: ObservableObject {
             return false
         }
 
+        if displayEditCursorIndex == nil {
+            prepareCurrentInputForDirectDisplayEditing()
+        }
         let currentIndex = activeDisplayEditCursorIndex ?? currentInput.count
         let nextIndex = normalizedDisplayEditCursorIndex(currentIndex + 1)
         let didMove = nextIndex != currentIndex || displayEditCursorIndex == nil
@@ -482,14 +489,8 @@ public final class CalculatorViewModel: ObservableObject {
         isPendingEntryClearedByClearButton = false
         if currentInput.hasPrefix("-") {
             currentInput.removeFirst()
-            if let cursorIndex = displayEditCursorIndex {
-                displayEditCursorIndex = max(0, cursorIndex - 1)
-            }
         } else if currentInput != "0" {
             currentInput = "-" + currentInput
-            if let cursorIndex = displayEditCursorIndex {
-                displayEditCursorIndex = cursorIndex + 1
-            }
         }
         shouldPreserveTypedCurrencyInput = activeCurrencySymbol != nil
         setCurrentTokenToCurrentInput()
@@ -2416,6 +2417,20 @@ public final class CalculatorViewModel: ObservableObject {
     private func finishDirectDisplayEditingIfNeeded() {
         guard activeDisplayEditCursorIndex != nil else { return }
         displayEditCursorIndex = nil
+    }
+
+    private func prepareCurrentInputForDirectDisplayEditing() {
+        guard canDirectlyEditDisplay,
+              let canonical = canonicalNumberString(from: currentInput) else {
+            return
+        }
+
+        if currentInput != canonical {
+            currentInput = canonical
+            shouldPreserveTypedCurrencyInput = activeCurrencySymbol != nil
+            setCurrentTokenToCurrentInput()
+            updateDisplay()
+        }
     }
 
     private func insertDigitIntoCurrentInput(_ digit: String, at rawIndex: Int) {

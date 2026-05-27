@@ -2428,6 +2428,24 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.displayEditCaretBoundaryIndex, 2)
     }
 
+    func testDisplayEditCursorNormalizesGroupedCurrentInputBeforeInsertion() {
+        let viewModel = CalculatorViewModel()
+
+        enter("1234", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("1", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "1,235")
+
+        let insertionBoundary = max(Array(viewModel.display).count - 1, 0)
+        viewModel.setDisplayEditCursor(displayBoundaryIndex: insertionBoundary)
+        viewModel.inputDigit("9")
+
+        XCTAssertEqual(viewModel.display, "12,395")
+        XCTAssertEqual(viewModel.displayEditCaretBoundaryIndex, insertionBoundary + 1)
+    }
+
     func testDisplayEditCursorLeftArrowMovesCaretLeftFromTrailingEdge() {
         let viewModel = CalculatorViewModel()
 

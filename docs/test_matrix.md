@@ -4,8 +4,8 @@ This document tracks the shared-module checks currently discovered by `swift tes
 Each row maps directly to a discovered test method in `apple/tests/CalculatorViewModelTests.swift`.
 
 Current verification status on macOS:
-- `swift test list` discovers `141` `CalculatorViewModelTests` methods.
-- This matrix documents the same `141` methods with no missing or extra entries.
+- `swift test list` discovers `142` `CalculatorViewModelTests` methods.
+- This matrix documents the same `142` methods with no missing or extra entries.
 - The current macOS run includes the AppKit-only clipboard tests guarded by `canImport(AppKit)`.
 
 ## UI Settings Expectations
@@ -77,6 +77,7 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Editing state | Enter `1234`, place the display caret between `2` and `3`, then backspace | The digit immediately before the caret is removed and display becomes `134` | `testDisplayEditCursorBackspaceRemovesDigitBeforeCursor` |
 | Editing state | Enter `12`, place the display caret between `1` and `2`, then enter the decimal key | Display updates to `1.2`; the caret advances past the inserted decimal separator | `testDisplayEditCursorCanInsertDecimalWithinCurrentInput` |
 | Editing state | Evaluate `12 + 3 = 15`, place the display caret after `1`, then enter `9` | The evaluated result remains editable in place and becomes `195` without resetting the session | `testDisplayEditCursorCanModifyEvaluatedResult` |
+| Editing state | Evaluate `1234 + 1 = 1235`, place the caret near the final digit of grouped output, and insert `9` | Direct editing normalizes grouped stored input, preserves grouping in display (`12,395`), and advances the caret to the expected trailing boundary | `testDisplayEditCursorNormalizesGroupedCurrentInputBeforeInsertion` |
 | Editing state | Enter `1234`, then press the left arrow key twice while editing the result display | The first press activates the caret from the trailing edge and subsequent presses move it left through grouped output boundaries | `testDisplayEditCursorLeftArrowMovesCaretLeftFromTrailingEdge` |
 | Editing state | Enter `1234`, place the display caret between `2` and `3`, then press the right arrow key twice | The caret advances right through grouped output boundaries and reaches the trailing edge of the result | `testDisplayEditCursorRightArrowMovesCaretRightAndReachesTrailingEdge` |
 | Editing state | Enter `1234 +`, place the display caret inside the shown left operand, edit it, then enter a right-hand value | The pending operation preview updates to the edited left operand and evaluation uses that edited value | `testDisplayEditCursorCanModifyPendingOperationLeftOperand` |
