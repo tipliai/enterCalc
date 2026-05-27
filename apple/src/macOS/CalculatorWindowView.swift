@@ -555,14 +555,14 @@ struct CalculatorWindowView: View {
     private func copyDisplayToPasteboardWithFlash() {
         viewModel.copyToPasteboard()
         showCopiedToast()
+        withAnimation(.easeOut(duration: 0.1)) {
+            flashCopy = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
             withAnimation(.easeOut(duration: 0.1)) {
-                flashCopy = true
+                flashCopy = false
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                withAnimation(.easeOut(duration: 0.1)) {
-                    flashCopy = false
-                }
-            }
+        }
     }
 
     private func copyCurrentResultToPasteboard() {
