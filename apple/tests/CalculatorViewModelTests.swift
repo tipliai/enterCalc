@@ -1414,7 +1414,7 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.reuse(entry)
 
         XCTAssertEqual(viewModel.display, "€13.34")
-    XCTAssertEqual(viewModel.expressionDisplay, "€12.34 + €1 =")
+        XCTAssertEqual(viewModel.expressionDisplay, "€12.34 + €1 =")
     }
 
     func testCurrencyOperationCopyThenPasteReplaysAndRestoresCurrencyMode() {

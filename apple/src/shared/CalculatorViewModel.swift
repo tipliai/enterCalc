@@ -3078,7 +3078,6 @@ public final class CalculatorViewModel: ObservableObject {
             ) else {
                 return nil
             }
-            shouldPreserveTypedCurrencyInput = activeCurrencySymbol != nil
             return normalizedMantissa + "e" + exponent.lowercased()
         }
 
