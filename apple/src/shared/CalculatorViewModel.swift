@@ -242,7 +242,8 @@ public final class CalculatorViewModel: ObservableObject {
 
     public var canDirectlyEditDisplay: Bool {
         guard !isErrorState,
-              !isResultRoundingEnabled else {
+              !isResultRoundingEnabled,
+              !shouldDisplayPercentTokenAsMainDisplay else {
             return false
         }
 
@@ -363,6 +364,7 @@ public final class CalculatorViewModel: ObservableObject {
     private var currentToken: String = "0"
     private var accumulatorToken: String?
     private var lastOperandToken: String?
+    private var pendingParenthesisExpressionSeedTokens: [String]?
     private var expressionTokens: [String] = []
     private var openParenthesisCount: Int = 0
     private var isExpressionMode = false
@@ -707,6 +709,7 @@ public final class CalculatorViewModel: ObservableObject {
         let snapshot = beginUndoableChange()
         finishDirectDisplayEditingIfNeeded()
         isPendingEntryClearedByClearButton = false
+        pendingParenthesisExpressionSeedTokens = nil
         if isExpressionMode {
             if !shouldResetInputOnNextDigit {
                 appendCurrentTokenToExpressionIfNeeded()
@@ -736,7 +739,12 @@ public final class CalculatorViewModel: ObservableObject {
             return
         }
 
-        if let _ = pendingOperator, !shouldResetInputOnNextDigit {
+        if let existingPending = pendingOperator, !shouldResetInputOnNextDigit {
+            if (existingPending == .add || existingPending == .subtract),
+               (op == .multiply || op == .divide) {
+                let lhsToken = accumulatorToken ?? currentToken
+                pendingParenthesisExpressionSeedTokens = [lhsToken, existingPending.symbol, currentToken, op.symbol]
+            }
             performPendingOperation(addToHistory: false)
             if isErrorState {
                 completeUndoableChange(from: snapshot)
@@ -824,7 +832,12 @@ public final class CalculatorViewModel: ObservableObject {
         }
 
         if pendingOperator != nil {
-            performPendingOperation(addToHistory: true)
+            if shouldFinalizeCurrencyPendingPercentAsStandaloneResult {
+                finalizeCurrencyPendingPercentAsStandaloneResult()
+                updateDisplay()
+            } else {
+                performPendingOperation(addToHistory: true)
+            }
         } else if let lastOp = lastOperator, let lastOperand = lastOperand {
             let lhs = currentValue
             if lastOp == .multiply,
@@ -841,7 +854,12 @@ public final class CalculatorViewModel: ObservableObject {
             }
             let resultText = format(result)
             let lhsToken = currentToken
-            let rhsToken = lastOperandToken ?? displayString(for: format(lastOperand))
+            let rhsToken: String
+            if let lastOperandToken, lastOperandToken.hasSuffix("%") {
+                rhsToken = displayString(for: format(lastOperand))
+            } else {
+                rhsToken = lastOperandToken ?? displayString(for: format(lastOperand))
+            }
             let exp = "\(lhsToken) \(lastOp.symbol) \(rhsToken)"
             appendHistory(expression: exp, result: resultText)
             lastResultSummary = exp + " ="
@@ -1308,6 +1326,29 @@ public final class CalculatorViewModel: ObservableObject {
 
     private func enterExpressionModeIfNeeded() {
         guard !isExpressionMode else { return }
+        if let seedTokens = pendingParenthesisExpressionSeedTokens,
+           pendingOperator != nil,
+           shouldResetInputOnNextDigit {
+            isExpressionMode = true
+            expressionTokens = seedTokens
+            openParenthesisCount = 0
+            lastOperator = nil
+            lastOperand = nil
+            lastOperandToken = nil
+            pendingParenthesisExpressionSeedTokens = nil
+            pendingOperator = nil
+            accumulator = nil
+            accumulatorToken = nil
+            shouldResetInputOnNextDigit = true
+            justEvaluated = false
+            return
+        }
+
+        pendingParenthesisExpressionSeedTokens = nil
+        let didHavePendingOperator = pendingOperator != nil
+        let wasEnteringRightOperand = didHavePendingOperator && !shouldResetInputOnNextDigit
+        let rightOperandToken = currentToken
+
         isExpressionMode = true
         expressionTokens.removeAll()
         openParenthesisCount = 0
@@ -1319,6 +1360,9 @@ public final class CalculatorViewModel: ObservableObject {
             let lhs = accumulatorToken ?? currentToken
             expressionTokens.append(lhs)
             expressionTokens.append(pending.symbol)
+            if wasEnteringRightOperand {
+                expressionTokens.append(rightOperandToken)
+            }
         } else if currentToken != "0" {
             expressionTokens.append(currentToken)
         }
@@ -1326,7 +1370,7 @@ public final class CalculatorViewModel: ObservableObject {
         pendingOperator = nil
         accumulator = nil
         accumulatorToken = nil
-        shouldResetInputOnNextDigit = true
+        shouldResetInputOnNextDigit = !wasEnteringRightOperand
         justEvaluated = false
     }
 
@@ -1340,8 +1384,15 @@ public final class CalculatorViewModel: ObservableObject {
 
     private func appendCurrentTokenToExpressionIfNeeded() {
         guard !shouldResetInputOnNextDigit else { return }
-        guard let normalized = normalizeDisplayNumberToken(currentToken) else { return }
-        let displayToken = displayString(for: normalized)
+        let displayToken: String
+        if currentToken.hasSuffix("%") {
+            displayToken = currentToken
+        } else if let normalized = normalizeDisplayNumberToken(currentToken) {
+            displayToken = displayString(for: normalized)
+        } else {
+            return
+        }
+
         if let last = expressionTokens.last, isExpressionNumberToken(last) {
             expressionTokens[expressionTokens.count - 1] = displayToken
         } else {
@@ -1351,9 +1402,16 @@ public final class CalculatorViewModel: ObservableObject {
 
     private func expressionPreviewHeader() -> String {
         var previewTokens = expressionTokens
-        if !shouldResetInputOnNextDigit,
-           let normalized = normalizeDisplayNumberToken(currentToken) {
-            let displayToken = displayString(for: normalized)
+        if !shouldResetInputOnNextDigit {
+            let displayToken: String
+            if currentToken.hasSuffix("%") {
+                displayToken = currentToken
+            } else if let normalized = normalizeDisplayNumberToken(currentToken) {
+                displayToken = displayString(for: normalized)
+            } else {
+                return previewTokens.joined(separator: " ")
+            }
+
             if let last = previewTokens.last, isExpressionNumberToken(last) {
                 previewTokens[previewTokens.count - 1] = displayToken
             } else if previewTokens.last != ")" {
@@ -1406,6 +1464,15 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func expressionTokenValue(_ token: String, unaryDepth: Int) -> Result<Decimal, ExpressionEvaluationError> {
+        if token.hasSuffix("%") {
+            let baseToken = String(token.dropLast())
+            if let normalizedBase = normalizeDisplayNumberToken(baseToken),
+               let baseValue = decimalValue(fromCanonicalString: normalizedBase) {
+                return .success(baseValue / 100)
+            }
+            return .failure(.invalidInput)
+        }
+
         if let normalized = normalizeDisplayNumberToken(token),
            let value = decimalValue(fromCanonicalString: normalized) {
             return .success(value)
@@ -2020,6 +2087,31 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func updateDisplay() {
+        if shouldDisplayPercentTokenAsMainDisplay {
+            let header: String
+            if isExpressionMode {
+                header = expressionPreviewHeader()
+                expression = header
+            } else if let op = pendingOperator {
+                let lhsText = accumulatorToken ?? currentToken
+                let rhsText = shouldResetInputOnNextDigit ? nil : currentToken
+                if let rhsText {
+                    header = "\(lhsText) \(op.symbol) \(rhsText)"
+                } else {
+                    header = "\(lhsText) \(op.symbol)"
+                }
+            } else if !expression.isEmpty {
+                header = expression
+            } else {
+                header = lastResultSummary
+            }
+
+            display = currentToken
+            expressionDisplay = groupedExpressionString(header)
+            displayEditCursorIndex = nil
+            return
+        }
+
         let shouldUseCurrencyForCurrentDisplay = !(activeCurrencySymbol != nil && currentToken.hasSuffix("%"))
         let plainDisplay = isPendingEntryClearedByClearButton && currentInput == "0"
             ? ""
@@ -2582,19 +2674,63 @@ public final class CalculatorViewModel: ObservableObject {
         pendingOperator != nil && accumulatorUsesStandalonePercentToken
     }
 
-    private var pendingOperatorShouldKeepPercentToken: Bool {
-        guard let pendingOperator else { return false }
+    private var shouldFinalizeCurrencyPendingPercentAsStandaloneResult: Bool {
+        guard activeCurrencySymbol != nil,
+              let pendingOperator,
+              currentToken.hasSuffix("%"),
+              !shouldResetInputOnNextDigit else {
+            return false
+        }
 
         switch pendingOperator {
-        case .multiply, .divide:
-            return true
         case .add, .subtract:
+            return true
+        case .multiply, .divide:
             return false
         }
     }
 
+    private var pendingOperatorShouldKeepPercentToken: Bool {
+        pendingOperator != nil
+    }
+
+    private var shouldDisplayPercentTokenAsMainDisplay: Bool {
+        guard currentToken.hasSuffix("%") else {
+            return false
+        }
+
+        if isExpressionMode && !shouldResetInputOnNextDigit {
+            return true
+        }
+
+        return pendingOperator != nil
+    }
+
     private var accumulatorUsesStandalonePercentToken: Bool {
         accumulatorToken?.hasSuffix("%") == true
+    }
+
+    private func finalizeCurrencyPendingPercentAsStandaloneResult() {
+        guard let pending = pendingOperator else { return }
+
+        let lhsToken = accumulatorToken ?? currentToken
+        let rhsToken = currentToken
+        let resultText = format(parseStoredNumber(currentInput) ?? 0)
+        let expressionText = "\(lhsToken) \(pending.symbol) \(rhsToken)"
+
+        appendHistory(expression: expressionText, result: resultText)
+        lastResultSummary = expressionText + " ="
+        currentInput = resultText
+        currentToken = displayString(for: resultText)
+        accumulator = parseStoredNumber(resultText)
+        accumulatorToken = currentToken
+        pendingOperator = nil
+        lastOperator = nil
+        lastOperand = nil
+        lastOperandToken = nil
+        expression = ""
+        shouldResetInputOnNextDigit = true
+        justEvaluated = true
     }
 
     private func resolvedPercentValue() -> Decimal {

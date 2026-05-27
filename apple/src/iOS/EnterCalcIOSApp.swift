@@ -1964,13 +1964,16 @@ private extension EnterCalcIOSView {
 
                 VStack(spacing: 0) {
                     VStack(alignment: .trailing, spacing: metrics.displaySpacing) {
+                        let expressionFontSize = metrics.expressionFontSize(for: resultsTextHeight)
+                        let operationLineMinScaleFactor = CalculatorDisplayMetrics.operationLineMinScaleFactor(for: expressionFontSize)
+
                         Text(screen.viewModel.expressionDisplay)
-                            .font(EnterCalcFont.appFont(size: metrics.expressionFontSize(for: resultsTextHeight)))
+                            .font(EnterCalcFont.appFont(size: expressionFontSize))
                             .foregroundStyle(palette.textSecondary)
                             .frame(maxWidth: .infinity, alignment: .trailing)
                             .lineLimit(1)
                             .allowsTightening(true)
-                            .minimumScaleFactor(0.35)
+                            .minimumScaleFactor(operationLineMinScaleFactor)
 
                         if screen.viewModel.canDirectlyEditDisplay {
                             EditableDisplayResultText(
