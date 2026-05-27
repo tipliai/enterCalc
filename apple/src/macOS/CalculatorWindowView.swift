@@ -89,6 +89,10 @@ struct CalculatorWindowView: View {
         _windowSettings = State(initialValue: Self.loadStoredSettings())
     }
 
+    private func verticalLockedTranslation(_ value: DragGesture.Value) -> CGFloat {
+        value.location.y - value.startLocation.y
+    }
+
     private var palette: Palette { currentTheme.palette(using: colorScheme) }
 
     private var currentTheme: AppTheme {
@@ -655,14 +659,14 @@ struct CalculatorWindowView: View {
         let accentColor = palette.accent
         let handleColor = isResizingKeypadHeight ? accentColor : palette.textSecondary.opacity(colorScheme == .dark ? 0.7 : 0.42)
         let lineColor = handleColor
-        let dragGesture = DragGesture(minimumDistance: 0, coordinateSpace: .local)
+        let dragGesture = DragGesture(minimumDistance: 0, coordinateSpace: .global)
             .onChanged { value in
                 if !isResizingKeypadHeight {
                     keypadResizeGestureStartMultiplier = activeKeypadHeightMultiplier()
                     isResizingKeypadHeight = true
                 }
 
-                let delta = Double(value.translation.height / max(defaultKeypadHeight, 1))
+                let delta = Double(verticalLockedTranslation(value) / max(defaultKeypadHeight, 1))
                 let newMultiplier = min(max(keypadResizeGestureStartMultiplier - delta, 0.5), 1.0)
                 liveKeypadHeightMultiplier = newMultiplier
             }
@@ -693,7 +697,7 @@ struct CalculatorWindowView: View {
         .frame(maxWidth: .infinity)
         .frame(height: max(height, 36))
         .contentShape(Rectangle())
-        .simultaneousGesture(dragGesture)
+        .highPriorityGesture(dragGesture)
         .onHover { hovering in
             keypadResizeHover = hovering
             if hovering || isResizingKeypadHeight {
@@ -864,7 +868,7 @@ struct CalculatorWindowView: View {
         let accentColor = palette.accent
         let handleColor = isResizingHistoryOverlay ? accentColor : palette.textSecondary.opacity(colorScheme == .dark ? 0.7 : 0.42)
         let lineColor = handleColor
-        let dragGesture = DragGesture(minimumDistance: 0, coordinateSpace: .local)
+        let dragGesture = DragGesture(minimumDistance: 0, coordinateSpace: .global)
             .onChanged { value in
                 let maximumHeight = maximumHistoryOverlayHeight(windowHeight: windowHeight)
                 let minimumHeight = minimumHistoryOverlayHeight(maximumHeight: maximumHeight)
@@ -874,7 +878,7 @@ struct CalculatorWindowView: View {
                     isResizingHistoryOverlay = true
                 }
 
-                let proposedHeight = historyOverlayResizeStartHeight - value.translation.height
+                let proposedHeight = historyOverlayResizeStartHeight - verticalLockedTranslation(value)
                 historyOverlayHeight = roundedHistoryOverlayHeight(min(max(proposedHeight, minimumHeight), maximumHeight))
             }
             .onEnded { _ in
@@ -911,7 +915,7 @@ struct CalculatorWindowView: View {
         }
         .frame(width: handleWidth, height: 32)
         .contentShape(Rectangle())
-        .simultaneousGesture(dragGesture)
+        .highPriorityGesture(dragGesture)
         .onHover { hovering in
             historyResizeHover = hovering
             if hovering || isResizingHistoryOverlay {

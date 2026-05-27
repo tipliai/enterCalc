@@ -2119,7 +2119,7 @@ private extension EnterCalcIOSView {
         let lineColor = handleColor
         let handleBackground = isActive ? accentColor.opacity(colorScheme == .dark ? 0.14 : 0.12) : palette.surface
         let verticalCenterOffset = -metrics.sectionSpacing / 2
-        let dragGesture = DragGesture(minimumDistance: 0, coordinateSpace: .local)
+        let dragGesture = DragGesture(minimumDistance: 0, coordinateSpace: .global)
             .onChanged { value in
                 if !isResizingKeypadHeight {
                     keypadResizeGestureStartMultiplier = normalizedKeypadHeightMultiplier(for: screen)
@@ -2129,9 +2129,10 @@ private extension EnterCalcIOSView {
                 }
 
                 let totalHeight = max(metrics.keypadHeight + metrics.displayHeight, 1)
-                let delta = Double(value.translation.height / totalHeight)
+                let verticalTranslation = verticalLockedTranslation(value)
+                let delta = Double(verticalTranslation / totalHeight)
                 let newMultiplier = clamp(keypadResizeGestureStartMultiplier - delta, to: 0.5...1.0)
-                let translationText = String(format: "%.1f", value.translation.height)
+                let translationText = String(format: "%.1f", verticalTranslation)
                 let deltaText = String(format: "%.3f", delta)
                 let multiplierText = String(format: "%.3f", newMultiplier)
                 DebugLog.emit("UI", "Keypad resize changed screen:\(screen.id) translationY:\(translationText) delta:\(deltaText) multiplier:\(multiplierText)")
@@ -2163,7 +2164,7 @@ private extension EnterCalcIOSView {
         .frame(maxWidth: .infinity)
         .frame(height: max(height, 36))
         .contentShape(Rectangle())
-        .simultaneousGesture(dragGesture)
+        .highPriorityGesture(dragGesture)
         .accessibilityLabel(Text("Resize keypad"))
         .accessibilityHint(Text("Drag up or down to resize the keypad"))
     }
@@ -2184,6 +2185,10 @@ private extension EnterCalcIOSView {
 
     func clamp(_ value: CGFloat, to range: ClosedRange<CGFloat>) -> CGFloat {
         min(max(value, range.lowerBound), range.upperBound)
+    }
+
+    func verticalLockedTranslation(_ value: DragGesture.Value) -> CGFloat {
+        value.location.y - value.startLocation.y
     }
 
     func resetHistoryOverlayResizeState() {
@@ -2345,7 +2350,7 @@ private extension EnterCalcIOSView {
             liveHistoryOverlayScreenID = screen.id
         }
 
-        let proposedHeight = historyOverlayResizeGestureStartHeight - dragValue.translation.height
+        let proposedHeight = historyOverlayResizeGestureStartHeight - verticalLockedTranslation(dragValue)
         let clampedHeight = clamp(proposedHeight, to: minimumHeight...maximumHeight)
         liveHistoryOverlayHeight = roundedHistoryOverlayHeight(clampedHeight)
     }
@@ -3082,7 +3087,7 @@ private struct IOSHistoryPanel: View {
         let accentColor = palette.accent
         let handleColor = isResizing ? accentColor : palette.textSecondary.opacity(colorScheme == .dark ? 0.65 : 0.4)
         let lineColor = handleColor
-        let dragGesture = DragGesture(minimumDistance: 0, coordinateSpace: .local)
+        let dragGesture = DragGesture(minimumDistance: 0, coordinateSpace: .global)
             .onChanged { value in
                 onResizeChanged(value)
             }
@@ -3111,7 +3116,7 @@ private struct IOSHistoryPanel: View {
         }
         .frame(width: handleWidth, height: rowHeight)
         .contentShape(Rectangle())
-        .simultaneousGesture(dragGesture)
+        .highPriorityGesture(dragGesture)
         .accessibilityLabel(Text("Resize history"))
         .accessibilityHint(Text("Drag up or down to resize the history overlay"))
 
