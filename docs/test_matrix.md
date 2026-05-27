@@ -4,8 +4,8 @@ This document tracks the shared-module checks currently discovered by `swift tes
 Each row maps directly to a discovered test method in `apple/tests/CalculatorViewModelTests.swift`.
 
 Current verification status on macOS:
-- `swift test list` discovers `130` `CalculatorViewModelTests` methods.
-- This matrix documents the same `130` methods with no missing or extra entries.
+- `swift test list` discovers `131` `CalculatorViewModelTests` methods.
+- This matrix documents the same `131` methods with no missing or extra entries.
 - The current macOS run includes the AppKit-only clipboard tests guarded by `canImport(AppKit)`.
 
 ## UI Settings Expectations
@@ -92,6 +92,7 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Licensing/resources | Load `Base`, `en`, `de`, `es`, `fr`, `ja`, `zh-Hans` string tables | All required credit keys exist; English credit text contains `MIT License` and `Tipli AI` | `testLocalizedCreditsExistAcrossSupportedBundles` |
 | Localization | Load `Base`, `en`, `de`, `es`, `fr`, `ja`, `zh-Hans` about/credit strings | Each bundle keeps non-empty about labels, preserves `%@` placeholders, mentions `EnterCalc`, and uses `GitHub` as the credit link text | `testAboutAndCreditStringsStayAlignedAcrossSupportedBundles` |
 | Localization | Load `Base`, `en`, `de`, `es`, `fr`, `ja`, `zh-Hans` screen strings | Screen labels and actions exist, are non-empty, and are translated across supported bundles | `testScreenLocalizationKeysExistAcrossSupportedBundles` |
+| Localization | Load `Base`, `en`, `de`, `es`, `fr`, `ja`, `zh-Hans` copy-feedback strings | The localized `Copied` label exists, is non-empty, and is translated across supported bundles | `testCopyLocalizationKeysExistAcrossSupportedBundles` |
 | Localization | Resolve localization code for `zh` | Maps to the supported `zh-Hans` bundle | `testResolvedLocalizationCodeMapsBaseLanguageToSupportedScriptLocalization` |
 | Localization | Resolve localization code for unknown `zz-ZZ` | Falls back to `en` | `testResolvedLocalizationCodeFallsBackToEnglishForUnknownLanguage` |
 | Localization | Resolve localization code for `default` with preferred language `de-DE` | Uses `de` from the preferred language list | `testResolvedLocalizationCodeUsesPreferredLanguageForDefaultSelection` |

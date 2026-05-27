@@ -38,6 +38,7 @@
 "rounding.title" = "Ergebnis runden";
 "rounding.remove" = "Rundung entfernen";
 "copy" = "Kopieren";
+"copy.copied" = "Kopiert";
 "paste" = "Einfügen";
 "undo" = "Rückgängig";
 "redo" = "Wiederholen";

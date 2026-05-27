@@ -257,6 +257,8 @@ struct EnterCalcIOSView: View {
     @State private var showSettingsSheet: Bool = false
     @State private var counterRotatesForUpsideDownPortrait: Bool = false
     @State private var flashCopy: Bool = false
+    @State private var showCopyToast: Bool = false
+    @State private var copyToastDismissWorkItem: DispatchWorkItem?
     @State private var copyStreakActive: Bool = false
     @State private var copyStreakTravel: CGFloat = 1.35
     @State private var displayShimmerParallaxOffset: CGSize = .zero
@@ -330,8 +332,8 @@ struct EnterCalcIOSView: View {
 
     private var actionContext: CalculatorActionContext {
         CalculatorActionContext(
-            copy: { viewModel.copyToPasteboard() },
-            copyOperation: { viewModel.copyOperationToPasteboard() },
+            copy: { copyCurrentResultToPasteboard(from: viewModel) },
+            copyOperation: { copyCurrentOperationToPasteboard(from: viewModel) },
             canCopyOperation: viewModel.hasOperationToCopy,
             paste: { viewModel.pasteFromPasteboard() },
             undo: { viewModel.undo() },
@@ -414,6 +416,13 @@ struct EnterCalcIOSView: View {
 
                 overlayPanels(metrics: metrics, containerSize: geometry.size, safeAreaInsets: geometry.safeAreaInsets)
                     .rotationEffect(.degrees(counterRotatesForUpsideDownPortrait ? 180 : 0))
+
+                if showCopyToast && !(metrics.mode == .phonePortrait && counterRotatesForUpsideDownPortrait) {
+                    copyToastOverlay(metrics: metrics, safeAreaInsets: geometry.safeAreaInsets)
+                        .rotationEffect(.degrees(counterRotatesForUpsideDownPortrait ? 180 : 0))
+                        .transition(.opacity)
+                        .zIndex(2)
+                }
 
                 IOSHardwareKeyCaptureView(
                     isEnabled: scenePhase == .active && !showSettingsSheet,
@@ -1883,6 +1892,15 @@ private extension EnterCalcIOSView {
             .mask { displayShape.padding(0.6) }
             .clipShape(displayShape, style: FillStyle(eoFill: false, antialiased: false))
             .clipped()
+            .overlay(alignment: .top) {
+                if metrics.mode == .phonePortrait && counterRotatesForUpsideDownPortrait {
+                    copyToastBubble
+                        .padding(.top, -15)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .opacity(showCopyToast ? 1 : 0)
+                        .animation(showCopyToast ? .easeOut(duration: 0.18) : .easeOut(duration: 0.5), value: showCopyToast)
+                }
+            }
             .contentShape(displayShape)
             .onTapGesture {
                 copyDisplayToPasteboardWithFlash(from: screen.viewModel)
@@ -1903,6 +1921,7 @@ private extension EnterCalcIOSView {
     func copyDisplayToPasteboardWithFlash(from viewModel: CalculatorViewModel) {
         viewModel.copyToPasteboard()
         triggerActionFeedback(emphasized: true)
+        showCopiedToast()
 
         copyStreakTravel = 1.35
         copyStreakActive = true
@@ -1928,12 +1947,14 @@ private extension EnterCalcIOSView {
     func copyCurrentResultToPasteboard(from viewModel: CalculatorViewModel) {
         viewModel.copyToPasteboard()
         triggerActionFeedback()
+        showCopiedToast()
     }
 
     func copyCurrentOperationToPasteboard(from viewModel: CalculatorViewModel) {
         guard viewModel.hasOperationToCopy else { return }
         viewModel.copyOperationToPasteboard()
         triggerActionFeedback()
+        showCopiedToast()
     }
 
     func pasteFromPasteboard(into viewModel: CalculatorViewModel) {
@@ -1944,11 +1965,66 @@ private extension EnterCalcIOSView {
     func copyHistoryEntryResultToPasteboard(_ entry: HistoryEntry, from viewModel: CalculatorViewModel) {
         viewModel.copyResultToPasteboard(entry)
         triggerActionFeedback()
+        showCopiedToast()
     }
 
     func copyHistoryEntryOperationToPasteboard(_ entry: HistoryEntry, from viewModel: CalculatorViewModel) {
         viewModel.copyOperationToPasteboard(entry)
         triggerActionFeedback()
+        showCopiedToast()
+    }
+
+    func showCopiedToast() {
+        copyToastDismissWorkItem?.cancel()
+
+        if !showCopyToast {
+            withAnimation(.easeOut(duration: 0.18)) {
+                showCopyToast = true
+            }
+        }
+
+        let dismissWorkItem = DispatchWorkItem {
+            withAnimation(.easeOut(duration: 0.5)) {
+                showCopyToast = false
+            }
+            copyToastDismissWorkItem = nil
+        }
+
+        copyToastDismissWorkItem = dismissWorkItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: dismissWorkItem)
+    }
+
+    @ViewBuilder
+    func copyToastOverlay(metrics: IOSLayoutMetrics, safeAreaInsets: EdgeInsets) -> some View {
+        let topInset = safeAreaInsets.top
+        let toast = copyToastBubble
+
+        if metrics.mode == .phonePortrait {
+            toast
+                .frame(maxWidth: .infinity)
+                .frame(height: metrics.headerHeight, alignment: .center)
+                .padding(.top, max(0, topInset - 15))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            } else {
+                toast
+                .padding(.top, topInset + 10)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
+    }
+
+    var copyToastBubble: some View {
+        Text(localized("copy.copied"))
+            .font(EnterCalcFont.appFont(size: 14))
+            .foregroundStyle(palette.textPrimary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(.regularMaterial, in: Capsule())
+            .overlay(
+                Capsule()
+                    .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.14 : 0.22), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.24 : 0.12), radius: 12, y: 6)
+            .allowsHitTesting(false)
     }
 
     func triggerActionFeedback() {

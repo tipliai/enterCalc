@@ -38,6 +38,7 @@
 "rounding.title" = "对结果进行四舍五入";
 "rounding.remove" = "取消四舍五入";
 "copy" = "复制";
+"copy.copied" = "已复制";
 "paste" = "粘贴";
 "undo" = "撤销";
 "redo" = "重做";

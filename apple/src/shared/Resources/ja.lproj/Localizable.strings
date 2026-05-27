@@ -38,6 +38,7 @@
 "rounding.title" = "結果を丸める";
 "rounding.remove" = "丸めを解除";
 "copy" = "コピー";
+"copy.copied" = "コピーしました";
 "paste" = "貼り付け";
 "undo" = "取り消す";
 "redo" = "やり直す";
