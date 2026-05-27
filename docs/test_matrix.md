@@ -4,8 +4,8 @@ This document tracks the shared-module checks currently discovered by `swift tes
 Each row maps directly to a discovered test method in `apple/tests/CalculatorViewModelTests.swift`.
 
 Current verification status on macOS:
-- `swift test list` discovers `115` `CalculatorViewModelTests` methods.
-- This matrix documents the same `115` methods with no missing or extra entries.
+- `swift test list` discovers `130` `CalculatorViewModelTests` methods.
+- This matrix documents the same `130` methods with no missing or extra entries.
 - The current macOS run includes the AppKit-only clipboard tests guarded by `canImport(AppKit)`.
 
 ## UI Settings Expectations
@@ -50,6 +50,8 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Rounding | Enter `12 +`, begin rounding, then commit without completing the operation | No history entry is appended for an incomplete pending operation | `testCommitResultRoundingDoesNotAppendHistoryForIncompletePendingOperation` |
 | Rounding | Paste `9.32227`, open rounding, then commit without selecting a level | History stays empty; display remains `9.32227`; rounding stays disabled | `testOpenThenCloseResultRoundingDoesNotAppendHistory` |
 | Rounding | Paste `5`, enable rounding with precision `3`, then commit | Display stays `5`; expression display uses `=round(5, 0)`; stored history expression remains `round(5, 3)` | `testExactRoundingUsesEqualsAndPreservesSelectedSignificantDigits` |
+| Rounding | Paste `$5`, enable rounding with precision `3`, then copy the rounded operation from both the live view and saved history | On-screen rounded expression keeps `$`, but copied `=round(...)` text omits the currency symbol and stays `=round(5,0)` | `testRoundedOperationCopyOmitsCurrencySymbols` |
+| Rounding | Paste `$5`, then enable rounding with precision `3` | Normal currency display stays `$5`, but rounding-enabled display, copy, and saved history result show `$5.00` without restoring forced `.00` padding to normal mode | `testCurrencyRoundingDisplaysTwoDecimalsWithoutNormalPadding` |
 | Rounding | Round `54321` at levels `1`, `2`, `5`, then round `1.5678` at levels `1`, `2`, `8` | Rounding removes least-significant digits by level and preserves at least one significant digit | `testResultRoundingLevelsRoundFromLeastSignificantDigit` |
 | Rounding | Evaluate `2 + 2.33 =`, then enable rounding level `1` | Display becomes `4.3`; operation display collapses to `=round(4.33, 1) ≈` | `testResultRoundingCollapsesEvaluatedExpressionToCurrentTotal` |
 | Rounding | Evaluate `2 + 2.33 =`, enable rounding level `1`, then backspace | Display resets to `0`; rounded operation display updates to `=round(0, 0)` | `testBackspaceUpdatesRoundedOperationBaseValue` |
@@ -61,7 +63,8 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Percent | Enable classic percent mode, evaluate `50`, then apply percent | Display `25`; expression remains `50%` | `testClassicPercentModeTreatsEvaluatedValuesLikeClassicBehavior` |
 | Percent | Enable classic percent mode, enter `50`, then apply percent as standalone input | Display `0`; expression remains `50%` | `testClassicPercentModeTreatsStandaloneInputLikeCalculator` |
 | Percent | Evaluate `10 + 10%` | Display `11`; expression resolves to `10 + 1 =`; history stores `10 + 1` | `testPercentMatchesCalculatorForAddition` |
-| Percent | Evaluate `10 ÷ 10%` | Display `100`; expression resolves to `10 ÷ 0.1 =`; history stores `10 ÷ 0.1` | `testPercentMatchesCalculatorForDivision` |
+| Percent | Evaluate `10 ÷ 10%` | Pre-equals display shows `0.1`; expression stays `10 ÷ 10%`; final history stores `10 ÷ 10% -> 100` | `testPercentMatchesCalculatorForDivision` |
+| Percent | Evaluate `100 × 15%` | Pre-equals display shows `0.15`; expression stays `100 × 15%`; final history stores `100 × 15% -> 15` | `testPercentMatchesCalculatorForMultiplication` |
 | Percent | Apply `5%`, then add `3%` and evaluate | Display `0.08`; expression and history remain `5% + 3%` | `testPercentAfterStandalonePercentUsesStandaloneSemantics` |
 | Percent | Apply `5%`, then add `3` and evaluate | Display `3.05`; expression and history remain `5% + 3` | `testAdditionAfterStandalonePercentUsesPercentValueAsLeftOperand` |
 | Error handling | Enter `9 ÷ 0 =` | Error state enabled, display `Cannot divide by zero`, empty expression, undo remains available | `testDivideByZeroSetsLocalizedErrorState` |
@@ -96,7 +99,18 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Clipboard | Enter `1234`, copy to pasteboard | Pasteboard string is `1234` | `testCopyToPasteboardWritesUngroupedValue` |
 | Clipboard | With French number format (`1 234 567,89`), copy `8,333` | Pasteboard preserves the localized decimal separator and ungrouped value (`8,333`) | `testCopyToPasteboardUsesLocalizedDecimalSeparatorForFrenchStyle` |
 | Clipboard | Copy operation `12 + 3 = 15`, then paste into a fresh view model | Pasted display is `15`; history stays empty; no error state | `testCopyOperationThenPasteReplaysTheOperation` |
-| Clipboard | Paste `$1,234.50` from the pasteboard | Display normalizes to `1,234.50`; no error state | `testPasteFromPasteboardNormalizesFormattedNumericContent` |
+| Clipboard | Paste `$1,234.50` from the pasteboard | Display normalizes to `$1,234.5`; no error state | `testPasteFromPasteboardNormalizesFormattedNumericContent` |
+| Currency | Paste `$12.3`, continue with `+ 1 =`, then clear all | Currency mode stays active for the pending operand and result (`$12.3 + $1 -> $13.3`) until all-clear resets the session | `testLeadingCurrencyPasteKeepsCurrencyActiveUntilAllClear` |
+| Currency | Evaluate `€12.34 + 1 =`, reuse the saved history entry | Reuse restores both the currency-formatted result and the currency-aware expression state | `testCurrencyReuseRestoresCurrencyAwareState` |
+| Currency | Evaluate `$12.34 + 1 =`, copy the operation, then paste into a fresh view model | Replayed operation restores `$12.34 + $1 =` and keeps currency mode active on the pasted session | `testCurrencyOperationCopyThenPasteReplaysAndRestoresCurrencyMode` |
+| Currency | Type `$`, then enter `1.2 + 2 =` | Leading currency symbol activates currency formatting immediately and arithmetic stays in currency mode without forced padding (`$1.2 -> $3.2`) | `testTypingCurrencySymbolActivatesCurrencyFormatting` |
+| Currency | Type `$0.00043` manually in currency mode | Live entry preserves typed trailing zeros and copy output matches the full typed fractional precision | `testTypingCurrencyZerosPreservesLiveFractionPrecision` |
+| Currency | Type `₿1.2` in currency mode | Bitcoin symbol is accepted as a supported currency prefix and copies back out as `₿1.2` | `testBitcoinCurrencySymbolIsSupported` |
+| Currency | Paste `₿1.00043` | Currency formatting preserves extended pasted fractional precision instead of clamping to two decimals | `testPastingBitcoinCurrencyPreservesExtendedFractionPrecision` |
+| Currency | Paste `12¢` | Cents notation converts to dollar currency mode and normalizes to `$0.12` | `testPastingCentsNotationConvertsToDollarCurrencyMode` |
+| Currency | In French number style, paste `€1,2` and copy the result | Currency copy output respects the active locale decimal separator without forced padding (`€1,2`) | `testCurrencyCopyUsesActiveNumberStyleDecimalSeparator` |
+| Currency | Evaluate `$100 × 115% =` in currency mode | Percent input overrides the currency symbol in the operand token while the final result remains currency-formatted (`$115`) | `testCurrencyModePercentOverridesCurrencyInMultiplyExpression` |
+| Currency | Evaluate `€93.33 ÷ 60% =` in currency mode | Percent input overrides the currency symbol in the divisor token while the final result remains currency-formatted (`€155.55`) | `testCurrencyModePercentOverridesCurrencyInDivisionExpression` |
 | Clipboard | Active style western (`1,234.56`), paste French value `1 000,00` | Value is parsed and converted into active style display as `1,000.00` | `testPasteFromPasteboardConvertsFrenchNumberToWesternActiveFormat` |
 | Clipboard | Active style French (`1 234,56`), paste western value `1,000.00` | Value is parsed and converted into active style display as `1 000,00` | `testPasteFromPasteboardConvertsWesternNumberToFrenchActiveFormat` |
 | Clipboard | Enter `12 +`, then paste `3` over the pending operand | Expression stays `12 + 3`, evaluation yields `15`, and the operation is not cleared by the paste | `testPasteFromPasteboardReplacesPendingOperandWithoutClearingOperation` |

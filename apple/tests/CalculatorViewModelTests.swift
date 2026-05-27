@@ -672,12 +672,35 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.setOperator(.divide)
         enter("10", into: viewModel)
         viewModel.applyPercent()
+
+        XCTAssertEqual(viewModel.display, "0.1")
+        XCTAssertEqual(viewModel.expressionDisplay, "10 ÷ 10%")
+
         viewModel.evaluate()
 
         XCTAssertEqual(viewModel.display, "100")
-        XCTAssertEqual(viewModel.expressionDisplay, "10 ÷ 0.1 =")
-        XCTAssertEqual(viewModel.history.first?.expression, "10 ÷ 0.1")
+        XCTAssertEqual(viewModel.expressionDisplay, "10 ÷ 10% =")
+        XCTAssertEqual(viewModel.history.first?.expression, "10 ÷ 10%")
         XCTAssertEqual(viewModel.history.first?.result, "100")
+    }
+
+    func testPercentMatchesCalculatorForMultiplication() {
+        let viewModel = CalculatorViewModel()
+
+        enter("100", into: viewModel)
+        viewModel.setOperator(.multiply)
+        enter("15", into: viewModel)
+        viewModel.applyPercent()
+
+        XCTAssertEqual(viewModel.display, "0.15")
+        XCTAssertEqual(viewModel.expressionDisplay, "100 × 15%")
+
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "15")
+        XCTAssertEqual(viewModel.expressionDisplay, "100 × 15% =")
+        XCTAssertEqual(viewModel.history.first?.expression, "100 × 15%")
+        XCTAssertEqual(viewModel.history.first?.result, "15")
     }
 
     func testPercentAfterStandalonePercentUsesStandaloneSemantics() {
@@ -1222,6 +1245,47 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(NSPasteboard.general.string(forType: .string), "=round(5,0)")
     }
 
+    func testRoundedOperationCopyOmitsCurrencySymbols() throws {
+        let viewModel = CalculatorViewModel()
+
+        pasteString("$5", into: viewModel)
+        viewModel.beginResultRounding()
+        viewModel.setResultRoundingPrecision(3)
+
+        XCTAssertEqual(viewModel.expressionDisplay, "=round($5, 0)")
+
+        viewModel.copyOperationToPasteboard()
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "=round(5,0)")
+
+        viewModel.commitResultRoundingInteraction()
+
+        let entry = try XCTUnwrap(viewModel.history.first)
+        XCTAssertEqual(entry.displayExpression, "=round($5, 0)")
+
+        viewModel.copyOperationToPasteboard(entry)
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "=round(5,0)")
+    }
+
+    func testCurrencyRoundingDisplaysTwoDecimalsWithoutNormalPadding() throws {
+        let viewModel = CalculatorViewModel()
+
+        pasteString("$5", into: viewModel)
+        XCTAssertEqual(viewModel.display, "$5")
+
+        viewModel.beginResultRounding()
+        viewModel.setResultRoundingPrecision(3)
+
+        XCTAssertEqual(viewModel.display, "$5.00")
+
+        viewModel.copyToPasteboard()
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "$5.00")
+
+        viewModel.commitResultRoundingInteraction()
+
+        let entry = try XCTUnwrap(viewModel.history.first)
+        XCTAssertEqual(entry.displayResult, "$5.00")
+    }
+
     func testResultRoundingLevelsRoundFromLeastSignificantDigit() {
         let viewModel = CalculatorViewModel()
 
@@ -1310,8 +1374,189 @@ final class CalculatorViewModelTests: XCTestCase {
         let viewModel = CalculatorViewModel()
         viewModel.pasteFromPasteboard()
 
-        XCTAssertEqual(viewModel.display, "1,234.50")
+        XCTAssertEqual(viewModel.display, "$1,234.5")
         XCTAssertFalse(viewModel.isErrorState)
+    }
+
+    func testLeadingCurrencyPasteKeepsCurrencyActiveUntilAllClear() {
+        let viewModel = CalculatorViewModel()
+
+        pasteString("$12.3", into: viewModel)
+        XCTAssertEqual(viewModel.display, "$12.3")
+
+        viewModel.setOperator(.add)
+        enter("1", into: viewModel)
+        XCTAssertEqual(viewModel.expressionDisplay, "$12.3 + $1")
+
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "$13.3")
+        XCTAssertEqual(viewModel.history.first?.displayExpression, "$12.3 + $1")
+        XCTAssertEqual(viewModel.history.first?.displayResult, "$13.3")
+
+        viewModel.clearAll()
+        XCTAssertEqual(viewModel.display, "0")
+    }
+
+    func testCurrencyReuseRestoresCurrencyAwareState() throws {
+        let viewModel = CalculatorViewModel()
+
+        pasteString("€12.34", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("1", into: viewModel)
+        viewModel.evaluate()
+
+        let entry = try XCTUnwrap(viewModel.history.first)
+        XCTAssertEqual(entry.displayExpression, "€12.34 + €1")
+        XCTAssertEqual(entry.displayResult, "€13.34")
+
+        viewModel.clearAll()
+        viewModel.reuse(entry)
+
+        XCTAssertEqual(viewModel.display, "€13.34")
+        XCTAssertEqual(viewModel.expressionDisplay, "€12.34 + €1 =")
+    }
+
+    func testCurrencyOperationCopyThenPasteReplaysAndRestoresCurrencyMode() {
+        let sourceViewModel = CalculatorViewModel()
+
+        pasteString("$12.34", into: sourceViewModel)
+        sourceViewModel.setOperator(.add)
+        enter("1", into: sourceViewModel)
+        sourceViewModel.evaluate()
+        sourceViewModel.copyOperationToPasteboard()
+
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "$12.34 + $1 = $13.34")
+
+        let pastedViewModel = CalculatorViewModel()
+        pastedViewModel.pasteFromPasteboard()
+
+        XCTAssertEqual(pastedViewModel.display, "$13.34")
+        XCTAssertEqual(pastedViewModel.expressionDisplay, "$12.34 + $1 =")
+        XCTAssertFalse(pastedViewModel.isErrorState)
+    }
+
+    func testTypingCurrencySymbolActivatesCurrencyFormatting() {
+        let viewModel = CalculatorViewModel()
+
+        viewModel.inputCurrencySymbol("$")
+        enter("1", into: viewModel)
+        viewModel.inputDecimal()
+        enter("2", into: viewModel)
+
+        XCTAssertEqual(viewModel.display, "$1.2")
+
+        viewModel.setOperator(.add)
+        enter("2", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "$3.2")
+    }
+
+    func testTypingCurrencyZerosPreservesLiveFractionPrecision() {
+        let viewModel = CalculatorViewModel()
+
+        viewModel.inputCurrencySymbol("$")
+        viewModel.inputDecimal()
+        XCTAssertEqual(viewModel.display, "$0.")
+
+        viewModel.inputDigit("0")
+        XCTAssertEqual(viewModel.display, "$0.0")
+
+        viewModel.inputDigit("0")
+        viewModel.inputDigit("0")
+        XCTAssertEqual(viewModel.display, "$0.000")
+
+        enter("43", into: viewModel)
+        XCTAssertEqual(viewModel.display, "$0.00043")
+
+        viewModel.copyToPasteboard()
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "$0.00043")
+    }
+
+    func testBitcoinCurrencySymbolIsSupported() {
+        let viewModel = CalculatorViewModel()
+
+        viewModel.inputCurrencySymbol("₿")
+        enter("1", into: viewModel)
+        viewModel.inputDecimal()
+        enter("2", into: viewModel)
+
+        XCTAssertEqual(viewModel.display, "₿1.2")
+
+        viewModel.copyToPasteboard()
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "₿1.2")
+    }
+
+    func testPastingBitcoinCurrencyPreservesExtendedFractionPrecision() {
+        let viewModel = CalculatorViewModel()
+
+        pasteString("₿1.00043", into: viewModel)
+
+        XCTAssertEqual(viewModel.display, "₿1.00043")
+
+        viewModel.copyToPasteboard()
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "₿1.00043")
+    }
+
+    func testPastingCentsNotationConvertsToDollarCurrencyMode() {
+        let viewModel = CalculatorViewModel()
+
+        pasteString("12¢", into: viewModel)
+
+        XCTAssertEqual(viewModel.display, "$0.12")
+
+        viewModel.copyToPasteboard()
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "$0.12")
+    }
+
+    func testCurrencyCopyUsesActiveNumberStyleDecimalSeparator() {
+        let viewModel = CalculatorViewModel(numberFormatStyle: .french)
+
+        pasteString("€1,2", into: viewModel)
+        XCTAssertEqual(viewModel.display, "€1,2")
+
+        viewModel.copyToPasteboard()
+
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "€1,2")
+    }
+
+    func testCurrencyModePercentOverridesCurrencyInMultiplyExpression() {
+        let viewModel = CalculatorViewModel()
+
+        pasteString("$100", into: viewModel)
+        viewModel.setOperator(.multiply)
+        enter("115", into: viewModel)
+        viewModel.applyPercent()
+
+        XCTAssertEqual(viewModel.display, "1.15")
+        XCTAssertEqual(viewModel.expressionDisplay, "$100 × 115%")
+
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "$115")
+        XCTAssertEqual(viewModel.expressionDisplay, "$100 × 115% =")
+        XCTAssertEqual(viewModel.history.first?.displayExpression, "$100 × 115%")
+        XCTAssertEqual(viewModel.history.first?.displayResult, "$115")
+    }
+
+    func testCurrencyModePercentOverridesCurrencyInDivisionExpression() {
+        let viewModel = CalculatorViewModel()
+
+        pasteString("€93.33", into: viewModel)
+        viewModel.setOperator(.divide)
+        enter("60", into: viewModel)
+        viewModel.applyPercent()
+
+        XCTAssertEqual(viewModel.display, "0.6")
+        XCTAssertEqual(viewModel.expressionDisplay, "€93.33 ÷ 60%")
+
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "€155.55")
+        XCTAssertEqual(viewModel.expressionDisplay, "€93.33 ÷ 60% =")
+        XCTAssertEqual(viewModel.history.first?.displayExpression, "€93.33 ÷ 60%")
+        XCTAssertEqual(viewModel.history.first?.displayResult, "€155.55")
     }
 
     func testPasteFromPasteboardConvertsFrenchNumberToWesternActiveFormat() {

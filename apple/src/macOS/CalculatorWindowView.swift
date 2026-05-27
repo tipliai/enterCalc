@@ -1161,6 +1161,9 @@ struct CalculatorWindowView: View {
             handled = true
         case "%": viewModel.applyPercent()
             handled = true
+        case "$", "€", "£", "¥", "₹", "₩", "₽", "฿", "₺", "₫", "₴", "₪", "₦", "₱", "₲", "₡", "₵", "₭", "₮", "₤", "₳", "₸", "₼", "₾", "₣", "₠", "₧", "₯", "₿":
+            viewModel.inputCurrencySymbol(inputChars)
+            handled = true
         default:
             break
         }
