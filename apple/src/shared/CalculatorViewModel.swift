@@ -990,18 +990,7 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     public func copyToPasteboard() {
-        let valueToClipboard: String
-        if isResultRoundingEnabled && !isErrorState {
-            valueToClipboard = roundedValueString(precision: resultRoundingPrecision)
-        } else {
-            valueToClipboard = currentInput
-        }
-        let clipboardValue = clipboardNumberString(
-            from: valueToClipboard,
-            preserveTrailingZeros: (!isResultRoundingEnabled && shouldPreserveTypedCurrencyInput)
-                || (isResultRoundingEnabled && activeCurrencySymbol != nil)
-        ) ?? display
-        writeStringToPasteboard(clipboardValue)
+        writeStringToPasteboard(display)
     }
 
     public func copyOperationToPasteboard() {
