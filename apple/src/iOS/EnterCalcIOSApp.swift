@@ -633,13 +633,44 @@ private extension EnterCalcIOSView {
     }
 
     func handleHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
-        let unsupportedModifiers = event.modifierFlags.intersection([.command, .control])
+        let unsupportedModifiers = event.modifierFlags.intersection([.control])
         guard unsupportedModifiers.isEmpty else {
             DebugLog.emit(
                 "KEY",
                 "iOS key ignored due to modifiers code:\(event.keyCode?.rawValue.description ?? "nil") modifiers:\(event.modifierFlags.rawValue)"
             )
             return false
+        }
+
+        let chars = event.charactersIgnoringModifiers ?? ""
+        let inputChars = event.characters ?? chars
+        let isCommand = event.modifierFlags.contains(.command)
+
+        if isCommand {
+            if event.keyCode == .keyboardDeleteOrBackspace || event.keyCode == .keyboardDeleteForward {
+                viewModel.clearAll()
+                return true
+            }
+            switch chars.lowercased() {
+            case "c":
+                copyCurrentResultToPasteboard(from: viewModel)
+                return true
+            case "v":
+                pasteFromPasteboard(into: viewModel)
+                return true
+            case "z":
+                if event.modifierFlags.contains(.shift) {
+                    viewModel.redo()
+                } else {
+                    viewModel.undo()
+                }
+                return true
+            case "y":
+                viewModel.redo()
+                return true
+            default:
+                break
+            }
         }
 
         if handleHistoryOverlayHardwareKey(event) {
@@ -650,8 +681,6 @@ private extension EnterCalcIOSView {
             return true
         }
 
-        let chars = event.charactersIgnoringModifiers ?? ""
-        let inputChars = event.characters ?? chars
         let insertFunctionCharacter = Character(UnicodeScalar(0xF727)!)
         let isInsertLikeHIDUsage = event.keyCode.map { code in
             // Apple keyboards can report the physical Insert key as Help (0x75).

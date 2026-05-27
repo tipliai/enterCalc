@@ -20,3 +20,7 @@ EnterCalc: A simple yet powerful macOS and iOS calculator.
 
 - Repository: [github.com/tipliai/enterCalc](https://github.com/tipliai/enterCalc)
 - License: [MIT License](https://github.com/tipliai/enterCalc/blob/main/LICENSE)
+
+## Engineering Docs
+
+- Keyboard actions and context matrix: [Keyboard Actions Matrix](./keyboard)

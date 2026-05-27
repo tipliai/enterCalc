@@ -1220,6 +1220,16 @@ struct CalculatorWindowView: View {
             case "v":
                 viewModel.pasteFromPasteboard()
                 return true
+            case "z":
+                if event.modifierFlags.contains(.shift) {
+                    viewModel.redo()
+                } else {
+                    viewModel.undo()
+                }
+                return true
+            case "y":
+                viewModel.redo()
+                return true
             default:
                 break
             }
