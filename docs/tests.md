@@ -4,8 +4,8 @@ This document tracks the shared-module checks currently discovered by `swift tes
 Each row maps directly to a discovered test method in `apple/tests/CalculatorViewModelTests.swift`.
 
 Current verification status on macOS:
-- `swift test list` discovers `143` `CalculatorViewModelTests` methods.
-- This matrix documents the same `143` methods with no missing or extra entries.
+- `swift test list` discovers `150` `CalculatorViewModelTests` methods.
+- This matrix documents the same `150` methods with no missing or extra entries.
 - The current macOS run includes the AppKit-only clipboard tests guarded by `canImport(AppKit)`.
 
 ## UI Settings Expectations
@@ -58,13 +58,20 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Arithmetic | Enter `5 + 2 = = =` | Display advances through `7`, `9`, `11`; final expression `9 + 2 =`; history records results for `5 + 2`, `7 + 2`, `9 + 2` | `testRepeatedEqualsRepeatsLastBinaryOperation` |
 | Parentheses | Evaluate `( 2 + 3 ) × 4 =` | Display `20`; expression and history preserve grouped precedence | `testParenthesesExpressionEvaluatesWithExpectedPrecedence` |
 | Parentheses | Use the toggle button to insert `(` then `)` around `8`, then add `2` | Display `10`; history expression is `( 8 ) + 2` | `testParenthesesToggleButtonInsertsOpenThenClose` |
+| Parentheses | Enter `6 + 6` then `(` | Expression keeps the pending right operand and becomes `6 + 6 × (` rather than collapsing to `6 + (` | `testTypingOpenParenthesisAfterPendingRightOperandPreservesThatOperand` |
 | Parentheses | Enter `8 × ( 9² )` and evaluate | Display `648`; visible history uses `9²` while stored history uses `sqr(9)` | `testSquareInsideParenthesesRemainsInExpressionAndEvaluates` |
+| Percent | Enter `1 + 2 × ( 100%` and evaluate | Before `=`, display stays `100%`; evaluation treats `%` as decimal and resolves to `3` with expression `1 + 2 × ( 100% ) =` | `testPercentInsideParenthesizedExpressionStaysVisibleUntilEvaluate` |
+| Percent | Enter `1 + 5 × ( 200% ) =` | Evaluation treats `%` as decimal inside parentheses, resulting in `11`; history stores `1 + 5 × ( 200% )` | `testPercentInsideParenthesizedExpressionEvaluatesAsDecimalPercent` |
 | Arithmetic | Enter `50`, apply percent | Display `0.5`, expression `50%`, no error state | `testPercentConvertsCurrentInputToDecimalValue` |
 | Percent | Enable classic percent mode, evaluate `50`, then apply percent | Display `25`; expression remains `50%` | `testClassicPercentModeTreatsEvaluatedValuesLikeClassicBehavior` |
 | Percent | Enable classic percent mode, enter `50`, then apply percent as standalone input | Display `0`; expression remains `50%` | `testClassicPercentModeTreatsStandaloneInputLikeCalculator` |
-| Percent | Evaluate `10 + 10%` | Display `11`; expression resolves to `10 + 1 =`; history stores `10 + 1` | `testPercentMatchesCalculatorForAddition` |
-| Percent | Evaluate `10 ÷ 10%` | Pre-equals display shows `0.1`; expression stays `10 ÷ 10%`; final history stores `10 ÷ 10% -> 100` | `testPercentMatchesCalculatorForDivision` |
-| Percent | Evaluate `100 × 15%` | Pre-equals display shows `0.15`; expression stays `100 × 15%`; final history stores `100 × 15% -> 15` | `testPercentMatchesCalculatorForMultiplication` |
+| Percent | Evaluate `10 + 10%` | Display `11`; expression preserves percent as `10 + 10% =`; history stores `10 + 10%` | `testPercentMatchesCalculatorForAddition` |
+| Percent | Repeat evaluate after `100 + 50% =` | First evaluation shows `100 + 50% = 150`; repeated equals collapses the operand in display (`150 + 50 = 200`, then `200 + 50 = 250`) | `testRepeatedEqualsAfterPercentShowsResolvedOperandInExpression` |
+| Percent | Evaluate `200 − 10%` | Pre-equals display shows `10%`; expression stays `200 − 10%`; final history stores `200 − 10% -> 180` | `testPercentMatchesCalculatorForSubtraction` |
+| Percent | Evaluate `10 ÷ 10%` | Pre-equals display shows `10%`; expression stays `10 ÷ 10%`; final history stores `10 ÷ 10% -> 100` | `testPercentMatchesCalculatorForDivision` |
+| Percent | Evaluate `100 × 15%` | Pre-equals display shows `15%`; expression stays `100 × 15%`; final history stores `100 × 15% -> 15` | `testPercentMatchesCalculatorForMultiplication` |
+| Percent | Evaluate `5 ÷ 200%` | Pre-equals display shows `200%`; expression stays `5 ÷ 200%`; final history stores `5 ÷ 200% -> 2.5` | `testDivisionWithTwoHundredPercentKeepsPercentVisibleUntilEvaluate` |
+| Percent | In currency mode, enter `$6 + 200%` then evaluate | Before `=`, display stays `200%`; evaluation finalizes to `$12` and preserves expression `$6 + 200% =` | `testCurrencyPercentInPendingAdditionStaysVisibleUntilEvaluate` |
 | Percent | Apply `5%`, then add `3%` and evaluate | Display `0.08`; expression and history remain `5% + 3%` | `testPercentAfterStandalonePercentUsesStandaloneSemantics` |
 | Percent | Apply `5%`, then add `3` and evaluate | Display `3.05`; expression and history remain `5% + 3` | `testAdditionAfterStandalonePercentUsesPercentValueAsLeftOperand` |
 | Error handling | Enter `9 ÷ 0 =` | Error state enabled, display `Cannot divide by zero`, empty expression, undo remains available | `testDivideByZeroSetsLocalizedErrorState` |
@@ -81,6 +88,7 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Editing state | Enter `1234`, then press the left arrow key twice while editing the result display | The first press activates the caret from the trailing edge and subsequent presses move it left through grouped output boundaries | `testDisplayEditCursorLeftArrowMovesCaretLeftFromTrailingEdge` |
 | Editing state | Enter `1234`, place the display caret between `2` and `3`, then press the right arrow key twice | The caret advances right through grouped output boundaries and reaches the trailing edge of the result | `testDisplayEditCursorRightArrowMovesCaretRightAndReachesTrailingEdge` |
 | Editing state | Enter `1234 +`, place the display caret inside the shown left operand, edit it, then enter a right-hand value | The pending operation preview updates to the edited left operand and evaluation uses that edited value | `testDisplayEditCursorCanModifyPendingOperationLeftOperand` |
+| Editing state | Build a parenthesized expression and edit an in-progress operand from the result display caret | Direct editing updates the operand token inside expression mode without breaking parenthesis state | `testDisplayEditCursorCanModifyOperandInsideParenthesesExpressionMode` |
 | Editing state | Enter `1234`, edit the displayed value, then press `+` before typing the next number | The operator exits direct edit mode, preserves the edited left operand, and the next digit starts a fresh pending right-hand operand | `testSetOperatorExitsDisplayEditModeAndStartsFreshPendingOperand` |
 | Editing state | In each supported number style, place the caret on a grouping separator and then on the decimal separator in `58,544.545`-style output | Grouping separators collapse to the preceding digit boundary, while the decimal separator remains directly selectable | `testDisplayEditCursorIgnoresGroupingSeparatorsAcrossSupportedNumberStyles` |
 | Display layout | Render `12,345,678,901,234,567` into a constrained editable display width | The editable layout shrinks the font instead of overflowing, and the trailing boundary remains inside the available display width | `testEditableDisplayLayoutScalesLongNumbersToFitAvailableWidth` |
