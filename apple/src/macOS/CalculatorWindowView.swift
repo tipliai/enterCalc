@@ -560,7 +560,10 @@ struct CalculatorWindowView: View {
               if hovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
         }
         .onTapGesture {
-            guard !viewModel.isDirectlyEditingDisplay else { return }
+            if viewModel.isDirectlyEditingDisplay {
+                viewModel.clearDisplayEditCursor()
+                return
+            }
             copyDisplayToPasteboardWithFlash()
         }
         .overlay {
