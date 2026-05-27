@@ -417,7 +417,7 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.memoryDisplay, "1 234,5")
 
         viewModel.copyToPasteboard()
-        XCTAssertEqual(clipboardString(), "1240,17")
+        XCTAssertEqual(clipboardString(), "1 240,17")
 
         pasteString("2,5", into: viewModel)
         XCTAssertEqual(viewModel.display, "2,5")
@@ -1329,13 +1329,13 @@ final class CalculatorViewModelTests: XCTestCase {
     }
 
     #if canImport(AppKit)
-    func testCopyToPasteboardWritesUngroupedValue() {
+    func testCopyToPasteboardWritesDisplayedGroupedValue() {
         let viewModel = CalculatorViewModel()
 
         enter("1234", into: viewModel)
         viewModel.copyToPasteboard()
 
-        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "1234")
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "1,234")
     }
 
     func testCopyToPasteboardUsesLocalizedDecimalSeparatorForFrenchStyle() {

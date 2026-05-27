@@ -4,8 +4,8 @@ This document tracks the shared-module checks currently discovered by `swift tes
 Each row maps directly to a discovered test method in `apple/tests/CalculatorViewModelTests.swift`.
 
 Current verification status on macOS:
-- `swift test list` discovers `150` `CalculatorViewModelTests` methods.
-- This matrix documents the same `150` methods with no missing or extra entries.
+- `swift test list` discovers `151` `CalculatorViewModelTests` methods.
+- This matrix documents the same `151` methods with no missing or extra entries.
 - The current macOS run includes the AppKit-only clipboard tests guarded by `canImport(AppKit)`.
 
 ## UI Settings Expectations
@@ -117,7 +117,7 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Localization | Resolve localization code for unknown `zz-ZZ` | Falls back to `en` | `testResolvedLocalizationCodeFallsBackToEnglishForUnknownLanguage` |
 | Localization | Resolve localization code for `default` with preferred language `de-DE` | Uses `de` from the preferred language list | `testResolvedLocalizationCodeUsesPreferredLanguageForDefaultSelection` |
 | Licensing/resources | Read repository `LICENSE` file | License contains `MIT License` and `Tipli AI` | `testLicenseFileContainsRequiredNotices` |
-| Clipboard | Enter `1234`, copy to pasteboard | Pasteboard string is `1234` | `testCopyToPasteboardWritesUngroupedValue` |
+| Clipboard | Enter `1234`, copy to pasteboard | Pasteboard string preserves displayed grouping as `1,234` | `testCopyToPasteboardWritesDisplayedGroupedValue` |
 | Clipboard | With French number format (`1 234 567,89`), copy `8,333` | Pasteboard preserves the localized decimal separator and ungrouped value (`8,333`) | `testCopyToPasteboardUsesLocalizedDecimalSeparatorForFrenchStyle` |
 | Clipboard | Copy operation `12 + 3 = 15`, then paste into a fresh view model | Pasted display is `15`; history stays empty; no error state | `testCopyOperationThenPasteReplaysTheOperation` |
 | Clipboard | Paste `$1,234.50` from the pasteboard | Display normalizes to `$1,234.5`; no error state | `testPasteFromPasteboardNormalizesFormattedNumericContent` |
