@@ -669,7 +669,7 @@ private extension EnterCalcIOSView {
                 viewModel.redo()
                 return true
             default:
-                break
+                return false
             }
         }
 

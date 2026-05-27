@@ -54,9 +54,10 @@ public struct EditableDisplayResultText: View {
 
                 ForEach(Array(layout.tapRegions.enumerated()), id: \.offset) { index, region in
                     Color.clear
-                        .frame(width: region.width, height: max(layout.lineHeight, geometry.size.height))
+                        .frame(width: region.width, height: layout.lineHeight)
                         .contentShape(Rectangle())
-                        .position(x: region.midX, y: max(layout.lineHeight, geometry.size.height) / 2)
+                        .offset(x: region.midX - (region.width / 2), y: 0)
+                        .editableDisplayHoverCursor()
                         .onTapGesture {
                             onTapBoundary(index)
                         }
@@ -178,7 +179,9 @@ struct EditableDisplayResultTextLayout {
         guard !boundaryXPositions.isEmpty else { return [] }
         let leadingEdge = max(0, boundaryXPositions.first ?? 0)
         let trailingEdge = min(availableWidth, leadingEdge + trailingTextWidth)
-        let edgePadding: CGFloat = 8
+        // Keep boundary taps close to rendered glyphs to avoid entering edit mode
+        // when users click in the broader display chrome.
+        let edgePadding: CGFloat = 0
 
         return boundaryXPositions.indices.map { index in
             let left: CGFloat
@@ -197,7 +200,7 @@ struct EditableDisplayResultTextLayout {
 
             return TapRegion(
                 midX: (left + right) * 0.5,
-                width: max(18, right - left)
+                width: max(6, right - left)
             )
         }
     }
@@ -250,5 +253,20 @@ private struct EditableDisplayOnChangeModifier<Value: Equatable>: ViewModifier {
 private extension View {
     func editableDisplayOnChange<Value: Equatable>(of value: Value, perform action: @escaping () -> Void) -> some View {
         modifier(EditableDisplayOnChangeModifier(value: value, action: action))
+    }
+
+    @ViewBuilder
+    func editableDisplayHoverCursor() -> some View {
+        #if canImport(AppKit)
+        self.onHover { hovering in
+            if hovering {
+                NSCursor.iBeam.set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
+        #else
+        self
+        #endif
     }
 }

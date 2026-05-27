@@ -51,4 +51,4 @@ Opening the `apple/` folder itself will surface the local Swift package (`EnterC
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Issue reporting guidance and pull request policy
 - [android/README.md](android/README.md) — Native Android placeholder structure and shared-resource strategy
-- [docs/keyboard_actions_matrix.md](docs/keyboard.md) — Keyboard actions and context behavior matrix for iOS and macOS
+- [docs/keyboard.md](docs/keyboard.md) — Keyboard actions and context behavior matrix for iOS and macOS

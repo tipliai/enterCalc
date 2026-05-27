@@ -1231,7 +1231,7 @@ struct CalculatorWindowView: View {
                 viewModel.redo()
                 return true
             default:
-                break
+                return false
             }
         }
 

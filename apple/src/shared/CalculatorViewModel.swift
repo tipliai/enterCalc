@@ -432,8 +432,12 @@ public final class CalculatorViewModel: ObservableObject {
         }
         isErrorState = false
         if let cursorIndex = activeDisplayEditCursorIndex {
-            resetPostEvaluateStateForDirectDisplayEditingIfNeeded()
+            let previousInput = currentInput
+            let previousCursor = displayEditCursorIndex
             insertDigitIntoCurrentInput(digit, at: cursorIndex)
+            if currentInput != previousInput || displayEditCursorIndex != previousCursor {
+                resetPostEvaluateStateForDirectDisplayEditingIfNeeded()
+            }
         } else if currentInput == "0" {
             currentInput = digit
         } else if currentInputDigitCount < Limits.maxInputDigits {
@@ -472,8 +476,12 @@ public final class CalculatorViewModel: ObservableObject {
         isErrorState = false
         let decimalSeparator = numberFormatStyle.decimalSeparator
         if let cursorIndex = activeDisplayEditCursorIndex {
-            resetPostEvaluateStateForDirectDisplayEditingIfNeeded()
+            let previousInput = currentInput
+            let previousCursor = displayEditCursorIndex
             insertDecimalIntoCurrentInput(at: cursorIndex)
+            if currentInput != previousInput || displayEditCursorIndex != previousCursor {
+                resetPostEvaluateStateForDirectDisplayEditingIfNeeded()
+            }
         } else if !currentInput.contains(decimalSeparator), !currentInput.contains("."), currentInputDigitCount < Limits.maxInputDigits {
             currentInput.append(contentsOf: decimalSeparator)
         }
@@ -659,8 +667,12 @@ public final class CalculatorViewModel: ObservableObject {
         isPendingEntryClearedByClearButton = false
 
         if let cursorIndex = activeDisplayEditCursorIndex {
-            resetPostEvaluateStateForDirectDisplayEditingIfNeeded()
+            let previousInput = currentInput
+            let previousCursor = displayEditCursorIndex
             deleteDigitBeforeDisplayCursor(cursorIndex)
+            if currentInput != previousInput || displayEditCursorIndex != previousCursor {
+                resetPostEvaluateStateForDirectDisplayEditingIfNeeded()
+            }
             shouldPreserveTypedCurrencyInput = activeCurrencySymbol != nil
             setCurrentTokenToCurrentInput()
             updateDisplay()
