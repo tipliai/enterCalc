@@ -1932,7 +1932,7 @@ private extension EnterCalcIOSView {
             }
             .contentShape(displayShape)
             .onTapGesture {
-                guard !screen.viewModel.canDirectlyEditDisplay else { return }
+                guard !screen.viewModel.isDirectlyEditingDisplay else { return }
                 copyDisplayToPasteboardWithFlash(from: screen.viewModel)
             }
         }
