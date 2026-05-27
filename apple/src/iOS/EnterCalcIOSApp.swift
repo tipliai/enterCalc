@@ -634,16 +634,30 @@ private extension EnterCalcIOSView {
             openRoundingOverlayFromKeyboard()
             return true
         case .keyboardLeftArrow:
+            if activeOverlay != .rounding {
+                return viewModel.moveDisplayEditCursorLeft()
+            }
             return adjustRoundingSelectionFromKeyboard(delta: -1)
         case .keyboardRightArrow:
+            if activeOverlay != .rounding {
+                return viewModel.moveDisplayEditCursorRight()
+            }
             return adjustRoundingSelectionFromKeyboard(delta: 1)
         case .keyboardEscape:
+            if viewModel.isDirectlyEditingDisplay {
+                viewModel.clearDisplayEditCursor()
+                return true
+            }
             viewModel.clearAll()
             return true
         case .keyboardDeleteOrBackspace:
             viewModel.backspace()
             return true
         case .keyboardReturnOrEnter, .keypadEnter:
+            if viewModel.isDirectlyEditingDisplay {
+                viewModel.clearDisplayEditCursor()
+                return true
+            }
             viewModel.evaluate()
             return true
         default:
@@ -1870,13 +1884,28 @@ private extension EnterCalcIOSView {
                             .allowsTightening(true)
                             .minimumScaleFactor(0.35)
 
-                        Text(screen.viewModel.display)
-                            .font(EnterCalcFont.appFont(size: metrics.displayFontSize(for: resultsTextHeight)))
-                            .foregroundStyle(palette.textPrimary)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                            .lineLimit(1)
-                            .allowsTightening(true)
-                            .minimumScaleFactor(0.22)
+                        if screen.viewModel.canDirectlyEditDisplay {
+                            EditableDisplayResultText(
+                                text: screen.viewModel.display,
+                                fontSize: metrics.displayFontSize(for: resultsTextHeight),
+                                foregroundColor: palette.textPrimary,
+                                minScaleFactor: 0.22,
+                                caretBoundaryIndex: screen.viewModel.displayEditCaretBoundaryIndex,
+                                caretColor: palette.textPrimary,
+                                onTapBoundary: { boundaryIndex in
+                                    screen.viewModel.setDisplayEditCursor(displayBoundaryIndex: boundaryIndex)
+                                }
+                            )
+                            .frame(maxWidth: .infinity, minHeight: metrics.displayFontSize(for: resultsTextHeight) * 1.12, alignment: .trailing)
+                        } else {
+                            Text(screen.viewModel.display)
+                                .font(EnterCalcFont.appFont(size: metrics.displayFontSize(for: resultsTextHeight)))
+                                .foregroundStyle(palette.textPrimary)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                                .lineLimit(1)
+                                .allowsTightening(true)
+                                .minimumScaleFactor(0.22)
+                        }
                     }
                     .padding(.horizontal, metrics.displayHorizontalPadding)
                     .padding(.vertical, metrics.displayVerticalPadding)
@@ -1919,6 +1948,7 @@ private extension EnterCalcIOSView {
     }
 
     func copyDisplayToPasteboardWithFlash(from viewModel: CalculatorViewModel) {
+        viewModel.clearDisplayEditCursor()
         viewModel.copyToPasteboard()
         triggerActionFeedback(emphasized: true)
         showCopiedToast()
@@ -1945,6 +1975,7 @@ private extension EnterCalcIOSView {
     }
 
     func copyCurrentResultToPasteboard(from viewModel: CalculatorViewModel) {
+        viewModel.clearDisplayEditCursor()
         viewModel.copyToPasteboard()
         triggerActionFeedback()
         showCopiedToast()
@@ -1952,6 +1983,7 @@ private extension EnterCalcIOSView {
 
     func copyCurrentOperationToPasteboard(from viewModel: CalculatorViewModel) {
         guard viewModel.hasOperationToCopy else { return }
+        viewModel.clearDisplayEditCursor()
         viewModel.copyOperationToPasteboard()
         triggerActionFeedback()
         showCopiedToast()
@@ -1963,12 +1995,14 @@ private extension EnterCalcIOSView {
     }
 
     func copyHistoryEntryResultToPasteboard(_ entry: HistoryEntry, from viewModel: CalculatorViewModel) {
+        viewModel.clearDisplayEditCursor()
         viewModel.copyResultToPasteboard(entry)
         triggerActionFeedback()
         showCopiedToast()
     }
 
     func copyHistoryEntryOperationToPasteboard(_ entry: HistoryEntry, from viewModel: CalculatorViewModel) {
+        viewModel.clearDisplayEditCursor()
         viewModel.copyOperationToPasteboard(entry)
         triggerActionFeedback()
         showCopiedToast()

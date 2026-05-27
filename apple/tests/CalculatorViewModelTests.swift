@@ -2379,4 +2379,183 @@ final class CalculatorViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.expressionDisplay, "2 + ( 3 + 4 ) × 6")
     }
+
+    func testDisplayEditCursorCanInsertDigitInsideGroupedDisplay() {
+        let viewModel = CalculatorViewModel()
+
+        enter("1234", into: viewModel)
+        viewModel.setDisplayEditCursor(displayBoundaryIndex: 3)
+        viewModel.inputDigit("9")
+
+        XCTAssertEqual(viewModel.display, "12,934")
+        XCTAssertEqual(viewModel.displayEditCaretBoundaryIndex, 4)
+    }
+
+    func testDisplayEditCursorBackspaceRemovesDigitBeforeCursor() {
+        let viewModel = CalculatorViewModel()
+
+        enter("1234", into: viewModel)
+        viewModel.setDisplayEditCursor(displayBoundaryIndex: 3)
+        viewModel.backspace()
+
+        XCTAssertEqual(viewModel.display, "134")
+        XCTAssertEqual(viewModel.displayEditCaretBoundaryIndex, 1)
+    }
+
+    func testDisplayEditCursorCanInsertDecimalWithinCurrentInput() {
+        let viewModel = CalculatorViewModel()
+
+        enter("12", into: viewModel)
+        viewModel.setDisplayEditCursor(displayBoundaryIndex: 1)
+        viewModel.inputDecimal()
+
+        XCTAssertEqual(viewModel.display, "1.2")
+        XCTAssertEqual(viewModel.displayEditCaretBoundaryIndex, 2)
+    }
+
+    func testDisplayEditCursorCanModifyEvaluatedResult() {
+        let viewModel = CalculatorViewModel()
+
+        enter("12", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("3", into: viewModel)
+        viewModel.evaluate()
+
+        viewModel.setDisplayEditCursor(displayBoundaryIndex: 1)
+        viewModel.inputDigit("9")
+
+        XCTAssertEqual(viewModel.display, "195")
+        XCTAssertEqual(viewModel.displayEditCaretBoundaryIndex, 2)
+    }
+
+    func testDisplayEditCursorLeftArrowMovesCaretLeftFromTrailingEdge() {
+        let viewModel = CalculatorViewModel()
+
+        enter("1234", into: viewModel)
+
+        XCTAssertTrue(viewModel.moveDisplayEditCursorLeft())
+        XCTAssertEqual(viewModel.displayEditCaretBoundaryIndex, 4)
+        XCTAssertTrue(viewModel.moveDisplayEditCursorLeft())
+        XCTAssertEqual(viewModel.displayEditCaretBoundaryIndex, 3)
+    }
+
+    func testDisplayEditCursorRightArrowMovesCaretRightAndReachesTrailingEdge() {
+        let viewModel = CalculatorViewModel()
+
+        enter("1234", into: viewModel)
+        viewModel.setDisplayEditCursor(displayBoundaryIndex: 3)
+
+        XCTAssertTrue(viewModel.moveDisplayEditCursorRight())
+        XCTAssertEqual(viewModel.displayEditCaretBoundaryIndex, 4)
+        XCTAssertTrue(viewModel.moveDisplayEditCursorRight())
+        XCTAssertEqual(viewModel.displayEditCaretBoundaryIndex, 5)
+    }
+
+    func testDisplayEditCursorCanModifyPendingOperationLeftOperand() {
+        let viewModel = CalculatorViewModel()
+
+        enter("1234", into: viewModel)
+        viewModel.setOperator(.add)
+
+        XCTAssertTrue(viewModel.canDirectlyEditDisplay)
+
+        viewModel.setDisplayEditCursor(displayBoundaryIndex: 2)
+        viewModel.inputDigit("9")
+
+        XCTAssertEqual(viewModel.display, "19,234")
+        XCTAssertEqual(viewModel.expressionDisplay, "19,234 +")
+
+        viewModel.clearDisplayEditCursor()
+        enter("5", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "19,239")
+    }
+
+    func testSetOperatorExitsDisplayEditModeAndStartsFreshPendingOperand() {
+        let viewModel = CalculatorViewModel()
+
+        enter("1234", into: viewModel)
+        viewModel.setDisplayEditCursor(displayBoundaryIndex: 3)
+        viewModel.inputDigit("9")
+
+        XCTAssertEqual(viewModel.display, "12,934")
+        XCTAssertNotNil(viewModel.displayEditCaretBoundaryIndex)
+
+        viewModel.setOperator(.add)
+
+        XCTAssertNil(viewModel.displayEditCaretBoundaryIndex)
+        XCTAssertEqual(viewModel.expressionDisplay, "12,934 +")
+
+        enter("5", into: viewModel)
+        XCTAssertEqual(viewModel.display, "5")
+        XCTAssertEqual(viewModel.expressionDisplay, "12,934 + 5")
+
+        viewModel.evaluate()
+        XCTAssertEqual(viewModel.display, "12,939")
+    }
+
+    func testDisplayEditCursorIgnoresGroupingSeparatorsAcrossSupportedNumberStyles() {
+        let styles: [NumberFormatStyle] = [.western, .european, .french, .swiss, .indian]
+
+        for style in styles {
+            let viewModel = CalculatorViewModel(numberFormatStyle: style)
+
+            enter("58544", into: viewModel)
+            viewModel.inputDecimal()
+            enter("545", into: viewModel)
+
+            let displayCharacters = Array(viewModel.display)
+            let groupingCharacterIndex = displayCharacters.firstIndex(where: { style.groupingSeparatorCharacters.contains($0) })
+            XCTAssertNotNil(groupingCharacterIndex, "Expected grouped display output for \(style)")
+
+            if let groupingCharacterIndex {
+                viewModel.setDisplayEditCursor(displayBoundaryIndex: groupingCharacterIndex + 1)
+                XCTAssertEqual(viewModel.displayEditCaretBoundaryIndex, groupingCharacterIndex, "Grouping separator should collapse to the preceding digit boundary for \(style)")
+            }
+
+            let decimalCharacterIndex = displayCharacters.firstIndex(where: { String($0) == style.decimalSeparator })
+            XCTAssertNotNil(decimalCharacterIndex, "Expected decimal separator in display output for \(style)")
+
+            if let decimalCharacterIndex {
+                viewModel.setDisplayEditCursor(displayBoundaryIndex: decimalCharacterIndex + 1)
+                XCTAssertEqual(viewModel.displayEditCaretBoundaryIndex, decimalCharacterIndex + 1, "Decimal separator should remain selectable for \(style)")
+            }
+        }
+    }
+
+    func testEditableDisplayLayoutScalesLongNumbersToFitAvailableWidth() {
+        let layout = EditableDisplayResultTextLayout(
+            text: "12,345,678,901,234,567",
+            fontSize: 56,
+            availableWidth: 240,
+            minScaleFactor: 0.22
+        )
+
+        XCTAssertLessThan(layout.resolvedFontSize, 56)
+        XCTAssertLessThanOrEqual(layout.textWidth, 240.5)
+        XCTAssertLessThanOrEqual(layout.boundaryXPositions.last ?? 0, 240.5)
+    }
+
+    func testEditableDisplayLayoutRescalesWhenDigitCountChanges() {
+        let shorter = EditableDisplayResultTextLayout(
+            text: "1,234,567",
+            fontSize: 56,
+            availableWidth: 240,
+            minScaleFactor: 0.22
+        )
+        let longer = EditableDisplayResultTextLayout(
+            text: "12,345,678,901,234,567",
+            fontSize: 56,
+            availableWidth: 240,
+            minScaleFactor: 0.22
+        )
+
+        XCTAssertGreaterThan(shorter.resolvedFontSize, longer.resolvedFontSize)
+        XCTAssertGreaterThan(shorter.caretWidth, longer.caretWidth)
+        XCTAssertGreaterThan(shorter.caretHeight, longer.caretHeight)
+        XCTAssertGreaterThan(shorter.caretTopInset, longer.caretTopInset)
+        XCTAssertLessThanOrEqual(longer.textWidth, 240.5)
+        XCTAssertLessThanOrEqual(longer.boundaryXPositions.last ?? 0, 240.5)
+    }
 }

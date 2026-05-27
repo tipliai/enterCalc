@@ -485,14 +485,30 @@ struct CalculatorWindowView: View {
                     .allowsTightening(true)
                     .minimumScaleFactor(0.35)
 
-                Text(viewModel.display)
-                    .font(EnterCalcFont.appFont(size: 48))
-                    .foregroundStyle(primaryForeground)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .lineLimit(1)
-                    .allowsTightening(true)
-                    .minimumScaleFactor(0.15)
+                if viewModel.canDirectlyEditDisplay {
+                    EditableDisplayResultText(
+                        text: viewModel.display,
+                        fontSize: 48,
+                        foregroundColor: primaryForeground,
+                        minScaleFactor: 0.15,
+                        caretBoundaryIndex: viewModel.displayEditCaretBoundaryIndex,
+                        caretColor: primaryForeground,
+                        onTapBoundary: { boundaryIndex in
+                            viewModel.setDisplayEditCursor(displayBoundaryIndex: boundaryIndex)
+                        }
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 54, alignment: .trailing)
                     .layoutPriority(1)
+                } else {
+                    Text(viewModel.display)
+                        .font(EnterCalcFont.appFont(size: 48))
+                        .foregroundStyle(primaryForeground)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .lineLimit(1)
+                        .allowsTightening(true)
+                        .minimumScaleFactor(0.15)
+                        .layoutPriority(1)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .topTrailing)
 
@@ -557,6 +573,7 @@ struct CalculatorWindowView: View {
     }
 
     private func copyDisplayToPasteboardWithFlash() {
+        viewModel.clearDisplayEditCursor()
         viewModel.copyToPasteboard()
         showCopiedToast()
         withAnimation(.easeOut(duration: 0.1)) {
@@ -570,17 +587,20 @@ struct CalculatorWindowView: View {
     }
 
     private func copyCurrentResultToPasteboard() {
+        viewModel.clearDisplayEditCursor()
         viewModel.copyToPasteboard()
         showCopiedToast()
     }
 
     private func copyCurrentOperationToPasteboard() {
         guard viewModel.hasOperationToCopy else { return }
+        viewModel.clearDisplayEditCursor()
         viewModel.copyOperationToPasteboard()
         showCopiedToast()
     }
 
     private func copyHistoryEntryOperationToPasteboard(_ entry: HistoryEntry) {
+        viewModel.clearDisplayEditCursor()
         viewModel.copyOperationToPasteboard(entry)
         showCopiedToast()
     }
@@ -1169,8 +1189,14 @@ struct CalculatorWindowView: View {
         // Keypad support by keyCode
         switch event.keyCode {
         case 123:
+            if !showRoundingOverlay {
+                return viewModel.moveDisplayEditCursorLeft()
+            }
             return adjustRoundingSelectionFromKeyboard(delta: -1)
         case 124:
+            if !showRoundingOverlay {
+                return viewModel.moveDisplayEditCursorRight()
+            }
             return adjustRoundingSelectionFromKeyboard(delta: 1)
         case 125:
             openRoundingOverlayFromKeyboard()
@@ -1196,6 +1222,10 @@ struct CalculatorWindowView: View {
         }
 
         if event.keyCode == 53 { // Escape
+            if viewModel.isDirectlyEditingDisplay {
+                viewModel.clearDisplayEditCursor()
+                return true
+            }
             viewModel.clearAll()
             return true
         }
@@ -1204,6 +1234,10 @@ struct CalculatorWindowView: View {
             return true
         }
         if event.keyCode == 36 || event.keyCode == 76 || chars == "=" { // Return / Enter / =
+            if (event.keyCode == 36 || event.keyCode == 76), viewModel.isDirectlyEditingDisplay {
+                viewModel.clearDisplayEditCursor()
+                return true
+            }
             viewModel.evaluate()
             return true
         }
