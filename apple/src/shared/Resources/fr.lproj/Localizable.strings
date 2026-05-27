@@ -38,6 +38,7 @@
 "rounding.title" = "Arrondir le résultat";
 "rounding.remove" = "Supprimer l'arrondi";
 "copy" = "Copier";
+"copy.copied" = "Copié";
 "paste" = "Coller";
 "undo" = "Annuler";
 "redo" = "Rétablir";

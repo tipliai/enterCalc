@@ -1138,6 +1138,25 @@ final class CalculatorViewModelTests: XCTestCase {
         }
     }
 
+    func testCopyLocalizationKeysExistAcrossSupportedBundles() throws {
+        let localeCodes = ["Base", "en", "de", "es", "fr", "ja", "zh-Hans"]
+        let copyKeys = [
+            "copy.copied"
+        ]
+
+        for localeCode in localeCodes {
+            let strings = try localizedStrings(named: localeCode)
+            for key in copyKeys {
+                guard let value = strings[key] as? String else {
+                    XCTFail("Missing \(key) in \(localeCode).lproj")
+                    continue
+                }
+                XCTAssertFalse(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, "Empty \(key) in \(localeCode).lproj")
+                XCTAssertNotEqual(value, key, "Untranslated \(key) in \(localeCode).lproj")
+            }
+        }
+    }
+
     func testResolvedLocalizationCodeMapsBaseLanguageToSupportedScriptLocalization() {
         let resolvedCode = resolvedLocalizationCode(for: "zh", in: Bundle.enterCalcCore, preferredLanguages: ["zh"])
 

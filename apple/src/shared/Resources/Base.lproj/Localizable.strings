@@ -39,6 +39,7 @@
 "rounding.title" = "Round Result";
 "rounding.remove" = "Remove";
 "copy" = "Copy";
+"copy.copied" = "Copied";
 "paste" = "Paste";
 "undo" = "Undo";
 "redo" = "Redo";

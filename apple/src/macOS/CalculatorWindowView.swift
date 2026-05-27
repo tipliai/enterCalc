@@ -59,6 +59,8 @@ struct CalculatorWindowView: View {
     @State private var didClearHistoryOverlay: Bool = false
     @State private var displayHover: Bool = false
     @State private var windowReference: NSWindow? = nil
+    @State private var showCopyToast: Bool = false
+    @State private var copyToastDismissWorkItem: DispatchWorkItem?
     @State private var operatorRevealProgress: Double = 0.0
     @State private var operatorAnimFadeOpacity: Double = 1.0
     @State private var historyOverlayHeight: CGFloat? = nil
@@ -109,8 +111,8 @@ struct CalculatorWindowView: View {
 
     private var actionContext: CalculatorActionContext {
         CalculatorActionContext(
-            copy: { viewModel.copyToPasteboard() },
-            copyOperation: { viewModel.copyOperationToPasteboard() },
+            copy: { copyCurrentResultToPasteboard() },
+            copyOperation: { copyCurrentOperationToPasteboard() },
             canCopyOperation: viewModel.hasOperationToCopy,
             paste: { viewModel.pasteFromPasteboard() },
             undo: { viewModel.undo() },
@@ -166,7 +168,7 @@ struct CalculatorWindowView: View {
                         entries: viewModel.history,
                         onSelect: { entry in viewModel.reuse(entry) },
                         onClear: { viewModel.clearHistory() },
-                        onCopyOperation: { entry in viewModel.copyOperationToPasteboard(entry) },
+                        onCopyOperation: { entry in copyHistoryEntryOperationToPasteboard(entry) },
                         palette: palette
                     )
                     .frame(width: historyPanelWidth)
@@ -241,6 +243,13 @@ struct CalculatorWindowView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .allowsHitTesting(false)
             )
+            .overlay(alignment: .top) {
+                if showCopyToast {
+                    copiedToast
+                        .padding(.top, 12)
+                        .transition(.opacity)
+                }
+            }
             .keyEventMonitor { event in
                 handleKey(event)
             }
@@ -352,12 +361,12 @@ struct CalculatorWindowView: View {
         HStack(spacing: 6) {
             Menu {
                 Button {
-                    viewModel.copyToPasteboard()
+                    copyCurrentResultToPasteboard()
                 } label: {
                     Label(macLocalized("copy", bundle: currentLocalizationBundle), systemImage: "doc.on.doc")
                 }
                 Button {
-                    viewModel.copyOperationToPasteboard()
+                    copyCurrentOperationToPasteboard()
                 } label: {
                     Label(macLocalized("history.copyOperation", bundle: currentLocalizationBundle), systemImage: "doc.on.doc")
                 }
@@ -510,12 +519,12 @@ struct CalculatorWindowView: View {
         )
         .contextMenu {
             Button {
-                viewModel.copyToPasteboard()
+                copyCurrentResultToPasteboard()
             } label: {
                 Label(macLocalized("copy", bundle: currentLocalizationBundle), systemImage: "doc.on.doc")
             }
             Button {
-                viewModel.copyOperationToPasteboard()
+                copyCurrentOperationToPasteboard()
             } label: {
                 Label(macLocalized("history.copyOperation", bundle: currentLocalizationBundle), systemImage: "doc.on.doc")
             }
@@ -531,15 +540,7 @@ struct CalculatorWindowView: View {
               if hovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
         }
         .onTapGesture {
-            viewModel.copyToPasteboard()
-            withAnimation(.easeOut(duration: 0.1)) {
-                flashCopy = true
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                withAnimation(.easeOut(duration: 0.1)) {
-                    flashCopy = false
-                }
-            }
+            copyDisplayToPasteboardWithFlash()
         }
         .overlay {
             if flashCopy {
@@ -549,6 +550,70 @@ struct CalculatorWindowView: View {
                     .transition(.opacity)
             }
         }
+    }
+
+    private func copyDisplayToPasteboardWithFlash() {
+        viewModel.copyToPasteboard()
+        showCopiedToast()
+            withAnimation(.easeOut(duration: 0.1)) {
+                flashCopy = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                withAnimation(.easeOut(duration: 0.1)) {
+                    flashCopy = false
+                }
+            }
+    }
+
+    private func copyCurrentResultToPasteboard() {
+        viewModel.copyToPasteboard()
+        showCopiedToast()
+    }
+
+    private func copyCurrentOperationToPasteboard() {
+        guard viewModel.hasOperationToCopy else { return }
+        viewModel.copyOperationToPasteboard()
+        showCopiedToast()
+    }
+
+    private func copyHistoryEntryOperationToPasteboard(_ entry: HistoryEntry) {
+        viewModel.copyOperationToPasteboard(entry)
+        showCopiedToast()
+    }
+
+    private func showCopiedToast() {
+        copyToastDismissWorkItem?.cancel()
+
+        if !showCopyToast {
+            withAnimation(.easeOut(duration: 0.18)) {
+                showCopyToast = true
+            }
+        }
+
+        let dismissWorkItem = DispatchWorkItem {
+            withAnimation(.easeOut(duration: 0.5)) {
+                showCopyToast = false
+            }
+            copyToastDismissWorkItem = nil
+        }
+
+        copyToastDismissWorkItem = dismissWorkItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: dismissWorkItem)
+    }
+
+    private var copiedToast: some View {
+        Text(macLocalized("copy.copied", bundle: currentLocalizationBundle))
+            .font(EnterCalcFont.appFont(size: 14))
+            .foregroundStyle(palette.textPrimary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(.regularMaterial, in: Capsule())
+            .overlay(
+                Capsule()
+                    .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.14 : 0.22), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.24 : 0.12), radius: 12, y: 6)
+            .allowsHitTesting(false)
     }
 
     private var memoryControls: some View {
@@ -677,7 +742,7 @@ struct CalculatorWindowView: View {
                                     closeHistoryOverlay()
                                 },
                                 onCopyOperation: {
-                                    viewModel.copyOperationToPasteboard(entry)
+                                    copyHistoryEntryOperationToPasteboard(entry)
                                 }
                             )
                         }
@@ -1087,7 +1152,7 @@ struct CalculatorWindowView: View {
             }
             switch chars.lowercased() {
             case "c":
-                viewModel.copyToPasteboard()
+                copyCurrentResultToPasteboard()
                 return true
             case "v":
                 viewModel.pasteFromPasteboard()
