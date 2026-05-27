@@ -2403,7 +2403,7 @@ public final class CalculatorViewModel: ObservableObject {
         }
 
         let rounded = roundedDecimal(from: value, precision: precision)
-        let roundedText = roundedString(from: rounded, precision: precision)
+        let roundedText = decimalNumberString(from: rounded)
         return groupedNumberString(roundedText)
     }
 
@@ -2414,7 +2414,7 @@ public final class CalculatorViewModel: ObservableObject {
         }
 
         let rounded = roundedDecimal(from: value, precision: precision)
-        return roundedString(from: rounded, precision: precision)
+        return decimalNumberString(from: rounded)
     }
 
     private func roundingRelationSymbol(fromStoredNumber raw: String, precision: Int) -> String {
@@ -2447,10 +2447,6 @@ public final class CalculatorViewModel: ObservableObject {
         var rounded = Decimal.zero
         NSDecimalRound(&rounded, &working, scale, .plain)
         return rounded
-    }
-
-    private func roundedString(from value: Decimal, precision _: Int) -> String {
-        return decimalNumberString(from: value)
     }
 
     private func appendRoundedHistoryEventIfNeeded() {
