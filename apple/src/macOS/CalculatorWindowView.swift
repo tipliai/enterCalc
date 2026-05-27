@@ -113,6 +113,15 @@ struct CalculatorWindowView: View {
         DebugLog.emit("UI", message)
     }
 
+    private func debugKeyCharacters(_ text: String?) -> String {
+        guard let text else { return "nil" }
+        if text.isEmpty { return "\"\"[]" }
+        let scalarList = text.unicodeScalars
+            .map { "U+\(String($0.value, radix: 16, uppercase: true))" }
+            .joined(separator: ",")
+        return "\"\(text)\"[\(scalarList)]"
+    }
+
     private var actionContext: CalculatorActionContext {
         CalculatorActionContext(
             copy: { copyCurrentResultToPasteboard() },
@@ -485,14 +494,30 @@ struct CalculatorWindowView: View {
                     .allowsTightening(true)
                     .minimumScaleFactor(0.35)
 
-                Text(viewModel.display)
-                    .font(EnterCalcFont.appFont(size: 48))
-                    .foregroundStyle(primaryForeground)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .lineLimit(1)
-                    .allowsTightening(true)
-                    .minimumScaleFactor(0.15)
+                if viewModel.canDirectlyEditDisplay {
+                    EditableDisplayResultText(
+                        text: viewModel.display,
+                        fontSize: 48,
+                        foregroundColor: primaryForeground,
+                        minScaleFactor: 0.15,
+                        caretBoundaryIndex: viewModel.displayEditCaretBoundaryIndex,
+                        caretColor: primaryForeground,
+                        onTapBoundary: { boundaryIndex in
+                            viewModel.setDisplayEditCursor(displayBoundaryIndex: boundaryIndex)
+                        }
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 54, alignment: .trailing)
                     .layoutPriority(1)
+                } else {
+                    Text(viewModel.display)
+                        .font(EnterCalcFont.appFont(size: 48))
+                        .foregroundStyle(primaryForeground)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .lineLimit(1)
+                        .allowsTightening(true)
+                        .minimumScaleFactor(0.15)
+                        .layoutPriority(1)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .topTrailing)
 
@@ -544,6 +569,10 @@ struct CalculatorWindowView: View {
               if hovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
         }
         .onTapGesture {
+            if viewModel.isDirectlyEditingDisplay {
+                viewModel.clearDisplayEditCursor()
+                return
+            }
             copyDisplayToPasteboardWithFlash()
         }
         .overlay {
@@ -557,6 +586,7 @@ struct CalculatorWindowView: View {
     }
 
     private func copyDisplayToPasteboardWithFlash() {
+        viewModel.clearDisplayEditCursor()
         viewModel.copyToPasteboard()
         showCopiedToast()
         withAnimation(.easeOut(duration: 0.1)) {
@@ -570,17 +600,20 @@ struct CalculatorWindowView: View {
     }
 
     private func copyCurrentResultToPasteboard() {
+        viewModel.clearDisplayEditCursor()
         viewModel.copyToPasteboard()
         showCopiedToast()
     }
 
     private func copyCurrentOperationToPasteboard() {
         guard viewModel.hasOperationToCopy else { return }
+        viewModel.clearDisplayEditCursor()
         viewModel.copyOperationToPasteboard()
         showCopiedToast()
     }
 
     private func copyHistoryEntryOperationToPasteboard(_ entry: HistoryEntry) {
+        viewModel.clearDisplayEditCursor()
         viewModel.copyOperationToPasteboard(entry)
         showCopiedToast()
     }
@@ -1090,12 +1123,34 @@ struct CalculatorWindowView: View {
         case 126, 36, 76:
             closeRoundingOverlay()
             return true
+        case 119:
+            closeRoundingOverlay()
+            return true
+        case 125:
+            // Already in the rounding overlay; no additional down-arrow action.
+            return true
         case 51, 53, 117:
             viewModel.removeResultRounding()
             closeRoundingOverlay()
             return true
         default:
             return false
+        }
+    }
+
+    private func handleHistoryOverlayKey(_ event: NSEvent) -> Bool {
+        guard showHistoryOverlay else { return false }
+
+        switch event.keyCode {
+        case 53, 51, 36, 76, 119:
+            closeHistoryOverlay()
+            return true
+        case 117:
+            clearHistoryAfterClosingOverlay()
+            return true
+        default:
+            // Suppress calculator input while history overlay is active.
+            return true
         }
     }
 
@@ -1140,17 +1195,21 @@ struct CalculatorWindowView: View {
 
     @discardableResult
     private func handleKey(_ event: NSEvent) -> Bool {
-        guard let chars = event.charactersIgnoringModifiers else { return false }
+        let chars = event.charactersIgnoringModifiers ?? ""
         let inputChars = event.characters ?? chars
+        let insertFunctionCharacter = Character(UnicodeScalar(NSInsertFunctionKey)!)
+        let isInsertKey = event.keyCode == 114
+            || chars.contains(insertFunctionCharacter)
+            || inputChars.contains(insertFunctionCharacter)
+        DebugLog.emit(
+            "KEY",
+            "macOS key route keyCode:\(event.keyCode) modifiers:\(event.modifierFlags.rawValue) chars:\(debugKeyCharacters(event.charactersIgnoringModifiers)) input:\(debugKeyCharacters(event.characters)) insert:\(isInsertKey) overlay:\(String(describing: activeOverlay)) canEdit:\(viewModel.canDirectlyEditDisplay)"
+        )
         var handled = false
         let isCommand = event.modifierFlags.contains(.command)
 
-        if handleRoundingOverlayKey(event) {
-            return true
-        }
-
         if isCommand {
-            if event.keyCode == 51 { // Cmd + Backspace = clear all
+            if event.keyCode == 51 || event.keyCode == 117 { // Cmd + Backspace/Delete = clear all
                 viewModel.clearAll()
                 return true
             }
@@ -1161,16 +1220,55 @@ struct CalculatorWindowView: View {
             case "v":
                 viewModel.pasteFromPasteboard()
                 return true
+            case "z":
+                if event.modifierFlags.contains(.shift) {
+                    viewModel.redo()
+                } else {
+                    viewModel.undo()
+                }
+                return true
+            case "y":
+                viewModel.redo()
+                return true
             default:
-                break
+                return false
             }
+        }
+
+        if handleHistoryOverlayKey(event) {
+            return true
+        }
+
+        if handleRoundingOverlayKey(event) {
+            return true
+        }
+
+        if activeOverlay == nil, isInsertKey {
+            guard viewModel.canDirectlyEditDisplay else {
+                DebugLog.emit("KEY", "macOS insert detected but direct display editing is unavailable")
+                return true
+            }
+            let trailingBoundary = Array(viewModel.display).count
+            viewModel.setDisplayEditCursor(displayBoundaryIndex: trailingBoundary)
+            DebugLog.emit("KEY", "macOS insert enabled display editing at boundary:\(trailingBoundary)")
+            return true
+        }
+
+        if isInsertKey {
+            DebugLog.emit("KEY", "macOS insert detected but blocked by active overlay:\(String(describing: activeOverlay))")
         }
 
         // Keypad support by keyCode
         switch event.keyCode {
         case 123:
+            if !showRoundingOverlay {
+                return viewModel.moveDisplayEditCursorLeft()
+            }
             return adjustRoundingSelectionFromKeyboard(delta: -1)
         case 124:
+            if !showRoundingOverlay {
+                return viewModel.moveDisplayEditCursorRight()
+            }
             return adjustRoundingSelectionFromKeyboard(delta: 1)
         case 125:
             openRoundingOverlayFromKeyboard()
@@ -1196,14 +1294,30 @@ struct CalculatorWindowView: View {
         }
 
         if event.keyCode == 53 { // Escape
+            if viewModel.isDirectlyEditingDisplay {
+                viewModel.clearDisplayEditCursor()
+                return true
+            }
             viewModel.clearAll()
             return true
         }
-        if event.keyCode == 51 { // Backspace
+        if event.keyCode == 119 { // End
+            if viewModel.isDirectlyEditingDisplay {
+                viewModel.clearDisplayEditCursor()
+                return true
+            }
+            viewModel.clearAll()
+            return true
+        }
+        if event.keyCode == 51 || event.keyCode == 117 { // Backspace/Delete
             viewModel.backspace()
             return true
         }
         if event.keyCode == 36 || event.keyCode == 76 || chars == "=" { // Return / Enter / =
+            if (event.keyCode == 36 || event.keyCode == 76), viewModel.isDirectlyEditingDisplay {
+                viewModel.clearDisplayEditCursor()
+                return true
+            }
             viewModel.evaluate()
             return true
         }

@@ -66,6 +66,15 @@ struct IOSHardwareKeyEvent {
     let modifierFlags: UIKeyModifierFlags
 }
 
+private func debugKeyCharacters(_ text: String?) -> String {
+    guard let text else { return "nil" }
+    if text.isEmpty { return "\"\"[]" }
+    let scalarList = text.unicodeScalars
+        .map { "U+\(String($0.value, radix: 16, uppercase: true))" }
+        .joined(separator: ",")
+    return "\"\(text)\"[\(scalarList)]"
+}
+
 struct IOSHardwareKeyCaptureView: UIViewRepresentable {
     let isEnabled: Bool
     let onKeyPress: (IOSHardwareKeyEvent) -> Bool
@@ -125,7 +134,14 @@ final class IOSHardwareKeyCaptureUIView: UIView {
                 modifierFlags: key.modifierFlags
             )
 
-            if onKeyPress?(keyEvent) != true {
+            DebugLog.emit(
+                "KEY",
+                "iOS press received code:\(key.keyCode.rawValue) modifiers:\(key.modifierFlags.rawValue) chars:\(debugKeyCharacters(key.characters)) charsNoMods:\(debugKeyCharacters(key.charactersIgnoringModifiers))"
+            )
+            let handled = onKeyPress?(keyEvent) == true
+            DebugLog.emit("KEY", "iOS press handled:\(handled)")
+
+            if !handled {
                 unhandledPresses.insert(press)
             }
         }
@@ -617,33 +633,119 @@ private extension EnterCalcIOSView {
     }
 
     func handleHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
-        let unsupportedModifiers = event.modifierFlags.intersection([.command, .control])
+        let unsupportedModifiers = event.modifierFlags.intersection([.control])
         guard unsupportedModifiers.isEmpty else {
+            DebugLog.emit(
+                "KEY",
+                "iOS key ignored due to modifiers code:\(event.keyCode?.rawValue.description ?? "nil") modifiers:\(event.modifierFlags.rawValue)"
+            )
             return false
+        }
+
+        let chars = event.charactersIgnoringModifiers ?? ""
+        let inputChars = event.characters ?? chars
+        let isCommand = event.modifierFlags.contains(.command)
+
+        if isCommand {
+            if event.keyCode == .keyboardDeleteOrBackspace || event.keyCode == .keyboardDeleteForward {
+                viewModel.clearAll()
+                return true
+            }
+            switch chars.lowercased() {
+            case "c":
+                copyCurrentResultToPasteboard(from: viewModel)
+                return true
+            case "v":
+                pasteFromPasteboard(into: viewModel)
+                return true
+            case "z":
+                if event.modifierFlags.contains(.shift) {
+                    viewModel.redo()
+                } else {
+                    viewModel.undo()
+                }
+                return true
+            case "y":
+                viewModel.redo()
+                return true
+            default:
+                return false
+            }
+        }
+
+        if handleHistoryOverlayHardwareKey(event) {
+            return true
         }
 
         if handleRoundingOverlayHardwareKey(event) {
             return true
         }
 
-        let chars = event.charactersIgnoringModifiers ?? ""
-        let inputChars = event.characters ?? chars
+        let insertFunctionCharacter = Character(UnicodeScalar(0xF727)!)
+        let isInsertLikeHIDUsage = event.keyCode.map { code in
+            // Apple keyboards can report the physical Insert key as Help (0x75).
+            code.rawValue == 0x49 || code.rawValue == 0x75
+        } ?? false
+        let isInsertKey = isInsertLikeHIDUsage
+            || chars.contains(insertFunctionCharacter)
+            || inputChars.contains(insertFunctionCharacter)
+        DebugLog.emit(
+            "KEY",
+            "iOS key route code:\(event.keyCode?.rawValue.description ?? "nil") chars:\(debugKeyCharacters(event.charactersIgnoringModifiers)) input:\(debugKeyCharacters(event.characters)) insert:\(isInsertKey) overlay:\(String(describing: activeOverlay)) canEdit:\(viewModel.canDirectlyEditDisplay)"
+        )
+
+        // Insert enters direct display editing and places the caret at the trailing boundary.
+        if activeOverlay == nil, isInsertKey {
+            guard viewModel.canDirectlyEditDisplay else {
+                DebugLog.emit("KEY", "iOS insert detected but direct display editing is unavailable")
+                return true
+            }
+            let trailingBoundary = Array(viewModel.display).count
+            viewModel.setDisplayEditCursor(displayBoundaryIndex: trailingBoundary)
+            DebugLog.emit("KEY", "iOS insert enabled display editing at boundary:\(trailingBoundary)")
+            return true
+        }
+
+        if isInsertKey {
+            DebugLog.emit("KEY", "iOS insert detected but blocked by active overlay:\(String(describing: activeOverlay))")
+        }
 
         switch event.keyCode {
         case .keyboardDownArrow:
             openRoundingOverlayFromKeyboard()
             return true
         case .keyboardLeftArrow:
+            if activeOverlay != .rounding {
+                return viewModel.moveDisplayEditCursorLeft()
+            }
             return adjustRoundingSelectionFromKeyboard(delta: -1)
         case .keyboardRightArrow:
+            if activeOverlay != .rounding {
+                return viewModel.moveDisplayEditCursorRight()
+            }
             return adjustRoundingSelectionFromKeyboard(delta: 1)
         case .keyboardEscape:
+            if viewModel.isDirectlyEditingDisplay {
+                viewModel.clearDisplayEditCursor()
+                return true
+            }
             viewModel.clearAll()
             return true
-        case .keyboardDeleteOrBackspace:
+        case .keyboardEnd:
+            if viewModel.isDirectlyEditingDisplay {
+                viewModel.clearDisplayEditCursor()
+                return true
+            }
+            viewModel.clearAll()
+            return true
+        case .keyboardDeleteOrBackspace, .keyboardDeleteForward:
             viewModel.backspace()
             return true
         case .keyboardReturnOrEnter, .keypadEnter:
+            if viewModel.isDirectlyEditingDisplay {
+                viewModel.clearDisplayEditCursor()
+                return true
+            }
             viewModel.evaluate()
             return true
         default:
@@ -1870,13 +1972,28 @@ private extension EnterCalcIOSView {
                             .allowsTightening(true)
                             .minimumScaleFactor(0.35)
 
-                        Text(screen.viewModel.display)
-                            .font(EnterCalcFont.appFont(size: metrics.displayFontSize(for: resultsTextHeight)))
-                            .foregroundStyle(palette.textPrimary)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                            .lineLimit(1)
-                            .allowsTightening(true)
-                            .minimumScaleFactor(0.22)
+                        if screen.viewModel.canDirectlyEditDisplay {
+                            EditableDisplayResultText(
+                                text: screen.viewModel.display,
+                                fontSize: metrics.displayFontSize(for: resultsTextHeight),
+                                foregroundColor: palette.textPrimary,
+                                minScaleFactor: 0.22,
+                                caretBoundaryIndex: screen.viewModel.displayEditCaretBoundaryIndex,
+                                caretColor: palette.textPrimary,
+                                onTapBoundary: { boundaryIndex in
+                                    screen.viewModel.setDisplayEditCursor(displayBoundaryIndex: boundaryIndex)
+                                }
+                            )
+                            .frame(maxWidth: .infinity, minHeight: metrics.displayFontSize(for: resultsTextHeight) * 1.12, alignment: .trailing)
+                        } else {
+                            Text(screen.viewModel.display)
+                                .font(EnterCalcFont.appFont(size: metrics.displayFontSize(for: resultsTextHeight)))
+                                .foregroundStyle(palette.textPrimary)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                                .lineLimit(1)
+                                .allowsTightening(true)
+                                .minimumScaleFactor(0.22)
+                        }
                     }
                     .padding(.horizontal, metrics.displayHorizontalPadding)
                     .padding(.vertical, metrics.displayVerticalPadding)
@@ -1903,6 +2020,10 @@ private extension EnterCalcIOSView {
             }
             .contentShape(displayShape)
             .onTapGesture {
+                if screen.viewModel.isDirectlyEditingDisplay {
+                    screen.viewModel.clearDisplayEditCursor()
+                    return
+                }
                 copyDisplayToPasteboardWithFlash(from: screen.viewModel)
             }
         }
@@ -1919,6 +2040,7 @@ private extension EnterCalcIOSView {
     }
 
     func copyDisplayToPasteboardWithFlash(from viewModel: CalculatorViewModel) {
+        viewModel.clearDisplayEditCursor()
         viewModel.copyToPasteboard()
         triggerActionFeedback(emphasized: true)
         showCopiedToast()
@@ -1945,6 +2067,7 @@ private extension EnterCalcIOSView {
     }
 
     func copyCurrentResultToPasteboard(from viewModel: CalculatorViewModel) {
+        viewModel.clearDisplayEditCursor()
         viewModel.copyToPasteboard()
         triggerActionFeedback()
         showCopiedToast()
@@ -1952,6 +2075,7 @@ private extension EnterCalcIOSView {
 
     func copyCurrentOperationToPasteboard(from viewModel: CalculatorViewModel) {
         guard viewModel.hasOperationToCopy else { return }
+        viewModel.clearDisplayEditCursor()
         viewModel.copyOperationToPasteboard()
         triggerActionFeedback()
         showCopiedToast()
@@ -1963,12 +2087,14 @@ private extension EnterCalcIOSView {
     }
 
     func copyHistoryEntryResultToPasteboard(_ entry: HistoryEntry, from viewModel: CalculatorViewModel) {
+        viewModel.clearDisplayEditCursor()
         viewModel.copyResultToPasteboard(entry)
         triggerActionFeedback()
         showCopiedToast()
     }
 
     func copyHistoryEntryOperationToPasteboard(_ entry: HistoryEntry, from viewModel: CalculatorViewModel) {
+        viewModel.clearDisplayEditCursor()
         viewModel.copyOperationToPasteboard(entry)
         triggerActionFeedback()
         showCopiedToast()
@@ -2232,12 +2358,35 @@ private extension EnterCalcIOSView {
         }
     }
 
+    func handleHistoryOverlayHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
+        guard activeOverlay == .history else { return false }
+
+        switch event.keyCode {
+        case .keyboardEscape, .keyboardDeleteOrBackspace, .keyboardReturnOrEnter, .keypadEnter, .keyboardEnd:
+            dismissActiveOverlay()
+            return true
+        case .keyboardDeleteForward:
+            activeScreen.viewModel.clearHistory()
+            dismissActiveOverlay()
+            return true
+        default:
+            // Suppress calculator input while history overlay is active.
+            return true
+        }
+    }
+
     func handleRoundingOverlayHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
         guard activeOverlay == .rounding else { return false }
 
         switch event.keyCode {
         case .keyboardUpArrow, .keyboardReturnOrEnter, .keypadEnter:
             dismissActiveOverlay()
+            return true
+        case .keyboardEnd:
+            dismissActiveOverlay()
+            return true
+        case .keyboardDownArrow:
+            // Already in the rounding overlay; no additional down-arrow action.
             return true
         case .keyboardEscape, .keyboardDeleteOrBackspace, .keyboardDeleteForward:
             activeScreen.viewModel.removeResultRounding()

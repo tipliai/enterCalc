@@ -134,6 +134,7 @@ public final class CalculatorViewModel: ObservableObject {
         let activeCurrencySymbol: String?
         let isPendingEntryClearedByClearButton: Bool
         let shouldPreserveTypedCurrencyInput: Bool
+        let displayEditCursorIndex: Int?
     }
 
     @Published public private(set) var display: String = "0"
@@ -149,6 +150,7 @@ public final class CalculatorViewModel: ObservableObject {
     @Published public private(set) var isResultRoundingEnabled: Bool = false
     @Published public private(set) var resultRoundingPrecision: Int = 4
     @Published public private(set) var activeCurrencySymbol: String?
+    @Published public private(set) var displayEditCursorIndex: Int?
     private var currentErrorKey: String? = nil
 
     private var currentInput: String = "0"
@@ -238,6 +240,74 @@ public final class CalculatorViewModel: ObservableObject {
         !redoStack.isEmpty
     }
 
+    public var canDirectlyEditDisplay: Bool {
+        guard !isErrorState,
+              !isResultRoundingEnabled else {
+            return false
+        }
+
+        return !currentInput.lowercased().contains("e")
+    }
+
+    public var displayEditCaretBoundaryIndex: Int? {
+        guard let rawIndex = activeDisplayEditCursorIndex else { return nil }
+        return displayBoundaryIndex(forRawCursorIndex: rawIndex)
+    }
+
+    public func setDisplayEditCursor(displayBoundaryIndex: Int) {
+        guard canDirectlyEditDisplay else {
+            displayEditCursorIndex = nil
+            return
+        }
+
+        prepareCurrentInputForDirectDisplayEditing()
+        let mapping = displayBoundaryToRawCursorMapping()
+        guard mapping.indices.contains(displayBoundaryIndex) else { return }
+        displayEditCursorIndex = mapping[displayBoundaryIndex]
+    }
+
+    public func clearDisplayEditCursor() {
+        displayEditCursorIndex = nil
+    }
+
+    public var isDirectlyEditingDisplay: Bool {
+        activeDisplayEditCursorIndex != nil
+    }
+
+    @discardableResult
+    public func moveDisplayEditCursorLeft() -> Bool {
+        guard canDirectlyEditDisplay else {
+            displayEditCursorIndex = nil
+            return false
+        }
+
+        if displayEditCursorIndex == nil {
+            prepareCurrentInputForDirectDisplayEditing()
+        }
+        let currentIndex = activeDisplayEditCursorIndex ?? currentInput.count
+        let nextIndex = normalizedDisplayEditCursorIndex(currentIndex - 1)
+        let didMove = nextIndex != currentIndex || displayEditCursorIndex == nil
+        displayEditCursorIndex = nextIndex
+        return didMove
+    }
+
+    @discardableResult
+    public func moveDisplayEditCursorRight() -> Bool {
+        guard canDirectlyEditDisplay else {
+            displayEditCursorIndex = nil
+            return false
+        }
+
+        if displayEditCursorIndex == nil {
+            prepareCurrentInputForDirectDisplayEditing()
+        }
+        let currentIndex = activeDisplayEditCursorIndex ?? currentInput.count
+        let nextIndex = normalizedDisplayEditCursorIndex(currentIndex + 1)
+        let didMove = nextIndex != currentIndex || displayEditCursorIndex == nil
+        displayEditCursorIndex = nextIndex
+        return didMove
+    }
+
     public var shouldShowAllClearButton: Bool {
         isErrorState || isPendingEntryClearedByClearButton || isStandaloneUnaryResult || isResultStateUsingAllClear || isInClearAllState
     }
@@ -305,6 +375,7 @@ public final class CalculatorViewModel: ObservableObject {
     public func inputParenthesis(_ symbol: Character) {
         guard symbol == "(" || symbol == ")" else { return }
         let snapshot = beginUndoableChange()
+        finishDirectDisplayEditingIfNeeded()
         isPendingEntryClearedByClearButton = false
         if isErrorState {
             resetStateForNewEntry()
@@ -350,16 +421,24 @@ public final class CalculatorViewModel: ObservableObject {
     public func inputDigit(_ digit: String) {
         guard digit.count == 1, "0123456789".contains(digit) else { return }
         let snapshot = beginUndoableChange()
+        let isEditingDisplay = activeDisplayEditCursorIndex != nil
         if isErrorState { resetStateForNewEntry() }
         isPendingEntryClearedByClearButton = false
-        if justEvaluated {
+        if justEvaluated, !isEditingDisplay {
             resetStateForNewEntry()
-        } else if shouldResetInputOnNextDigit {
+        } else if shouldResetInputOnNextDigit, !isEditingDisplay {
             currentInput = "0"
             shouldResetInputOnNextDigit = false
         }
         isErrorState = false
-        if currentInput == "0" {
+        if let cursorIndex = activeDisplayEditCursorIndex {
+            let previousInput = currentInput
+            let previousCursor = displayEditCursorIndex
+            insertDigitIntoCurrentInput(digit, at: cursorIndex)
+            if currentInput != previousInput || displayEditCursorIndex != previousCursor {
+                resetPostEvaluateStateForDirectDisplayEditingIfNeeded()
+            }
+        } else if currentInput == "0" {
             currentInput = digit
         } else if currentInputDigitCount < Limits.maxInputDigits {
             currentInput.append(digit)
@@ -373,6 +452,7 @@ public final class CalculatorViewModel: ObservableObject {
     public func inputCurrencySymbol(_ symbol: String) {
         guard symbol != "¢", Self.isSupportedCurrencySymbol(symbol) else { return }
         let snapshot = beginUndoableChange()
+        finishDirectDisplayEditingIfNeeded()
         if isErrorState {
             resetStateForNewEntry()
         }
@@ -384,17 +464,25 @@ public final class CalculatorViewModel: ObservableObject {
 
     public func inputDecimal() {
         let snapshot = beginUndoableChange()
+        let isEditingDisplay = activeDisplayEditCursorIndex != nil
         if isErrorState { resetStateForNewEntry() }
         isPendingEntryClearedByClearButton = false
-        if justEvaluated {
+        if justEvaluated, !isEditingDisplay {
             resetStateForNewEntry()
-        } else if shouldResetInputOnNextDigit {
+        } else if shouldResetInputOnNextDigit, !isEditingDisplay {
             currentInput = "0"
             shouldResetInputOnNextDigit = false
         }
         isErrorState = false
         let decimalSeparator = numberFormatStyle.decimalSeparator
-        if !currentInput.contains(decimalSeparator), !currentInput.contains("."), currentInputDigitCount < Limits.maxInputDigits {
+        if let cursorIndex = activeDisplayEditCursorIndex {
+            let previousInput = currentInput
+            let previousCursor = displayEditCursorIndex
+            insertDecimalIntoCurrentInput(at: cursorIndex)
+            if currentInput != previousInput || displayEditCursorIndex != previousCursor {
+                resetPostEvaluateStateForDirectDisplayEditingIfNeeded()
+            }
+        } else if !currentInput.contains(decimalSeparator), !currentInput.contains("."), currentInputDigitCount < Limits.maxInputDigits {
             currentInput.append(contentsOf: decimalSeparator)
         }
         shouldPreserveTypedCurrencyInput = activeCurrencySymbol != nil
@@ -406,6 +494,7 @@ public final class CalculatorViewModel: ObservableObject {
     public func toggleSign() {
         guard !isErrorState else { return }
         let snapshot = beginUndoableChange()
+        finishDirectDisplayEditingIfNeeded()
         isPendingEntryClearedByClearButton = false
         if currentInput.hasPrefix("-") {
             currentInput.removeFirst()
@@ -421,6 +510,7 @@ public final class CalculatorViewModel: ObservableObject {
     public func applyPercent() {
         guard !isErrorState else { return }
         let snapshot = beginUndoableChange()
+        finishDirectDisplayEditingIfNeeded()
         isPendingEntryClearedByClearButton = false
         let operandToken = currentToken
         let percentOperandToken = activeCurrencySymbol == nil
@@ -451,6 +541,7 @@ public final class CalculatorViewModel: ObservableObject {
 
     public func clearEntry() {
         let snapshot = beginUndoableChange()
+        finishDirectDisplayEditingIfNeeded()
 
         if shouldUseAllClearBehavior {
             resetAllStateForClearAll()
@@ -520,6 +611,7 @@ public final class CalculatorViewModel: ObservableObject {
         isResultRoundingEnabled = false
         resultRoundingPrecision = 4
         activeCurrencySymbol = nil
+        displayEditCursorIndex = nil
     }
 
     public func backspace() {
@@ -574,6 +666,20 @@ public final class CalculatorViewModel: ObservableObject {
 
         isPendingEntryClearedByClearButton = false
 
+        if let cursorIndex = activeDisplayEditCursorIndex {
+            let previousInput = currentInput
+            let previousCursor = displayEditCursorIndex
+            deleteDigitBeforeDisplayCursor(cursorIndex)
+            if currentInput != previousInput || displayEditCursorIndex != previousCursor {
+                resetPostEvaluateStateForDirectDisplayEditingIfNeeded()
+            }
+            shouldPreserveTypedCurrencyInput = activeCurrencySymbol != nil
+            setCurrentTokenToCurrentInput()
+            updateDisplay()
+            completeUndoableChange(from: snapshot)
+            return
+        }
+
         if shouldResetInputOnNextDigit {
             currentInput = "0"
             shouldResetInputOnNextDigit = false
@@ -599,6 +705,7 @@ public final class CalculatorViewModel: ObservableObject {
     public func setOperator(_ op: BinaryOperator) {
         guard !isErrorState else { return }
         let snapshot = beginUndoableChange()
+        finishDirectDisplayEditingIfNeeded()
         isPendingEntryClearedByClearButton = false
         if isExpressionMode {
             if !shouldResetInputOnNextDigit {
@@ -650,6 +757,7 @@ public final class CalculatorViewModel: ObservableObject {
     public func evaluate() {
         guard !isErrorState else { return }
         let snapshot = beginUndoableChange()
+        finishDirectDisplayEditingIfNeeded()
         isPendingEntryClearedByClearButton = false
         if isExpressionMode {
             if !shouldResetInputOnNextDigit {
@@ -758,6 +866,7 @@ public final class CalculatorViewModel: ObservableObject {
 
     public func reciprocal() {
         let snapshot = beginUndoableChange()
+        finishDirectDisplayEditingIfNeeded()
         isPendingEntryClearedByClearButton = false
         if nextUnaryChainDepth(for: currentToken) > Limits.maxConsecutiveSquareOrRootDepth {
             setError("error.outOfRange")
@@ -792,6 +901,7 @@ public final class CalculatorViewModel: ObservableObject {
     public func square() {
         guard !isErrorState else { return }
         let snapshot = beginUndoableChange()
+        finishDirectDisplayEditingIfNeeded()
         isPendingEntryClearedByClearButton = false
         if nextUnaryChainDepth(for: currentToken) > Limits.maxConsecutiveSquareOrRootDepth {
             setError("error.outOfRange")
@@ -826,6 +936,7 @@ public final class CalculatorViewModel: ObservableObject {
 
     public func squareRoot() {
         let snapshot = beginUndoableChange()
+        finishDirectDisplayEditingIfNeeded()
         isPendingEntryClearedByClearButton = false
         if nextUnaryChainDepth(for: currentToken) > Limits.maxConsecutiveSquareOrRootDepth {
             setError("error.outOfRange")
@@ -890,6 +1001,7 @@ public final class CalculatorViewModel: ObservableObject {
 
     public func pasteFromPasteboard() {
         let snapshot = beginUndoableChange()
+        finishDirectDisplayEditingIfNeeded()
         let string: String?
         #if os(macOS)
         string = NSPasteboard.general.string(forType: .string)
@@ -1149,22 +1261,39 @@ public final class CalculatorViewModel: ObservableObject {
         }
 
         // Only group plain numeric strings; leave errors like "Error" untouched.
-        let allowed = CharacterSet(charactersIn: "0123456789.")
+        let groupingCharacters = String(numberFormatStyle.groupingSeparatorCharacters)
+        let allowed = CharacterSet(charactersIn: "0123456789." + numberFormatStyle.decimalSeparator + groupingCharacters)
         guard working.unicodeScalars.allSatisfy({ allowed.contains($0) }) else {
             return raw
         }
 
-        let components = working.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false)
-        let intPart = String(components.first ?? "")
+        let decimalSeparator = numberFormatStyle.decimalSeparator
+        let activeDecimalSeparator: Character?
+        if working.contains(decimalSeparator) {
+            activeDecimalSeparator = Character(decimalSeparator)
+        } else if decimalSeparator != "." && working.contains(".") {
+            activeDecimalSeparator = "."
+        } else {
+            activeDecimalSeparator = nil
+        }
+
+        let components: [Substring]
+        if let activeDecimalSeparator {
+            components = working.split(separator: activeDecimalSeparator, maxSplits: 1, omittingEmptySubsequences: false)
+        } else {
+            components = [Substring(working)]
+        }
+
+        let intPart = String(components.first ?? "").filter { $0.isNumber }
         let fracPart = components.count > 1 ? String(components[1]) : ""
-        let keepTrailingDot = working.hasSuffix(".") && fracPart.isEmpty
+        let keepTrailingDecimalSeparator = activeDecimalSeparator != nil && fracPart.isEmpty
 
         let groupedInt = groupDigits(intPart)
         var result = prefix + groupedInt
-        if keepTrailingDot {
-            result.append(contentsOf: numberFormatStyle.decimalSeparator)
+        if keepTrailingDecimalSeparator {
+            result.append(contentsOf: decimalSeparator)
         } else if !fracPart.isEmpty {
-            result.append(contentsOf: numberFormatStyle.decimalSeparator)
+            result.append(contentsOf: decimalSeparator)
             result.append(fracPart)
         }
         return result
@@ -1631,7 +1760,8 @@ public final class CalculatorViewModel: ObservableObject {
             resultRoundingPrecision: resultRoundingPrecision,
             activeCurrencySymbol: activeCurrencySymbol,
             isPendingEntryClearedByClearButton: isPendingEntryClearedByClearButton,
-            shouldPreserveTypedCurrencyInput: shouldPreserveTypedCurrencyInput
+            shouldPreserveTypedCurrencyInput: shouldPreserveTypedCurrencyInput,
+            displayEditCursorIndex: displayEditCursorIndex
         )
     }
 
@@ -1662,6 +1792,7 @@ public final class CalculatorViewModel: ObservableObject {
         activeCurrencySymbol = snapshot.activeCurrencySymbol
         isPendingEntryClearedByClearButton = snapshot.isPendingEntryClearedByClearButton
         shouldPreserveTypedCurrencyInput = snapshot.shouldPreserveTypedCurrencyInput
+        displayEditCursorIndex = snapshot.displayEditCursorIndex
         trimToNewestEntries(&history, maxCount: Limits.maxStoredHistoryEntries)
         trimToNewestEntries(&memoryEntries, maxCount: Limits.maxStoredMemoryEntries)
         trimToRecentSnapshots(&undoStack, maxCount: Limits.maxUndoDepth)
@@ -1918,6 +2049,13 @@ public final class CalculatorViewModel: ObservableObject {
         guard isResultRoundingEnabled, !isErrorState else {
             display = plainDisplay
             expressionDisplay = groupedExpressionString(header)
+            if canDirectlyEditDisplay {
+                if let displayEditCursorIndex {
+                    self.displayEditCursorIndex = min(max(displayEditCursorIndex, 0), currentInput.count)
+                }
+            } else {
+                displayEditCursorIndex = nil
+            }
             return
         }
 
@@ -1931,6 +2069,14 @@ public final class CalculatorViewModel: ObservableObject {
             precision: resultRoundingPrecision,
             relationSymbol: relationSymbol
         )
+
+        if canDirectlyEditDisplay {
+            if let displayEditCursorIndex {
+                self.displayEditCursorIndex = min(max(displayEditCursorIndex, 0), currentInput.count)
+            }
+        } else {
+            displayEditCursorIndex = nil
+        }
     }
 
     /// Attempt to extract a numeric string from pasted content, preferring the active style and
@@ -2225,6 +2371,30 @@ public final class CalculatorViewModel: ObservableObject {
     private func setCurrentTokenToCurrentInput() {
         let formatted = displayString(for: currentInput, preserveTrailingZeros: shouldPreserveTypedCurrencyInput)
         currentToken = boundedDisplayToken(formatted, fallback: formatted)
+
+        // When a binary operator is armed but no RHS entry has started yet, the
+        // visible display is still the stored left operand. Keep that pending
+        // operand in sync so preview and evaluation use the edited value.
+        if pendingOperator != nil, shouldResetInputOnNextDigit {
+            accumulator = currentValue
+            accumulatorToken = currentToken
+        }
+    }
+
+    private func resetPostEvaluateStateForDirectDisplayEditingIfNeeded() {
+        guard justEvaluated else { return }
+
+        // Editing a previously evaluated result creates a fresh input state,
+        // so stale operation summary/repeat-equals metadata must be cleared.
+        accumulator = nil
+        accumulatorToken = nil
+        lastOperator = nil
+        lastOperand = nil
+        lastOperandToken = nil
+        lastResultSummary = ""
+        expression = ""
+        justEvaluated = false
+        shouldResetInputOnNextDigit = false
     }
 
     public func refreshLocalization() {
@@ -2259,6 +2429,153 @@ public final class CalculatorViewModel: ObservableObject {
 
     private var currentInputDigitCount: Int {
         significantDigitCount(in: currentInput)
+    }
+
+    private var activeDisplayEditCursorIndex: Int? {
+        guard canDirectlyEditDisplay, let displayEditCursorIndex else { return nil }
+        return normalizedDisplayEditCursorIndex(displayEditCursorIndex)
+    }
+
+    private func normalizedDisplayEditCursorIndex(_ rawIndex: Int) -> Int {
+        let clamped = min(max(rawIndex, 0), currentInput.count)
+        if currentInput.hasPrefix("-") {
+            return max(1, clamped)
+        }
+        return clamped
+    }
+
+    private func finishDirectDisplayEditingIfNeeded() {
+        guard activeDisplayEditCursorIndex != nil else { return }
+        displayEditCursorIndex = nil
+    }
+
+    private func prepareCurrentInputForDirectDisplayEditing() {
+        guard canDirectlyEditDisplay,
+              let canonical = canonicalNumberString(from: currentInput) else {
+            return
+        }
+
+        if currentInput != canonical {
+            currentInput = canonical
+            shouldPreserveTypedCurrencyInput = activeCurrencySymbol != nil
+            setCurrentTokenToCurrentInput()
+            updateDisplay()
+        }
+    }
+
+    private func insertDigitIntoCurrentInput(_ digit: String, at rawIndex: Int) {
+        let insertionIndex = normalizedDisplayEditCursorIndex(rawIndex)
+
+        if currentInput == "0" {
+            currentInput = digit
+            displayEditCursorIndex = 1
+            return
+        }
+
+        if currentInput == "-0" {
+            currentInput = "-\(digit)"
+            displayEditCursorIndex = 2
+            return
+        }
+
+        guard currentInputDigitCount < Limits.maxInputDigits else { return }
+        let stringIndex = currentInput.index(currentInput.startIndex, offsetBy: insertionIndex)
+        currentInput.insert(contentsOf: digit, at: stringIndex)
+        displayEditCursorIndex = insertionIndex + digit.count
+    }
+
+    private func insertDecimalIntoCurrentInput(at rawIndex: Int) {
+        let decimalSeparator = numberFormatStyle.decimalSeparator
+        guard !currentInput.contains(decimalSeparator), !currentInput.contains(".") else { return }
+
+        let insertionIndex = normalizedDisplayEditCursorIndex(rawIndex)
+        let insertionText: String
+        if insertionIndex == 0 || (currentInput.hasPrefix("-") && insertionIndex == 1) {
+            insertionText = "0\(decimalSeparator)"
+        } else {
+            insertionText = decimalSeparator
+        }
+
+        let stringIndex = currentInput.index(currentInput.startIndex, offsetBy: insertionIndex)
+        currentInput.insert(contentsOf: insertionText, at: stringIndex)
+        displayEditCursorIndex = insertionIndex + insertionText.count
+        normalizeCurrentInputAfterCursorEdit()
+    }
+
+    private func deleteDigitBeforeDisplayCursor(_ rawIndex: Int) {
+        let cursorIndex = normalizedDisplayEditCursorIndex(rawIndex)
+        guard cursorIndex > 0 else { return }
+        guard !(currentInput.hasPrefix("-") && cursorIndex == 1) else { return }
+
+        let removalIndex = currentInput.index(currentInput.startIndex, offsetBy: cursorIndex - 1)
+        currentInput.remove(at: removalIndex)
+        displayEditCursorIndex = cursorIndex - 1
+        normalizeCurrentInputAfterCursorEdit()
+    }
+
+    private func normalizeCurrentInputAfterCursorEdit() {
+        let decimalSeparator = numberFormatStyle.decimalSeparator
+
+        if currentInput.isEmpty || currentInput == "-" {
+            currentInput = "0"
+            displayEditCursorIndex = 1
+            return
+        }
+
+        if currentInput.hasPrefix(decimalSeparator) || currentInput.hasPrefix(".") {
+            currentInput = "0" + currentInput
+            if let cursorIndex = displayEditCursorIndex {
+                displayEditCursorIndex = cursorIndex + 1
+            }
+            return
+        }
+
+        let negativeDecimalPrefix = "-\(decimalSeparator)"
+        if currentInput.hasPrefix(negativeDecimalPrefix) || currentInput.hasPrefix("-.") {
+            currentInput.insert("0", at: currentInput.index(after: currentInput.startIndex))
+            if let cursorIndex = displayEditCursorIndex {
+                displayEditCursorIndex = cursorIndex + 1
+            }
+        }
+    }
+
+    private func displayBoundaryToRawCursorMapping() -> [Int] {
+        let displayCharacters = Array(display)
+        let rawCharacters = Array(currentInput)
+        var rawIndex = 0
+        var mapping: [Int] = [0]
+
+        for displaySymbol in displayCharacters {
+            if rawIndex < rawCharacters.count,
+               displayCharacterMatchesRawCharacter(displaySymbol, rawCharacter: rawCharacters[rawIndex]) {
+                rawIndex += 1
+            }
+            mapping.append(rawIndex)
+        }
+
+        return mapping
+    }
+
+    private func displayBoundaryIndex(forRawCursorIndex rawIndex: Int) -> Int? {
+        let normalized = normalizedDisplayEditCursorIndex(rawIndex)
+        return displayBoundaryToRawCursorMapping().firstIndex(of: normalized)
+    }
+
+    private func displayCharacterMatchesRawCharacter(_ displayCharacter: Character, rawCharacter: Character) -> Bool {
+        if displayCharacter == rawCharacter {
+            return true
+        }
+
+        if rawCharacter == "-" {
+            return displayCharacter == "-" || displayCharacter == "−"
+        }
+
+        let decimalSeparator = Character(numberFormatStyle.decimalSeparator)
+        if rawCharacter == decimalSeparator || rawCharacter == "." || rawCharacter == "," {
+            return displayCharacter == decimalSeparator || displayCharacter == "." || displayCharacter == ","
+        }
+
+        return false
     }
 
     private var pendingOperandShouldKeepPercentToken: Bool {

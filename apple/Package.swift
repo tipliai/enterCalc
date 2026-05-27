@@ -7,7 +7,7 @@ let package = Package(
     name: "EnterCalc",
     defaultLocalization: "en",
     platforms: [
-        .macOS(.v13),
+        .macOS(.v14),
         .iOS(.v17)
     ],
     products: [

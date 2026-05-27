@@ -4,8 +4,8 @@ This document tracks the shared-module checks currently discovered by `swift tes
 Each row maps directly to a discovered test method in `apple/tests/CalculatorViewModelTests.swift`.
 
 Current verification status on macOS:
-- `swift test list` discovers `131` `CalculatorViewModelTests` methods.
-- This matrix documents the same `131` methods with no missing or extra entries.
+- `swift test list` discovers `143` `CalculatorViewModelTests` methods.
+- This matrix documents the same `143` methods with no missing or extra entries.
 - The current macOS run includes the AppKit-only clipboard tests guarded by `canImport(AppKit)`.
 
 ## UI Settings Expectations
@@ -73,6 +73,18 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Error handling | Apply reciprocal to zero | Error state enabled, display `Cannot divide by zero` | `testReciprocalOfZeroSetsDivideByZeroError` |
 | Editing state | Enter `12`, then undo twice and redo twice | Display steps `12 -> 1 -> 0 -> 1 -> 12`; redo becomes unavailable at the end | `testUndoAndRedoRestorePriorDisplayStates` |
 | Input sanitization | Enter more than `CalculatorViewModel.Limits.maxInputDigits` digits | Display is capped at the configured maximum input length | `testInputDigitsAreCappedAtMaximumLength` |
+| Editing state | Enter `1234`, place the display caret between `2` and `3`, then enter `9` | Display updates to `12,934`; the caret advances with the inserted digit inside grouped output | `testDisplayEditCursorCanInsertDigitInsideGroupedDisplay` |
+| Editing state | Enter `1234`, place the display caret between `2` and `3`, then backspace | The digit immediately before the caret is removed and display becomes `134` | `testDisplayEditCursorBackspaceRemovesDigitBeforeCursor` |
+| Editing state | Enter `12`, place the display caret between `1` and `2`, then enter the decimal key | Display updates to `1.2`; the caret advances past the inserted decimal separator | `testDisplayEditCursorCanInsertDecimalWithinCurrentInput` |
+| Editing state | Evaluate `12 + 3 = 15`, place the display caret after `1`, then enter `9` | The evaluated result remains editable in place and becomes `195` without resetting the session | `testDisplayEditCursorCanModifyEvaluatedResult` |
+| Editing state | Evaluate `1234 + 1 = 1235`, place the caret near the final digit of grouped output, and insert `9` | Direct editing normalizes grouped stored input, preserves grouping in display (`12,395`), and advances the caret to the expected trailing boundary | `testDisplayEditCursorNormalizesGroupedCurrentInputBeforeInsertion` |
+| Editing state | Enter `1234`, then press the left arrow key twice while editing the result display | The first press activates the caret from the trailing edge and subsequent presses move it left through grouped output boundaries | `testDisplayEditCursorLeftArrowMovesCaretLeftFromTrailingEdge` |
+| Editing state | Enter `1234`, place the display caret between `2` and `3`, then press the right arrow key twice | The caret advances right through grouped output boundaries and reaches the trailing edge of the result | `testDisplayEditCursorRightArrowMovesCaretRightAndReachesTrailingEdge` |
+| Editing state | Enter `1234 +`, place the display caret inside the shown left operand, edit it, then enter a right-hand value | The pending operation preview updates to the edited left operand and evaluation uses that edited value | `testDisplayEditCursorCanModifyPendingOperationLeftOperand` |
+| Editing state | Enter `1234`, edit the displayed value, then press `+` before typing the next number | The operator exits direct edit mode, preserves the edited left operand, and the next digit starts a fresh pending right-hand operand | `testSetOperatorExitsDisplayEditModeAndStartsFreshPendingOperand` |
+| Editing state | In each supported number style, place the caret on a grouping separator and then on the decimal separator in `58,544.545`-style output | Grouping separators collapse to the preceding digit boundary, while the decimal separator remains directly selectable | `testDisplayEditCursorIgnoresGroupingSeparatorsAcrossSupportedNumberStyles` |
+| Display layout | Render `12,345,678,901,234,567` into a constrained editable display width | The editable layout shrinks the font instead of overflowing, and the trailing boundary remains inside the available display width | `testEditableDisplayLayoutScalesLongNumbersToFitAvailableWidth` |
+| Display layout | Compare short and long editable result strings in the same constrained width | Adding digits reduces the resolved editable display font size and keeps the trailing boundary inside the display width | `testEditableDisplayLayoutRescalesWhenDigitCountChanges` |
 | History | Repeatedly evaluate `1 + 1` more than `64` times | History count is capped at `64`; newest entry is kept first | `testHistoryIsCappedAtMaximumEntryCount` |
 | Memory | `MS 12`, clear, `M+ 3`, clear, `M- 5`, `MR`, `MC` | Memory progresses `12 -> 15 -> 10`; recall shows `10`; clear removes memory and entries | `testMemoryStoreRecallAddSubtractAndClearFlow` |
 | Memory | Store more than `64` distinct values | Memory entries keep only the newest `64` stored values | `testMemoryEntriesAreCappedAtMaximumEntryCount` |
