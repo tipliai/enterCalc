@@ -622,6 +622,10 @@ private extension EnterCalcIOSView {
             return false
         }
 
+        if handleHistoryOverlayHardwareKey(event) {
+            return true
+        }
+
         if handleRoundingOverlayHardwareKey(event) {
             return true
         }
@@ -650,7 +654,14 @@ private extension EnterCalcIOSView {
             }
             viewModel.clearAll()
             return true
-        case .keyboardDeleteOrBackspace:
+        case .keyboardEnd:
+            if viewModel.isDirectlyEditingDisplay {
+                viewModel.clearDisplayEditCursor()
+                return true
+            }
+            viewModel.clearAll()
+            return true
+        case .keyboardDeleteOrBackspace, .keyboardDeleteForward:
             viewModel.backspace()
             return true
         case .keyboardReturnOrEnter, .keypadEnter:
@@ -2270,12 +2281,35 @@ private extension EnterCalcIOSView {
         }
     }
 
+    func handleHistoryOverlayHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
+        guard activeOverlay == .history else { return false }
+
+        switch event.keyCode {
+        case .keyboardEscape, .keyboardDeleteOrBackspace, .keyboardReturnOrEnter, .keypadEnter, .keyboardEnd:
+            dismissActiveOverlay()
+            return true
+        case .keyboardDeleteForward:
+            activeScreen.viewModel.clearHistory()
+            dismissActiveOverlay()
+            return true
+        default:
+            // Suppress calculator input while history overlay is active.
+            return true
+        }
+    }
+
     func handleRoundingOverlayHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
         guard activeOverlay == .rounding else { return false }
 
         switch event.keyCode {
         case .keyboardUpArrow, .keyboardReturnOrEnter, .keypadEnter:
             dismissActiveOverlay()
+            return true
+        case .keyboardEnd:
+            dismissActiveOverlay()
+            return true
+        case .keyboardDownArrow:
+            // Already in the rounding overlay; no additional down-arrow action.
             return true
         case .keyboardEscape, .keyboardDeleteOrBackspace, .keyboardDeleteForward:
             activeScreen.viewModel.removeResultRounding()

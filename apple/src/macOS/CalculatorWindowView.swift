@@ -1114,12 +1114,34 @@ struct CalculatorWindowView: View {
         case 126, 36, 76:
             closeRoundingOverlay()
             return true
+        case 119:
+            closeRoundingOverlay()
+            return true
+        case 125:
+            // Already in the rounding overlay; no additional down-arrow action.
+            return true
         case 51, 53, 117:
             viewModel.removeResultRounding()
             closeRoundingOverlay()
             return true
         default:
             return false
+        }
+    }
+
+    private func handleHistoryOverlayKey(_ event: NSEvent) -> Bool {
+        guard showHistoryOverlay else { return false }
+
+        switch event.keyCode {
+        case 53, 51, 36, 76, 119:
+            closeHistoryOverlay()
+            return true
+        case 117:
+            clearHistoryAfterClosingOverlay()
+            return true
+        default:
+            // Suppress calculator input while history overlay is active.
+            return true
         }
     }
 
@@ -1169,12 +1191,8 @@ struct CalculatorWindowView: View {
         var handled = false
         let isCommand = event.modifierFlags.contains(.command)
 
-        if handleRoundingOverlayKey(event) {
-            return true
-        }
-
         if isCommand {
-            if event.keyCode == 51 { // Cmd + Backspace = clear all
+            if event.keyCode == 51 || event.keyCode == 117 { // Cmd + Backspace/Delete = clear all
                 viewModel.clearAll()
                 return true
             }
@@ -1188,6 +1206,14 @@ struct CalculatorWindowView: View {
             default:
                 break
             }
+        }
+
+        if handleHistoryOverlayKey(event) {
+            return true
+        }
+
+        if handleRoundingOverlayKey(event) {
+            return true
         }
 
         // Keypad support by keyCode
@@ -1233,7 +1259,15 @@ struct CalculatorWindowView: View {
             viewModel.clearAll()
             return true
         }
-        if event.keyCode == 51 { // Backspace
+        if event.keyCode == 119 { // End
+            if viewModel.isDirectlyEditingDisplay {
+                viewModel.clearDisplayEditCursor()
+                return true
+            }
+            viewModel.clearAll()
+            return true
+        }
+        if event.keyCode == 51 || event.keyCode == 117 { // Backspace/Delete
             viewModel.backspace()
             return true
         }
