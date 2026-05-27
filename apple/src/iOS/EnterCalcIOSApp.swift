@@ -613,10 +613,21 @@ private extension EnterCalcIOSView {
             return false
         }
 
+        if handleRoundingOverlayHardwareKey(event) {
+            return true
+        }
+
         let chars = event.charactersIgnoringModifiers ?? ""
         let inputChars = event.characters ?? chars
 
         switch event.keyCode {
+        case .keyboardDownArrow:
+            openRoundingOverlayFromKeyboard()
+            return true
+        case .keyboardLeftArrow:
+            return adjustRoundingSelectionFromKeyboard(delta: -1)
+        case .keyboardRightArrow:
+            return adjustRoundingSelectionFromKeyboard(delta: 1)
         case .keyboardEscape:
             viewModel.clearAll()
             return true
@@ -817,18 +828,22 @@ private extension EnterCalcIOSView {
                     IOSRoundingPanel(
                         palette: palette,
                         metrics: metrics,
+                        isEnabled: activeScreen.viewModel.isResultRoundingEnabled,
                         precision: activeScreen.viewModel.resultRoundingPrecision,
                         maxPrecision: activeScreen.viewModel.maxResultRoundingPrecision,
-                        onPrecisionChanged: { newPrecision in
-                            activeScreen.viewModel.setResultRoundingPrecision(newPrecision)
+                        bottomSafeAreaInset: metrics.mode == .phonePortrait ? safeAreaInsets.bottom : 0,
+                        onSelectionChanged: { digits in
+                            if let digits {
+                                activeScreen.viewModel.setResultRoundingPrecision(digits)
+                            } else {
+                                activeScreen.viewModel.removeResultRounding()
+                            }
                         },
-                        onPrecisionCommit: {
-                            dismissActiveOverlay()
-                        },
-                        onRemove: {
+                        onDisableAndDismiss: {
                             activeScreen.viewModel.removeResultRounding()
                             dismissActiveOverlay()
-                        }
+                        },
+                        onDismiss: { dismissActiveOverlay() }
                     )
                 }
             }
@@ -838,17 +853,16 @@ private extension EnterCalcIOSView {
     @ViewBuilder
     func roundingOverlayPanel<Content: View>(metrics: IOSLayoutMetrics, @ViewBuilder content: () -> Content) -> some View {
         if metrics.usesBottomOverlaySheet {
-            if metrics.mode == .phoneLandscape {
+            if metrics.mode == .phonePortrait {
                 content()
                     .frame(maxWidth: .infinity)
-                    .padding(.bottom, metrics.overlayBottomPadding)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .ignoresSafeArea(edges: .bottom)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             } else {
                 content()
                     .frame(width: metrics.overlayPanelWidth)
                     .padding(.bottom, metrics.overlayBottomPadding)
-                    .padding(.horizontal, metrics.mode == .phonePortrait ? metrics.outerPadding : 0)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -1107,7 +1121,7 @@ private extension EnterCalcIOSView {
         ) { index in
             screenBody(metrics: metrics, screen: screenStore.screens[index])
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .top)
 
         if usesLandscapeNavigationRail {
             HStack(spacing: metrics.sectionSpacing) {
@@ -2134,6 +2148,47 @@ private extension EnterCalcIOSView {
         }
     }
 
+    func handleRoundingOverlayHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
+        guard activeOverlay == .rounding else { return false }
+
+        switch event.keyCode {
+        case .keyboardUpArrow, .keyboardReturnOrEnter, .keypadEnter:
+            dismissActiveOverlay()
+            return true
+        case .keyboardEscape, .keyboardDeleteOrBackspace, .keyboardDeleteForward:
+            activeScreen.viewModel.removeResultRounding()
+            dismissActiveOverlay()
+            return true
+        default:
+            return false
+        }
+    }
+
+    func openRoundingOverlayFromKeyboard() {
+        guard activeOverlay != .rounding else { return }
+        toggleOverlay(.rounding)
+    }
+
+    func adjustRoundingSelectionFromKeyboard(delta: Int) -> Bool {
+        guard activeOverlay == .rounding else { return false }
+
+        let currentStep = activeScreen.viewModel.isResultRoundingEnabled
+            ? activeScreen.viewModel.resultRoundingPrecision
+            : 0
+        let maximumStep = activeScreen.viewModel.maxResultRoundingPrecision
+        let nextStep = min(max(currentStep + delta, 0), maximumStep)
+
+        guard nextStep != currentStep else { return true }
+
+        if nextStep == 0 {
+            activeScreen.viewModel.removeResultRounding()
+        } else {
+            activeScreen.viewModel.setResultRoundingPrecision(nextStep)
+        }
+
+        return true
+    }
+
     func overlayScrim(metrics: IOSLayoutMetrics) -> some View {
         Color.black.opacity(metrics.mode == .padWide ? 0.22 : 0.4)
             .ignoresSafeArea()
@@ -2484,48 +2539,56 @@ private struct IOSSettingsSheet: View {
 private struct IOSRoundingPanel: View {
     let palette: Palette
     let metrics: IOSLayoutMetrics
+    let isEnabled: Bool
     let precision: Int
     let maxPrecision: Int
-    let onPrecisionChanged: (Int) -> Void
-    let onPrecisionCommit: () -> Void
-    let onRemove: () -> Void
+    let bottomSafeAreaInset: CGFloat
+    let onSelectionChanged: (Int?) -> Void
+    let onDisableAndDismiss: () -> Void
+    let onDismiss: () -> Void
     @State private var sliderValue: Double
-    @State private var changedDuringInteraction: Bool = false
 
     private static let exponentialK: Double = -0.15234446585900155
     private static let exponentialDomainMax: Double = 16
+    private static let offStepIndex: Int = 0
 
-    private var allPrecisions: [Int] {
-        guard maxPrecision >= 0 else { return [] }
-        return Array(0...min(maxPrecision, Int(Self.exponentialDomainMax)))
+    private var maximumStepIndex: Int {
+        min(maxPrecision, Int(Self.exponentialDomainMax))
+    }
+
+    private var allStepIndices: [Int] {
+        Array(Self.offStepIndex...maximumStepIndex)
     }
 
     init(
         palette: Palette,
         metrics: IOSLayoutMetrics,
+        isEnabled: Bool,
         precision: Int,
         maxPrecision: Int,
-        onPrecisionChanged: @escaping (Int) -> Void,
-        onPrecisionCommit: @escaping () -> Void,
-        onRemove: @escaping () -> Void
+        bottomSafeAreaInset: CGFloat = 0,
+        onSelectionChanged: @escaping (Int?) -> Void,
+        onDisableAndDismiss: @escaping () -> Void,
+        onDismiss: @escaping () -> Void
     ) {
         self.palette = palette
         self.metrics = metrics
+        self.isEnabled = isEnabled
         self.precision = precision
         self.maxPrecision = max(0, maxPrecision)
-        self.onPrecisionChanged = onPrecisionChanged
-        self.onPrecisionCommit = onPrecisionCommit
-        self.onRemove = onRemove
-        let initialPosition = IOSRoundingPanel.sliderPosition(for: precision, maxPrecision: max(0, maxPrecision))
+        self.bottomSafeAreaInset = bottomSafeAreaInset
+        self.onSelectionChanged = onSelectionChanged
+        self.onDisableAndDismiss = onDisableAndDismiss
+        self.onDismiss = onDismiss
+        let initialPosition = IOSRoundingPanel.sliderPosition(
+            for: IOSRoundingPanel.stepIndex(isEnabled: isEnabled, precision: precision, maxPrecision: max(0, maxPrecision))
+        )
         _sliderValue = State(initialValue: initialPosition)
     }
 
     var body: some View {
-        VStack(spacing: metrics.panelSpacing) {
-            Text(localized("rounding.title"))
-                .font(EnterCalcFont.appFont(size: metrics.panelSecondaryFontSize + 1))
-                .foregroundStyle(palette.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .center)
+        VStack(alignment: .leading, spacing: metrics.panelSpacing) {
+            roundingOverlayHeader
 
             VStack(spacing: 8) {
                 Slider(
@@ -2533,97 +2596,159 @@ private struct IOSRoundingPanel: View {
                         get: { sliderValue },
                         set: { newValue in
                             let clamped = min(max(newValue, 0), 1)
-                            let snappedPrecision = precision(for: clamped)
-                            let snappedPosition = sliderPosition(for: snappedPrecision)
+                            let snappedStepIndex = stepIndex(for: clamped)
+                            let snappedPosition = sliderPosition(for: snappedStepIndex)
                             guard snappedPosition != sliderValue else { return }
                             sliderValue = snappedPosition
-                            changedDuringInteraction = true
-                            onPrecisionChanged(snappedPrecision)
+                            onSelectionChanged(digits(for: snappedStepIndex))
                         }
                     ),
-                    in: 0...1,
-                    onEditingChanged: { isEditing in
-                        if !isEditing, changedDuringInteraction {
-                            changedDuringInteraction = false
-                            onPrecisionCommit()
-                        }
-                    }
+                    in: 0...1
                 )
 
                 GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        ForEach(allPrecisions, id: \.self) { value in
-                            Capsule(style: .continuous)
-                                .fill(palette.textSecondary.opacity(0.35))
-                                .frame(width: 2, height: 5)
-                                .offset(x: tickOffset(for: value, width: geometry.size.width))
+                    ZStack(alignment: .topLeading) {
+                        ForEach(allStepIndices, id: \.self) { stepIndex in
+                            if stepIndex == Self.offStepIndex {
+                                Image(systemName: "power")
+                                    .font(EnterCalcFont.appFont(size: metrics.panelSecondaryFontSize))
+                                    .foregroundStyle(palette.textSecondary)
+                                    .offset(x: offIconOffset(width: geometry.size.width), y: -3)
+                            } else {
+                                Capsule(style: .continuous)
+                                    .fill(palette.textSecondary.opacity(0.35))
+                                    .frame(width: 2, height: 5)
+                                    .offset(x: tickOffset(for: stepIndex, width: geometry.size.width))
+                            }
                         }
                     }
                 }
-                .frame(height: 8)
+                .frame(height: 26)
             }
-
-            Button(role: .destructive) {
-                onRemove()
-            } label: {
-                Text(localized("rounding.remove"))
-                    .font(EnterCalcFont.appFont(size: metrics.panelPrimaryFontSize))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(palette.accent)
         }
         .padding(.horizontal, metrics.panelHorizontalPadding)
-        .padding(.vertical, metrics.panelVerticalPadding)
+        .padding(.top, 0)
+        .padding(.bottom, metrics.panelVerticalPadding + bottomSafeAreaInset)
         .frame(maxWidth: .infinity, alignment: .top)
+        .fixedSize(horizontal: false, vertical: true)
         .background(
-            RoundedRectangle(cornerRadius: metrics.surfaceCornerRadius, style: .continuous)
+            Rectangle()
                 .fill(palette.historyBackground)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: metrics.surfaceCornerRadius, style: .continuous)
+            Rectangle()
                 .stroke(palette.buttonBorder, lineWidth: 1)
         )
         .onChange(of: precision) { _, newValue in
-            sliderValue = sliderPosition(for: newValue)
+            sliderValue = sliderPosition(for: Self.stepIndex(isEnabled: isEnabled, precision: newValue, maxPrecision: maxPrecision))
         }
+        .onChange(of: isEnabled) { _, newValue in
+            sliderValue = sliderPosition(for: Self.stepIndex(isEnabled: newValue, precision: precision, maxPrecision: maxPrecision))
+        }
+        .contentShape(Rectangle())
     }
 
-    private func sliderPosition(for precision: Int) -> Double {
-        Self.sliderPosition(for: precision, maxPrecision: maxPrecision)
+    private var roundingOverlayHeader: some View {
+        let hitTargetSize = max(metrics.headerButtonSize, 44)
+
+        return ZStack {
+            Text(localized("rounding.title"))
+                .font(EnterCalcFont.appFont(size: metrics.panelSecondaryFontSize + 1))
+                .foregroundStyle(palette.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            HStack(spacing: 0) {
+                disableAndDismissButton
+                Spacer(minLength: 0)
+                dismissButton
+            }
+        }
+        .frame(height: hitTargetSize)
     }
 
-    private func precision(for normalizedPosition: Double) -> Int {
+    private var dismissButton: some View {
+        let hitTargetSize = max(metrics.headerButtonSize, 44)
+
+        return Button(action: onDismiss) {
+            Image(systemName: "xmark")
+                .font(EnterCalcFont.appFont(size: metrics.panelPrimaryFontSize * 1.15))
+                .frame(width: metrics.headerButtonSize, height: metrics.headerButtonSize)
+                .foregroundColor(palette.textSecondary)
+        }
+        .frame(width: hitTargetSize, height: hitTargetSize, alignment: .center)
+        .contentShape(Rectangle())
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(localized("close")))
+    }
+
+    private var disableAndDismissButton: some View {
+        let hitTargetSize = max(metrics.headerButtonSize, 44)
+
+        return Button(action: onDisableAndDismiss) {
+            Image(systemName: "trash")
+                .font(EnterCalcFont.appFont(size: metrics.panelPrimaryFontSize * 1.15))
+                .frame(width: metrics.headerButtonSize, height: metrics.headerButtonSize)
+                .foregroundColor(palette.textSecondary)
+        }
+        .frame(width: hitTargetSize, height: hitTargetSize, alignment: .center)
+        .contentShape(Rectangle())
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(localized("rounding.remove")))
+    }
+
+    private func sliderPosition(for stepIndex: Int) -> Double {
+        Self.sliderPosition(for: stepIndex)
+    }
+
+    private func stepIndex(for normalizedPosition: Double) -> Int {
         let clamped = min(max(normalizedPosition, 0), 1)
-        if allPrecisions.isEmpty {
-            return 0
+        if allStepIndices.isEmpty {
+            return Self.offStepIndex
         }
 
-        var nearestPrecision = allPrecisions[0]
-        var nearestDistance = abs(clamped - sliderPosition(for: nearestPrecision))
+        var nearestStepIndex = allStepIndices[0]
+        var nearestDistance = abs(clamped - sliderPosition(for: nearestStepIndex))
 
-        for candidate in allPrecisions.dropFirst() {
+        for candidate in allStepIndices.dropFirst() {
             let candidateDistance = abs(clamped - sliderPosition(for: candidate))
             if candidateDistance < nearestDistance {
                 nearestDistance = candidateDistance
-                nearestPrecision = candidate
+                nearestStepIndex = candidate
             }
         }
 
-        return nearestPrecision
+        return nearestStepIndex
     }
 
-    private func tickOffset(for precision: Int, width: CGFloat) -> CGFloat {
-        let sliderLeftPadding: CGFloat = 1
-        let sliderUsableWidth = max(0, width - sliderLeftPadding * 2)
-        let normalized = sliderPosition(for: precision)
-        return sliderLeftPadding + CGFloat(normalized) * sliderUsableWidth
+    private func digits(for stepIndex: Int) -> Int? {
+        guard stepIndex != Self.offStepIndex else { return nil }
+        return min(stepIndex, min(maxPrecision, Int(Self.exponentialDomainMax)))
     }
 
-    private static func sliderPosition(for precision: Int, maxPrecision: Int) -> Double {
-        let boundedPrecision = min(max(precision, 0), max(0, maxPrecision))
-        let value = Double(boundedPrecision)
+    private func tickOffset(for stepIndex: Int, width: CGFloat) -> CGFloat {
+        markerOffset(for: stepIndex, width: width, markerWidth: 2)
+    }
+
+    private static func stepIndex(isEnabled: Bool, precision: Int, maxPrecision: Int) -> Int {
+        guard isEnabled else { return offStepIndex }
+        return min(max(precision, 1), min(maxPrecision, Int(exponentialDomainMax)))
+    }
+
+    private func offIconOffset(width: CGFloat) -> CGFloat {
+        markerOffset(for: Self.offStepIndex, width: width, markerWidth: 14) + 17
+    }
+
+    private func markerOffset(for stepIndex: Int, width: CGFloat, markerWidth: CGFloat) -> CGFloat {
+        let trackLeadingInset: CGFloat = 10
+        let trackTrailingInset: CGFloat = 10
+        let usableWidth = max(width - trackLeadingInset - trackTrailingInset, 0)
+        let centerX = trackLeadingInset + CGFloat(sliderPosition(for: stepIndex)) * usableWidth
+        return centerX - markerWidth * 0.5
+    }
+
+    private static func sliderPosition(for stepIndex: Int) -> Double {
+        let boundedStepIndex = min(max(stepIndex, 0), Int(exponentialDomainMax))
+        let value = Double(boundedStepIndex)
         let denominator = exp(exponentialK * exponentialDomainMax) - 1
         if denominator == 0 {
             return 0
