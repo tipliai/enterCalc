@@ -4,8 +4,8 @@ This document tracks the shared-module checks currently discovered by `swift tes
 Each row maps directly to a discovered test method in `apple/tests/CalculatorViewModelTests.swift`.
 
 Current verification status on macOS:
-- `swift test list` discovers `151` `CalculatorViewModelTests` methods.
-- This matrix documents the same `151` methods with no missing or extra entries.
+- `swift test list` discovers `154` `CalculatorViewModelTests` methods.
+- This matrix documents the same `154` methods with no missing or extra entries.
 - The current macOS run includes the AppKit-only clipboard tests guarded by `canImport(AppKit)`.
 
 ## UI Settings Expectations
@@ -27,6 +27,7 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Arithmetic | Enter `97`, apply square root, `+ 8 =` | Display `17.8488578017961`, expression `√(97) + 8 =`, history entry `√(97) + 8 -> 17.8488578017961` | `testSquareRootPlusAdditionProducesExpectedResultAndHistory` |
 | Arithmetic | Enter `123246 - 105317.74 =` | Display `17,928.26`; stored history result is `17928.26` without binary floating-point residue | `testDecimalSubtractionDoesNotExposeBinaryFloatingPointResidue` |
 | Arithmetic | Enter `0.1 + 0.2 =` | Display and history result are `0.3` | `testTenthsAdditionRoundsLikeANormalCalculatorDisplay` |
+| Arithmetic | Enter `0.1 + 0.1 + 0.1 =` | Display and history result are `0.3`, preserving normal calculator rounding across chained tenths | `testThreeTenthsAdditionRoundsLikeANormalCalculatorDisplay` |
 | Arithmetic | Enter `4`, apply square root, then enter `(2 + 2)` and evaluate | Display `8`; expression and history use implicit multiplication `√(4) × ( 2 + 2 )` | `testSquareRootThenParenthesizedExpressionImplicitlyMultiplies` |
 | Arithmetic | Enter `4`, apply reciprocal, then enter `(2 + 2)` and evaluate | Display `1`; expression and history use implicit multiplication `1/(4) × ( 2 + 2 )` | `testReciprocalThenParenthesizedExpressionImplicitlyMultiplies` |
 | Arithmetic | Enter `3`, apply square, then enter `(2 + 1)` and evaluate | Display `27`; expression and history use implicit multiplication `3² × ( 2 + 1 )` | `testSquareThenParenthesizedExpressionImplicitlyMultiplies` |
@@ -71,6 +72,7 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Parentheses | Enter `6 + 6` then `(` | Expression keeps the pending right operand and becomes `6 + 6 × (` rather than collapsing to `6 + (` | `testTypingOpenParenthesisAfterPendingRightOperandPreservesThatOperand` |
 | Parentheses | Build `6 + 6 + 6`, then press the parentheses key to open `(` | Existing multi-step chain is preserved inline (`6 + 6 + 6 × (`), then evaluates correctly after closing the parenthesized operand | `testParenthesisKeyPreservesExistingMultiChainExpression` |
 | Parentheses | Enter `8 × ( 9² )` and evaluate | Display `648`; visible history uses `9²` while stored history uses `sqr(9)` | `testSquareInsideParenthesesRemainsInExpressionAndEvaluates` |
+| Arithmetic | Enter `-2`, then apply square | Display `-4`; x² treats the signed input with exponent-style precedence for standalone negatives | `testSquareOfNegativeInputUsesExponentPrecedenceSemantics` |
 | Parentheses | Use keyboard-typed `(` and `)` to enter `2 + 3 × ( 4 + 5 × ( 6 ) )` | Nested keyboard parentheses are accepted inline and evaluate with expected precedence (`104`) | `testKeyboardTypedNestedParenthesesAreAcceptedInline` |
 | Percent | Enter `1 + 2 × ( 100%` and evaluate | Before `=`, display stays `100%`; evaluation treats `%` as decimal and resolves to `3` with expression `1 + 2 × ( 100% ) =` | `testPercentInsideParenthesizedExpressionStaysVisibleUntilEvaluate` |
 | Percent | Enter `1 + 5 × ( 200% ) =` | Evaluation treats `%` as decimal inside parentheses, resulting in `11`; history stores `1 + 5 × ( 200% )` | `testPercentInsideParenthesizedExpressionEvaluatesAsDecimalPercent` |
@@ -87,6 +89,7 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Percent | Apply `5%`, then add `3%` and evaluate | Display `0.08`; expression and history remain `5% + 3%` | `testPercentAfterStandalonePercentUsesStandaloneSemantics` |
 | Percent | Apply `5%`, then add `3` and evaluate | Display `3.05`; expression and history remain `5% + 3` | `testAdditionAfterStandalonePercentUsesPercentValueAsLeftOperand` |
 | Error handling | Enter `9 ÷ 0 =` | Error state enabled, display `Cannot divide by zero`, empty expression, undo remains available | `testDivideByZeroSetsLocalizedErrorState` |
+| Error handling | Enter `0 ÷ 0 =` | Same divide-by-zero error state and cleared expression as the standard divide-by-zero case | `testZeroDividedByZeroSetsLocalizedErrorState` |
 | Error handling | Enter `9`, toggle sign, apply square root | Error state enabled, display `Invalid input`, empty expression | `testSquareRootOfNegativeNumberSetsInvalidInputError` |
 | Error handling | Trigger `Invalid input`, then press backspace once | Error state clears and display restores to `-9` | `testBackspaceOnInvalidInputUndoesErrorOnce` |
 | Error handling | Apply reciprocal to zero | Error state enabled, display `Cannot divide by zero` | `testReciprocalOfZeroSetsDivideByZeroError` |

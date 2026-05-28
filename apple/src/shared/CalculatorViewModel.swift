@@ -1032,7 +1032,11 @@ public final class CalculatorViewModel: ObservableObject {
             completeUndoableChange(from: snapshot)
             return
         }
-        let result = val * val
+        let isNegativeOperand = val < 0
+        var result = val * val
+        if isNegativeOperand {
+            result = -result
+        }
         if valueWouldUnderflowDisplay(result) {
             setError("error.outOfRange")
             completeUndoableChange(from: snapshot)
@@ -1742,7 +1746,10 @@ public final class CalculatorViewModel: ObservableObject {
             case .success(let value):
                 let dbl = NSDecimalNumber(decimal: value).doubleValue
                 if abs(dbl) >= Self.maxFormatterMagnitude.squareRoot() { return .failure(.overflow) }
-                let squared = value * value
+                var squared = value * value
+                if value < 0 {
+                    squared = -squared
+                }
                 if valueWouldUnderflowDisplay(squared) { return .failure(.underflow) }
                 return .success(squared)
             case .failure(let error):
