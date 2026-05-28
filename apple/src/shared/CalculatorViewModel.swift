@@ -73,8 +73,9 @@ public final class CalculatorViewModel: ObservableObject {
         static let maxHistoryExpressionCharacters = 512
         static let maxHistoryResultCharacters = 256
         static let maxStoredMemoryEntries = 64
-        static let maxUndoDepth = 64
-        static let maxRedoDepth = 64
+        static let maxUndoDepth = 100
+        static let maxRedoDepth = 100
+        static let maxOperationChunks = maxUndoDepth
         static let maxConsecutiveSquareOrRootDepth = 25
         static let maxPasteCharacters = 512
         static let maxPasteReplaySteps = 256
@@ -727,7 +728,14 @@ public final class CalculatorViewModel: ObservableObject {
                 return
             }
 
-            if isExpressionOperatorToken(last) {
+            let isReplacingTrailingOperator = isExpressionOperatorToken(last)
+            if !isReplacingTrailingOperator,
+               operationChunkCount(in: expressionTokens) >= Limits.maxOperationChunks {
+                completeUndoableChange(from: snapshot)
+                return
+            }
+
+            if isReplacingTrailingOperator {
                 expressionTokens.removeLast()
             }
 
@@ -765,6 +773,11 @@ public final class CalculatorViewModel: ObservableObject {
 
         let didBuildChainedExpression: Bool
         if let existingPending = pendingOperator, !shouldResetInputOnNextDigit {
+            if nonExpressionOperationChunkCountIncludingCurrentInput() >= Limits.maxOperationChunks {
+                completeUndoableChange(from: snapshot)
+                return
+            }
+
             let previousExpression = expression
             let previousLhsToken = accumulatorToken ?? currentToken
             let previousRhsToken = currentToken
@@ -1687,6 +1700,34 @@ public final class CalculatorViewModel: ObservableObject {
             || token == BinaryOperator.subtract.symbol
             || token == BinaryOperator.multiply.symbol
             || token == BinaryOperator.divide.symbol
+    }
+
+    private func operationChunkCount(in tokens: [String]) -> Int {
+        tokens.reduce(into: 0) { count, token in
+            if isExpressionValueToken(token) {
+                count += 1
+            }
+        }
+    }
+
+    private func nonExpressionOperationChunkCountIncludingCurrentInput() -> Int {
+        let expressionTokens = expression
+            .split(separator: " ", omittingEmptySubsequences: true)
+            .map(String.init)
+
+        var chunkCount = operationChunkCount(in: expressionTokens)
+
+        guard pendingOperator != nil, !shouldResetInputOnNextDigit else {
+            return chunkCount
+        }
+
+        if let last = expressionTokens.last, isExpressionOperatorToken(last) {
+            chunkCount += 1
+        } else if chunkCount == 0 {
+            chunkCount = 1
+        }
+
+        return chunkCount
     }
 
     private func isExpressionNumberToken(_ token: String) -> Bool {
