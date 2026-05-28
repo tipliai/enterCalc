@@ -184,6 +184,20 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.history.first?.result, "0.3")
     }
 
+    func testThreeTenthsAdditionRoundsLikeANormalCalculatorDisplay() {
+        let viewModel = CalculatorViewModel()
+
+        enter("0.1", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("0.1", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("0.1", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "0.3")
+        XCTAssertEqual(viewModel.history.first?.result, "0.3")
+    }
+
     func testLargeResultUsesScientificNotationByDefault() {
         let viewModel = CalculatorViewModel()
 
@@ -435,6 +449,19 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.display, "Cannot divide by zero")
         XCTAssertEqual(viewModel.expressionDisplay, "")
         XCTAssertTrue(viewModel.canUndo)
+    }
+
+    func testZeroDividedByZeroSetsLocalizedErrorState() {
+        let viewModel = CalculatorViewModel()
+
+        enter("0", into: viewModel)
+        viewModel.setOperator(.divide)
+        enter("0", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertTrue(viewModel.isErrorState)
+        XCTAssertEqual(viewModel.display, "Cannot divide by zero")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
     }
 
     func testUndoAndRedoRestorePriorDisplayStates() {
@@ -836,6 +863,18 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.history.first?.expression, "8 × ( sqr(9) )")
         XCTAssertEqual(viewModel.history.first?.displayExpression, "8 × ( 9² )")
         XCTAssertEqual(viewModel.history.first?.result, "648")
+    }
+
+    func testSquareOfNegativeInputUsesExponentPrecedenceSemantics() {
+        let viewModel = CalculatorViewModel()
+
+        enter("2", into: viewModel)
+        viewModel.toggleSign()
+        viewModel.square()
+
+        XCTAssertEqual(viewModel.display, "-4")
+        XCTAssertEqual(viewModel.expressionDisplay, "-2²")
+        XCTAssertEqual(viewModel.history.isEmpty, true)
     }
 
     func testSquareRootThenParenthesizedExpressionImplicitlyMultiplies() {
