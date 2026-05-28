@@ -483,9 +483,8 @@ struct CalculatorWindowView: View {
 
     private var display: some View {
         let basicFontSize: CGFloat = 12
-        let operationTextCompactionProgress = min(
-            1,
-            max(0, Double(viewModel.expressionDisplay.count - 20) / 14)
+        let operationTextCompactionProgress = CalculatorDisplayMetrics.operationTextCompactionProgress(
+            for: viewModel.expressionDisplay.count
         )
 
         return VStack(alignment: .leading, spacing: 0) {
@@ -660,7 +659,7 @@ struct CalculatorWindowView: View {
     private func memoryControls(compactionProgress: Double) -> some View {
         let adjustedOpacity = 0.15 * (1 - compactionProgress)
         let adjustedHeight = max(0, 16 * (1 - compactionProgress))
-        Text("Basic")
+        return Text("Basic")
             .font(EnterCalcFont.appFont(size: 12))
             .foregroundStyle(primaryForeground.opacity(adjustedOpacity))
             .frame(maxWidth: .infinity, alignment: .leading)

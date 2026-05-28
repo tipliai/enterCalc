@@ -1962,9 +1962,8 @@ private extension EnterCalcIOSView {
                     .allowsHitTesting(false)
                 }
 
-                let operationTextCompactionProgress = min(
-                    1,
-                    max(0, Double(screen.viewModel.expressionDisplay.count - 20) / 14)
+                let operationTextCompactionProgress = CalculatorDisplayMetrics.operationTextCompactionProgress(
+                    for: screen.viewModel.expressionDisplay.count
                 )
 
                 VStack(spacing: 0) {

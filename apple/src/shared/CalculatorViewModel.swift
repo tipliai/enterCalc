@@ -779,7 +779,7 @@ public final class CalculatorViewModel: ObservableObject {
                 let lhsToken = accumulatorToken ?? currentToken
                 pendingParenthesisExpressionSeedTokens = [lhsToken, existingPending.symbol, currentToken, op.symbol]
             }
-            performPendingOperation(addToHistory: false)
+            performPendingOperation(addToHistory: false, refreshDisplay: false)
             if isErrorState {
                 completeUndoableChange(from: snapshot)
                 return
@@ -916,24 +916,10 @@ public final class CalculatorViewModel: ObservableObject {
 
         // Preserve existing calculator-style percent semantics (e.g. 10 + 10% = 11)
         // by falling back to immediate pending-operation evaluation when % is present.
-        let visibleExpression = expressionDisplay.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedVisibleExpression = visibleExpression.lowercased()
-        let hasAdditiveOperator = visibleExpression.contains(BinaryOperator.add.symbol)
-            || visibleExpression.contains(BinaryOperator.subtract.symbol)
-        let hasMultiplicativeOperator = visibleExpression.contains(BinaryOperator.multiply.symbol)
-            || visibleExpression.contains(BinaryOperator.divide.symbol)
-        guard !visibleExpression.isEmpty,
-              !visibleExpression.contains("%"),
-              !normalizedVisibleExpression.contains("e+"),
-              !normalizedVisibleExpression.contains("e-"),
-              hasAdditiveOperator,
-              hasMultiplicativeOperator else {
+        let pendingExpression = expression.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !pendingExpression.isEmpty else {
             return false
         }
-
-        let pendingExpression = visibleExpression
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "=").union(.whitespacesAndNewlines))
 
         let evaluationExpression: String
         if pendingExpression.hasSuffix(pending.symbol) {
@@ -942,10 +928,23 @@ public final class CalculatorViewModel: ObservableObject {
             evaluationExpression = pendingExpression
         }
 
+        let normalizedEvaluationExpression = evaluationExpression.lowercased()
+        guard !evaluationExpression.contains("%"),
+              !normalizedEvaluationExpression.contains("e+"),
+              !normalizedEvaluationExpression.contains("e-") else {
+            return false
+        }
+
         let evaluationTokens = evaluationExpression
             .split(separator: " ", omittingEmptySubsequences: true)
             .map(String.init)
         guard !evaluationTokens.isEmpty else { return false }
+
+        let hasAdditiveOperator = evaluationTokens.contains { isDisplayAdditiveOperator($0) }
+        let hasMultiplicativeOperator = evaluationTokens.contains { isDisplayMultiplicativeOperator($0) }
+        guard hasAdditiveOperator, hasMultiplicativeOperator else {
+            return false
+        }
 
         switch evaluateExpressionTokens(evaluationTokens) {
         case .success(let result):
@@ -1894,7 +1893,7 @@ public final class CalculatorViewModel: ObservableObject {
         return .success(result)
     }
 
-    private func performPendingOperation(addToHistory: Bool) {
+    private func performPendingOperation(addToHistory: Bool, refreshDisplay: Bool = true) {
         guard let pending = pendingOperator else { return }
         let lhs = accumulator ?? currentValue
         let rhs = currentValue
@@ -1941,7 +1940,9 @@ public final class CalculatorViewModel: ObservableObject {
         accumulator = result
         accumulatorToken = displayString(for: resultText, useActiveCurrency: false)
         currentToken = displayString(for: resultText, useActiveCurrency: false)
-        updateDisplay()
+        if refreshDisplay {
+            updateDisplay()
+        }
     }
 
     private func appendHistory(expression: String, result: String, displayExpressionOverride: String? = nil) {
