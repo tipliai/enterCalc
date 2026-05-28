@@ -483,7 +483,9 @@ struct CalculatorWindowView: View {
 
     private var display: some View {
         let basicFontSize: CGFloat = 12
-        let operationLineMinScaleFactor = CalculatorDisplayMetrics.operationLineMinScaleFactor(for: basicFontSize)
+        let operationTextCompactionProgress = CalculatorDisplayMetrics.operationTextCompactionProgress(
+            for: viewModel.expressionDisplay.count
+        )
 
         return VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .trailing, spacing: 4) {
@@ -491,9 +493,9 @@ struct CalculatorWindowView: View {
                     .font(EnterCalcFont.appFont(size: basicFontSize))
                     .foregroundStyle(fadedForeground)
                     .frame(maxWidth: .infinity, alignment: .trailing)
-                    .lineLimit(1)
-                    .allowsTightening(true)
-                    .minimumScaleFactor(operationLineMinScaleFactor)
+                    .multilineTextAlignment(.trailing)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if viewModel.canDirectlyEditDisplay {
                     EditableDisplayResultText(
@@ -524,7 +526,7 @@ struct CalculatorWindowView: View {
 
             Spacer(minLength: 0)
 
-            memoryControls
+            memoryControls(compactionProgress: operationTextCompactionProgress)
         }
         .padding(.top, 8)
         .padding(.horizontal, 8)
@@ -654,12 +656,16 @@ struct CalculatorWindowView: View {
             .allowsHitTesting(false)
     }
 
-    private var memoryControls: some View {
-        Text("Basic")
+    private func memoryControls(compactionProgress: Double) -> some View {
+        let adjustedOpacity = 0.15 * (1 - compactionProgress)
+        let adjustedHeight = max(0, 16 * (1 - compactionProgress))
+        return Text("Basic")
             .font(EnterCalcFont.appFont(size: 12))
-            .foregroundStyle(primaryForeground.opacity(0.15))
+            .foregroundStyle(primaryForeground.opacity(adjustedOpacity))
             .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: adjustedHeight, alignment: .leading)
             .lineLimit(1)
+            .clipped()
             .anchorPreference(
                 key: MemoryControlsBoundsKey.self,
                 value: .bounds,
