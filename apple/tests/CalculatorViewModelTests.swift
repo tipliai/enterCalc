@@ -468,7 +468,7 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.display.replacingOccurrences(of: ",", with: ""), String(repeating: "9", count: CalculatorViewModel.Limits.maxInputDigits))
     }
 
-    func testRepeatedEqualsRepeatsLastBinaryOperation() {
+    func testRepeatedEqualsAfterEvaluateDoesNotReplayLastOperation() {
         let viewModel = CalculatorViewModel()
 
         enter("5", into: viewModel)
@@ -478,15 +478,249 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.evaluate()
         viewModel.evaluate()
 
-        XCTAssertEqual(viewModel.display, "11")
-        XCTAssertEqual(viewModel.expressionDisplay, "9 + 2 =")
-        XCTAssertEqual(viewModel.history.count, 3)
-        XCTAssertEqual(viewModel.history[0].expression, "9 + 2")
-        XCTAssertEqual(viewModel.history[0].result, "11")
-        XCTAssertEqual(viewModel.history[1].expression, "7 + 2")
-        XCTAssertEqual(viewModel.history[1].result, "9")
-        XCTAssertEqual(viewModel.history[2].expression, "5 + 2")
-        XCTAssertEqual(viewModel.history[2].result, "7")
+        XCTAssertEqual(viewModel.display, "7")
+        XCTAssertEqual(viewModel.expressionDisplay, "5 + 2 =")
+        XCTAssertEqual(viewModel.history.count, 1)
+        XCTAssertEqual(viewModel.history[0].expression, "5 + 2")
+        XCTAssertEqual(viewModel.history[0].result, "7")
+    }
+
+    func testChainedMultiplicationKeepsFullExpressionDisplayOnEvaluate() {
+        let viewModel = CalculatorViewModel()
+
+        enter("2", into: viewModel)
+        viewModel.setOperator(.multiply)
+        enter("2", into: viewModel)
+        viewModel.setOperator(.multiply)
+        enter("2", into: viewModel)
+
+        XCTAssertEqual(viewModel.expressionDisplay, "2 × 2 × 2")
+
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "8")
+        XCTAssertEqual(viewModel.expressionDisplay, "2 × 2 × 2 =")
+        XCTAssertEqual(viewModel.history.first?.expression, "2 × 2 × 2")
+        XCTAssertEqual(viewModel.history.first?.result, "8")
+    }
+
+    func testPressingSameOperatorTwiceWithoutRightOperandIsNoOp() {
+        let viewModel = CalculatorViewModel()
+
+        enter("6", into: viewModel)
+        viewModel.setOperator(.add)
+
+        XCTAssertEqual(viewModel.expressionDisplay, "6 +")
+
+        viewModel.setOperator(.add)
+
+        XCTAssertEqual(viewModel.display, "6")
+        XCTAssertEqual(viewModel.expressionDisplay, "6 +")
+
+        enter("6", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("6", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "18")
+        XCTAssertEqual(viewModel.expressionDisplay, "6 + 6 + 6 =")
+        XCTAssertEqual(viewModel.history.first?.expression, "6 + 6 + 6")
+        XCTAssertEqual(viewModel.history.first?.result, "18")
+    }
+
+    func testMixedPrecedenceSimpleChainUsesNestedPostEqualsDisplayAndPrecedenceOnEvaluate() {
+        let viewModel = CalculatorViewModel()
+
+        enter("2", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("2", into: viewModel)
+        viewModel.setOperator(.multiply)
+
+        XCTAssertEqual(viewModel.display, "2")
+        XCTAssertEqual(viewModel.expressionDisplay, "2 + 2 ×")
+
+        enter("2", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "6")
+        XCTAssertEqual(viewModel.expressionDisplay, "2 + (2 × 2) =")
+        XCTAssertEqual(viewModel.history.first?.expression, "2 + 2 × 2")
+        XCTAssertEqual(viewModel.history.first?.result, "6")
+    }
+
+    func testMixedPrecedenceWithParenthesizedSegmentUsesNestedPostEqualsDisplay() {
+        let viewModel = CalculatorViewModel()
+
+        enter("5", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("6", into: viewModel)
+        viewModel.setOperator(.multiply)
+        enter("5", into: viewModel)
+        viewModel.setOperator(.add)
+        viewModel.inputParenthesis("(")
+        enter("5", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("665", into: viewModel)
+        viewModel.inputParenthesis(")")
+        viewModel.setOperator(.subtract)
+        enter("5", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "700")
+        XCTAssertEqual(viewModel.expressionDisplay, "5 + (6 × 5) + 5 + 665 − 5 =")
+        XCTAssertEqual(viewModel.history.first?.expression, "5 + 6 × 5 + ( 5 + 665 ) − 5")
+        XCTAssertEqual(viewModel.history.first?.result, "700")
+    }
+
+    func testMixedChainDoesNotComputeDisplayUntilEvaluate() {
+        let viewModel = CalculatorViewModel()
+
+        enter("5", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("6", into: viewModel)
+        viewModel.setOperator(.multiply)
+        enter("5", into: viewModel)
+        viewModel.setOperator(.add)
+
+        XCTAssertEqual(viewModel.display, "5")
+        XCTAssertEqual(viewModel.expressionDisplay, "5 + 6 × 5 +")
+    }
+
+    func testSwitchingFromPlusToMinusWithPendingOperandKeepsFullExpression() {
+        let viewModel = CalculatorViewModel()
+
+        enter("2", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("2", into: viewModel)
+        viewModel.setOperator(.subtract)
+
+        XCTAssertEqual(viewModel.expressionDisplay, "2 + 2 −")
+
+        enter("1", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "3")
+        XCTAssertEqual(viewModel.expressionDisplay, "2 + 2 − 1 =")
+        XCTAssertEqual(viewModel.history.first?.expression, "2 + 2 − 1")
+        XCTAssertEqual(viewModel.history.first?.result, "3")
+    }
+
+    func testSwitchingPendingOperatorWithoutNewOperandPreservesChain() {
+        let viewModel = CalculatorViewModel()
+
+        enter("6", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("6", into: viewModel)
+        viewModel.setOperator(.add)
+
+        XCTAssertEqual(viewModel.expressionDisplay, "6 + 6 +")
+
+        viewModel.setOperator(.subtract)
+
+        XCTAssertEqual(viewModel.display, "6")
+        XCTAssertEqual(viewModel.expressionDisplay, "6 + 6 −")
+
+        enter("3", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "9")
+        XCTAssertEqual(viewModel.expressionDisplay, "6 + 6 − 3 =")
+        XCTAssertEqual(viewModel.history.first?.expression, "6 + 6 − 3")
+        XCTAssertEqual(viewModel.history.first?.result, "9")
+    }
+
+    func testLongMixedOperationChainMatchesReferenceResult() {
+        let viewModel = CalculatorViewModel()
+
+        enter("5454", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("5454", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("5655", into: viewModel)
+        viewModel.setOperator(.subtract)
+        enter("5454", into: viewModel)
+        viewModel.setOperator(.subtract)
+        enter("88", into: viewModel)
+        viewModel.setOperator(.subtract)
+        enter("555", into: viewModel)
+        viewModel.setOperator(.subtract)
+        enter("8787", into: viewModel)
+        viewModel.setOperator(.subtract)
+        enter("32121", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("54", into: viewModel)
+        viewModel.setOperator(.subtract)
+        enter("5", into: viewModel)
+        viewModel.setOperator(.multiply)
+        enter("5", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("5454", into: viewModel)
+        viewModel.setOperator(.multiply)
+        enter("444", into: viewModel)
+
+        let additiveTail = [
+            "1", "1", "1", "1", "1", "1", "1", "1", "1", "1", "1",
+            "11", "1", "1", "1", "2", "4", "5", "4", "6", "6", "645",
+            "1", "1", "11", "1", "1", "1", "1", "11", "1", "1", "11",
+            "1", "1", "11", "1", "1", "11", "1", "11", "1", "11", "1",
+            "1", "11"
+        ]
+
+        for value in additiveTail {
+            viewModel.setOperator(.add)
+            enter(value, into: viewModel)
+        }
+
+        viewModel.setOperator(.add)
+        enter("65050083", into: viewModel)
+        viewModel.toggleSign()
+
+        let expectedExpression = "( 5,454 + 5,454 + 5,655 − 5,454 − 88 − 555 − 8,787 − 32,121 + 54 − 5 × 5 + 5,454 ) × 444 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 11 + 1 + 1 + 1 + 2 + 4 + 5 + 4 + 6 + 6 + 645 + 1 + 1 + 11 + 1 + 1 + 1 + 1 + 11 + 1 + 1 + 11 + 1 + 1 + 11 + 1 + 1 + 11 + 1 + 11 + 1 + 11 + 1 + 1 + 11 + -65,050,083"
+        XCTAssertEqual(viewModel.expressionDisplay, expectedExpression)
+
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "-76,131,078")
+        XCTAssertEqual(viewModel.history.first?.result, "-76131078")
+    }
+
+    func testAddingSignToggledNegativeRightOperandUsesLeftAccumulator() {
+        let viewModel = CalculatorViewModel()
+
+        enter("10", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("5", into: viewModel)
+        viewModel.toggleSign()
+
+        XCTAssertEqual(viewModel.display, "-5")
+        XCTAssertEqual(viewModel.expressionDisplay, "10 + -5")
+
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "5")
+        XCTAssertEqual(viewModel.expressionDisplay, "10 + -5 =")
+        XCTAssertEqual(viewModel.history.first?.expression, "10 + -5")
+        XCTAssertEqual(viewModel.history.first?.result, "5")
+    }
+
+    func testUndoRedoRestoresFullChainedExpressionDuringConstruction() {
+        let viewModel = CalculatorViewModel()
+
+        enter("2", into: viewModel)
+        viewModel.setOperator(.multiply)
+        enter("2", into: viewModel)
+        viewModel.setOperator(.multiply)
+        enter("2", into: viewModel)
+
+        XCTAssertEqual(viewModel.expressionDisplay, "2 × 2 × 2")
+
+        viewModel.undo()
+        XCTAssertEqual(viewModel.display, "2")
+        XCTAssertEqual(viewModel.expressionDisplay, "2 × 2 ×")
+
+        viewModel.redo()
+        XCTAssertEqual(viewModel.display, "2")
+        XCTAssertEqual(viewModel.expressionDisplay, "2 × 2 × 2")
     }
 
     func testParenthesesExpressionEvaluatesWithExpectedPrecedence() {
@@ -502,7 +736,7 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.evaluate()
 
         XCTAssertEqual(viewModel.display, "20")
-        XCTAssertEqual(viewModel.expressionDisplay, "( 2 + 3 ) × 4 =")
+        XCTAssertEqual(viewModel.expressionDisplay, "(2 + 3) × 4 =")
         XCTAssertEqual(viewModel.history.first?.expression, "( 2 + 3 ) × 4")
         XCTAssertEqual(viewModel.history.first?.result, "20")
     }
@@ -536,8 +770,52 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.evaluate()
 
         XCTAssertEqual(viewModel.display, "18")
-        XCTAssertEqual(viewModel.expressionDisplay, "6 + 6 × ( 2 ) =")
+        XCTAssertEqual(viewModel.expressionDisplay, "6 + (6 × 2) =")
         XCTAssertEqual(viewModel.history.first?.expression, "6 + 6 × ( 2 )")
+    }
+
+    func testParenthesisKeyPreservesExistingMultiChainExpression() {
+        let viewModel = CalculatorViewModel()
+
+        enter("6", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("6", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("6", into: viewModel)
+        viewModel.inputParentheses()
+
+        XCTAssertEqual(viewModel.expressionDisplay, "6 + 6 + 6 × (")
+
+        enter("2", into: viewModel)
+        viewModel.inputParenthesis(")")
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "24")
+        XCTAssertEqual(viewModel.expressionDisplay, "6 + 6 + (6 × 2) =")
+        XCTAssertEqual(viewModel.history.first?.expression, "6 + 6 + 6 × ( 2 )")
+    }
+
+    func testKeyboardTypedNestedParenthesesAreAcceptedInline() {
+        let viewModel = CalculatorViewModel()
+
+        enter("2", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("3", into: viewModel)
+        viewModel.inputParenthesis("(")
+        enter("4", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("5", into: viewModel)
+        viewModel.inputParenthesis("(")
+        enter("6", into: viewModel)
+        viewModel.inputParenthesis(")")
+        viewModel.inputParenthesis(")")
+
+        XCTAssertEqual(viewModel.expressionDisplay, "2 + 3 × ( 4 + 5 × ( 6 ) )")
+
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "104")
+        XCTAssertEqual(viewModel.history.first?.expression, "2 + 3 × ( 4 + 5 × ( 6 ) )")
     }
 
     func testSquareInsideParenthesesRemainsInExpressionAndEvaluates() {
@@ -572,7 +850,7 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.evaluate()
 
         XCTAssertEqual(viewModel.display, "8")
-        XCTAssertEqual(viewModel.expressionDisplay, "√(4) × ( 2 + 2 ) =")
+        XCTAssertEqual(viewModel.expressionDisplay, "√(4) × (2 + 2) =")
         XCTAssertEqual(viewModel.history.first?.expression, "√(4) × ( 2 + 2 )")
         XCTAssertEqual(viewModel.history.first?.result, "8")
     }
@@ -589,7 +867,7 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.evaluate()
 
         XCTAssertEqual(viewModel.display, "1")
-        XCTAssertEqual(viewModel.expressionDisplay, "1/(4) × ( 2 + 2 ) =")
+        XCTAssertEqual(viewModel.expressionDisplay, "1/(4) × (2 + 2) =")
         XCTAssertEqual(viewModel.history.first?.expression, "1/(4) × ( 2 + 2 )")
         XCTAssertEqual(viewModel.history.first?.result, "1")
     }
@@ -606,9 +884,9 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.evaluate()
 
         XCTAssertEqual(viewModel.display, "27")
-        XCTAssertEqual(viewModel.expressionDisplay, "3² × ( 2 + 1 ) =")
+        XCTAssertEqual(viewModel.expressionDisplay, "3² × (2 + 1) =")
         XCTAssertEqual(viewModel.history.first?.expression, "sqr(3) × ( 2 + 1 )")
-        XCTAssertEqual(viewModel.history.first?.displayExpression, "3² × ( 2 + 1 )")
+        XCTAssertEqual(viewModel.history.first?.displayExpression, "3² × (2 + 1)")
         XCTAssertEqual(viewModel.history.first?.result, "27")
     }
 
@@ -628,7 +906,7 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.evaluate()
 
         XCTAssertEqual(viewModel.display, "15")
-        XCTAssertEqual(viewModel.expressionDisplay, "( 2 + 3 ) × ( √(4) + 1 ) =")
+        XCTAssertEqual(viewModel.expressionDisplay, "(2 + 3) × (√(4) + 1) =")
         XCTAssertEqual(viewModel.history.first?.expression, "( 2 + 3 ) × ( √(4) + 1 )")
         XCTAssertEqual(viewModel.history.first?.result, "15")
     }
@@ -650,7 +928,7 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.evaluate()
 
         XCTAssertEqual(viewModel.display, "3")
-        XCTAssertEqual(viewModel.expressionDisplay, "1 + 2 × ( 100% ) =")
+        XCTAssertEqual(viewModel.expressionDisplay, "1 + (2 × 100%) =")
         XCTAssertEqual(viewModel.history.first?.expression, "1 + 2 × ( 100% )")
         XCTAssertEqual(viewModel.history.first?.result, "3")
     }
@@ -669,7 +947,7 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.evaluate()
 
         XCTAssertEqual(viewModel.display, "11")
-        XCTAssertEqual(viewModel.expressionDisplay, "1 + 5 × ( 200% ) =")
+        XCTAssertEqual(viewModel.expressionDisplay, "1 + (5 × 200%) =")
         XCTAssertEqual(viewModel.history.first?.expression, "1 + 5 × ( 200% )")
         XCTAssertEqual(viewModel.history.first?.result, "11")
     }
@@ -725,7 +1003,7 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.history.first?.result, "11")
     }
 
-    func testRepeatedEqualsAfterPercentShowsResolvedOperandInExpression() {
+    func testRepeatedEqualsAfterPercentDoesNotAdvanceResult() {
         let viewModel = CalculatorViewModel()
 
         enter("100", into: viewModel)
@@ -739,14 +1017,14 @@ final class CalculatorViewModelTests: XCTestCase {
 
         viewModel.evaluate()
 
-        XCTAssertEqual(viewModel.display, "200")
-        XCTAssertEqual(viewModel.expressionDisplay, "150 + 50 =")
+        XCTAssertEqual(viewModel.display, "150")
+        XCTAssertEqual(viewModel.expressionDisplay, "100 + 50% =")
 
         viewModel.evaluate()
 
-        XCTAssertEqual(viewModel.display, "250")
-        XCTAssertEqual(viewModel.expressionDisplay, "200 + 50 =")
-        XCTAssertEqual(viewModel.history.first?.expression, "200 + 50")
+        XCTAssertEqual(viewModel.display, "150")
+        XCTAssertEqual(viewModel.expressionDisplay, "100 + 50% =")
+        XCTAssertEqual(viewModel.history.first?.expression, "100 + 50%")
     }
 
     func testCurrencyPercentInPendingAdditionStaysVisibleUntilEvaluate() {
@@ -759,13 +1037,13 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.applyPercent()
 
         XCTAssertEqual(viewModel.display, "200%")
-        XCTAssertEqual(viewModel.expressionDisplay, "$6 + 200%")
+        XCTAssertEqual(viewModel.expressionDisplay, "6 + 200%")
 
         viewModel.evaluate()
 
         XCTAssertEqual(viewModel.display, "$12")
-        XCTAssertEqual(viewModel.expressionDisplay, "$6 + 200% =")
-        XCTAssertEqual(viewModel.history.first?.expression, "$6 + 200%")
+        XCTAssertEqual(viewModel.expressionDisplay, "6 + 200% =")
+        XCTAssertEqual(viewModel.history.first?.expression, "6 + 200%")
         XCTAssertEqual(viewModel.history.first?.result, "$12")
     }
 
@@ -951,13 +1229,13 @@ final class CalculatorViewModelTests: XCTestCase {
         let retainedEntryCount = CalculatorViewModel.Limits.maxStoredHistoryEntries
         let totalEvaluations = retainedEntryCount + 10
         let expectedNewestExpression = "\(totalEvaluations) + 1"
-        let expectedOldestRetainedExpression = "11 + 1"
+        let expectedOldestRetainedExpression = "\(totalEvaluations - retainedEntryCount + 1) + 1"
 
-        enter("1", into: viewModel)
-        viewModel.setOperator(.add)
-        enter("1", into: viewModel)
-
-        for _ in 0..<totalEvaluations {
+        for value in 1...totalEvaluations {
+            viewModel.clearAll()
+            enter("\(value)", into: viewModel)
+            viewModel.setOperator(.add)
+            enter("1", into: viewModel)
             viewModel.evaluate()
         }
 
@@ -1413,7 +1691,7 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.beginResultRounding()
         viewModel.setResultRoundingPrecision(3)
 
-        XCTAssertEqual(viewModel.expressionDisplay, "=round($5, 0)")
+        XCTAssertEqual(viewModel.expressionDisplay, "=round(5, 0)")
 
         viewModel.copyOperationToPasteboard()
         XCTAssertEqual(NSPasteboard.general.string(forType: .string), "=round(5,0)")
@@ -1421,7 +1699,7 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.commitResultRoundingInteraction()
 
         let entry = try XCTUnwrap(viewModel.history.first)
-        XCTAssertEqual(entry.displayExpression, "=round($5, 0)")
+        XCTAssertEqual(entry.displayExpression, "=round(5, 0)")
 
         viewModel.copyOperationToPasteboard(entry)
         XCTAssertEqual(NSPasteboard.general.string(forType: .string), "=round(5,0)")
@@ -1547,12 +1825,12 @@ final class CalculatorViewModelTests: XCTestCase {
 
         viewModel.setOperator(.add)
         enter("1", into: viewModel)
-        XCTAssertEqual(viewModel.expressionDisplay, "$12.3 + $1")
+        XCTAssertEqual(viewModel.expressionDisplay, "12.3 + 1")
 
         viewModel.evaluate()
 
         XCTAssertEqual(viewModel.display, "$13.3")
-        XCTAssertEqual(viewModel.history.first?.displayExpression, "$12.3 + $1")
+        XCTAssertEqual(viewModel.history.first?.displayExpression, "12.3 + 1")
         XCTAssertEqual(viewModel.history.first?.displayResult, "$13.3")
 
         viewModel.clearAll()
@@ -1568,14 +1846,14 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.evaluate()
 
         let entry = try XCTUnwrap(viewModel.history.first)
-        XCTAssertEqual(entry.displayExpression, "€12.34 + €1")
+        XCTAssertEqual(entry.displayExpression, "12.34 + 1")
         XCTAssertEqual(entry.displayResult, "€13.34")
 
         viewModel.clearAll()
         viewModel.reuse(entry)
 
         XCTAssertEqual(viewModel.display, "€13.34")
-        XCTAssertEqual(viewModel.expressionDisplay, "€12.34 + €1 =")
+        XCTAssertEqual(viewModel.expressionDisplay, "12.34 + 1 =")
     }
 
     func testCurrencyOperationCopyThenPasteReplaysAndRestoresCurrencyMode() {
@@ -1587,13 +1865,13 @@ final class CalculatorViewModelTests: XCTestCase {
         sourceViewModel.evaluate()
         sourceViewModel.copyOperationToPasteboard()
 
-        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "$12.34 + $1 = $13.34")
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "12.34 + 1 = $13.34")
 
         let pastedViewModel = CalculatorViewModel()
         pastedViewModel.pasteFromPasteboard()
 
         XCTAssertEqual(pastedViewModel.display, "$13.34")
-        XCTAssertEqual(pastedViewModel.expressionDisplay, "$12.34 + $1 =")
+        XCTAssertEqual(pastedViewModel.expressionDisplay, "12.34 + 1 =")
         XCTAssertFalse(pastedViewModel.isErrorState)
     }
 
@@ -1612,6 +1890,65 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.evaluate()
 
         XCTAssertEqual(viewModel.display, "$3.2")
+    }
+
+    func testTypingCurrencySymbolMidChainKeepsExistingExpression() {
+        let viewModel = CalculatorViewModel()
+
+        enter("10", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("5", into: viewModel)
+        viewModel.setOperator(.multiply)
+
+        XCTAssertEqual(viewModel.expressionDisplay, "10 + 5 ×")
+        XCTAssertEqual(viewModel.display, "5")
+
+        viewModel.inputCurrencySymbol("$")
+
+        XCTAssertEqual(viewModel.expressionDisplay, "10 + 5 ×")
+        XCTAssertEqual(viewModel.display, "$5")
+
+        enter("2", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "$20")
+        XCTAssertEqual(viewModel.history.first?.displayExpression, "10 + (5 × 2)")
+    }
+
+    func testStackedOperationDisplayPreservesSubtractTermsAfterEvaluate() {
+        let viewModel = CalculatorViewModel()
+
+        enter("25", into: viewModel)
+        viewModel.setOperator(.add)
+        viewModel.inputParenthesis("(")
+        enter("6", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("65", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("665", into: viewModel)
+        viewModel.setOperator(.subtract)
+        enter("554", into: viewModel)
+        viewModel.setOperator(.multiply)
+        enter("5454", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("65659", into: viewModel)
+        viewModel.setOperator(.subtract)
+        enter("44", into: viewModel)
+        viewModel.inputDecimal()
+        enter("00022", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("11", into: viewModel)
+        viewModel.inputDecimal()
+        enter("22244", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("8", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "-2,955,120.77778")
+        XCTAssertTrue(viewModel.expressionDisplay.contains("− (554 × 5,454)"))
+        XCTAssertTrue(viewModel.expressionDisplay.contains("− 44.00022"))
+        XCTAssertFalse(viewModel.expressionDisplay.contains("+ (554 × 5,454)"))
+        XCTAssertFalse(viewModel.expressionDisplay.contains("+ 44.00022"))
     }
 
     func testTypingCurrencyZerosPreservesLiveFractionPrecision() {
@@ -1691,13 +2028,13 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.applyPercent()
 
         XCTAssertEqual(viewModel.display, "115%")
-        XCTAssertEqual(viewModel.expressionDisplay, "$100 × 115%")
+        XCTAssertEqual(viewModel.expressionDisplay, "100 × 115%")
 
         viewModel.evaluate()
 
         XCTAssertEqual(viewModel.display, "$115")
-        XCTAssertEqual(viewModel.expressionDisplay, "$100 × 115% =")
-        XCTAssertEqual(viewModel.history.first?.displayExpression, "$100 × 115%")
+        XCTAssertEqual(viewModel.expressionDisplay, "100 × 115% =")
+        XCTAssertEqual(viewModel.history.first?.displayExpression, "100 × 115%")
         XCTAssertEqual(viewModel.history.first?.displayResult, "$115")
     }
 
@@ -1710,13 +2047,13 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.applyPercent()
 
         XCTAssertEqual(viewModel.display, "60%")
-        XCTAssertEqual(viewModel.expressionDisplay, "€93.33 ÷ 60%")
+        XCTAssertEqual(viewModel.expressionDisplay, "93.33 ÷ 60%")
 
         viewModel.evaluate()
 
         XCTAssertEqual(viewModel.display, "€155.55")
-        XCTAssertEqual(viewModel.expressionDisplay, "€93.33 ÷ 60% =")
-        XCTAssertEqual(viewModel.history.first?.displayExpression, "€93.33 ÷ 60%")
+        XCTAssertEqual(viewModel.expressionDisplay, "93.33 ÷ 60% =")
+        XCTAssertEqual(viewModel.history.first?.displayExpression, "93.33 ÷ 60%")
         XCTAssertEqual(viewModel.history.first?.displayResult, "€155.55")
     }
 
@@ -1949,7 +2286,7 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.hasOperationToCopy)
     }
 
-    func testRepeatedEqualsOverflowSetsErrorInsteadOfZero() {
+    func testRepeatedEqualsAfterLargeProductDoesNotOverflowAgain() {
         let viewModel = CalculatorViewModel()
 
         enter("999999999999999", into: viewModel)
@@ -1958,12 +2295,14 @@ final class CalculatorViewModelTests: XCTestCase {
         viewModel.evaluate()
 
         XCTAssertFalse(viewModel.isErrorState)
+        let displayAfterFirstEvaluate = viewModel.display
+        let expressionAfterFirstEvaluate = viewModel.expressionDisplay
 
         viewModel.evaluate()
 
-        XCTAssertTrue(viewModel.isErrorState)
-        XCTAssertEqual(viewModel.display, "Out of range")
-        XCTAssertEqual(viewModel.expressionDisplay, "")
+        XCTAssertFalse(viewModel.isErrorState)
+        XCTAssertEqual(viewModel.display, displayAfterFirstEvaluate)
+        XCTAssertEqual(viewModel.expressionDisplay, expressionAfterFirstEvaluate)
     }
 
     func testOverflowDuringPendingOperatorResolutionDoesNotLeaveOperatorPreview() {

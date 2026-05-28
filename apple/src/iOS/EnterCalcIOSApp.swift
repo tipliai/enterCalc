@@ -1962,23 +1962,37 @@ private extension EnterCalcIOSView {
                     .allowsHitTesting(false)
                 }
 
+                let operationTextCompactionProgress = min(
+                    1,
+                    max(0, Double(screen.viewModel.expressionDisplay.count - 20) / 14)
+                )
+
                 VStack(spacing: 0) {
                     VStack(alignment: .trailing, spacing: metrics.displaySpacing) {
                         let expressionFontSize = metrics.expressionFontSize(for: resultsTextHeight)
-                        let operationLineMinScaleFactor = CalculatorDisplayMetrics.operationLineMinScaleFactor(for: expressionFontSize)
+                        let resultFontSize = metrics.displayFontSize(for: resultsTextHeight)
+                        let resultLineHeight = resultFontSize * 1.12
+                        let operationLineHeight = max(0, resultsTextHeight - resultLineHeight - metrics.displaySpacing)
 
                         Text(screen.viewModel.expressionDisplay)
                             .font(EnterCalcFont.appFont(size: expressionFontSize))
                             .foregroundStyle(palette.textSecondary)
                             .frame(maxWidth: .infinity, alignment: .trailing)
-                            .lineLimit(1)
-                            .allowsTightening(true)
-                            .minimumScaleFactor(operationLineMinScaleFactor)
+                            .multilineTextAlignment(.trailing)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(
+                                maxWidth: .infinity,
+                                minHeight: operationLineHeight,
+                                maxHeight: operationLineHeight,
+                                alignment: .bottomTrailing
+                            )
+                            .clipped()
 
                         if screen.viewModel.canDirectlyEditDisplay {
                             EditableDisplayResultText(
                                 text: screen.viewModel.display,
-                                fontSize: metrics.displayFontSize(for: resultsTextHeight),
+                                fontSize: resultFontSize,
                                 foregroundColor: palette.textPrimary,
                                 minScaleFactor: 0.22,
                                 caretBoundaryIndex: screen.viewModel.displayEditCaretBoundaryIndex,
@@ -1987,12 +2001,12 @@ private extension EnterCalcIOSView {
                                     screen.viewModel.setDisplayEditCursor(displayBoundaryIndex: boundaryIndex)
                                 }
                             )
-                            .frame(maxWidth: .infinity, minHeight: metrics.displayFontSize(for: resultsTextHeight) * 1.12, alignment: .trailing)
+                            .frame(maxWidth: .infinity, minHeight: resultLineHeight, maxHeight: resultLineHeight, alignment: .trailing)
                         } else {
                             Text(screen.viewModel.display)
-                                .font(EnterCalcFont.appFont(size: metrics.displayFontSize(for: resultsTextHeight)))
+                                .font(EnterCalcFont.appFont(size: resultFontSize))
                                 .foregroundStyle(palette.textPrimary)
-                                .frame(maxWidth: .infinity, alignment: .trailing)
+                                .frame(maxWidth: .infinity, minHeight: resultLineHeight, maxHeight: resultLineHeight, alignment: .trailing)
                                 .lineLimit(1)
                                 .allowsTightening(true)
                                 .minimumScaleFactor(0.22)
@@ -2004,7 +2018,11 @@ private extension EnterCalcIOSView {
 
                     if showsMemoryLabel {
                         Spacer(minLength: 0)
-                        memoryControls(metrics: metrics, screen: screen)
+                        memoryControls(
+                            metrics: metrics,
+                            screen: screen,
+                            compactionProgress: operationTextCompactionProgress
+                        )
                     }
                 }
             }
@@ -2032,14 +2050,17 @@ private extension EnterCalcIOSView {
         }
     }
 
-    func memoryControls(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession) -> some View {
+    func memoryControls(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, compactionProgress: Double) -> some View {
         let basicLabelOpacity = activeTheme == .blue ? 0.24 : 0.15
+        let adjustedOpacity = basicLabelOpacity * (1 - compactionProgress)
+        let adjustedHeight = max(0, metrics.memoryHeight * (1 - compactionProgress))
         return Text("Basic")
             .font(EnterCalcFont.appFont(size: metrics.memoryFontSize))
-            .foregroundStyle(palette.textPrimary.opacity(basicLabelOpacity))
-            .frame(maxWidth: .infinity, minHeight: metrics.memoryHeight, maxHeight: metrics.memoryHeight, alignment: .leading)
+            .foregroundStyle(palette.textPrimary.opacity(adjustedOpacity))
+            .frame(maxWidth: .infinity, minHeight: adjustedHeight, maxHeight: adjustedHeight, alignment: .leading)
             .padding(.horizontal, metrics.displayHorizontalPadding)
             .lineLimit(1)
+            .clipped()
     }
 
     func copyDisplayToPasteboardWithFlash(from viewModel: CalculatorViewModel) {

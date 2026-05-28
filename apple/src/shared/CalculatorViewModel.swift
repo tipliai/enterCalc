@@ -533,7 +533,7 @@ public final class CalculatorViewModel: ObservableObject {
         } else if pendingOperandShouldKeepPercentToken || pendingOperatorShouldKeepPercentToken || activeCurrencySymbol != nil {
             currentToken = percentToken
         } else {
-            currentToken = displayString(for: currentInput)
+            currentToken = displayString(for: currentInput, useActiveCurrency: false)
         }
         justEvaluated = false
         shouldResetInputOnNextDigit = false
@@ -739,7 +739,41 @@ public final class CalculatorViewModel: ObservableObject {
             return
         }
 
+        if let existingPending = pendingOperator,
+           shouldResetInputOnNextDigit {
+            if existingPending == op {
+                completeUndoableChange(from: snapshot)
+                return
+            }
+
+            let pendingExpression = expression.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !pendingExpression.isEmpty,
+               pendingExpression.hasSuffix(existingPending.symbol) {
+                let expressionWithoutOperator = pendingExpression
+                    .dropLast(existingPending.symbol.count)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                expression = expressionWithoutOperator.isEmpty
+                    ? op.symbol
+                    : "\(expressionWithoutOperator) \(op.symbol)"
+                pendingOperator = op
+                justEvaluated = false
+                updateDisplay()
+                completeUndoableChange(from: snapshot)
+                return
+            }
+        }
+
+        let didBuildChainedExpression: Bool
         if let existingPending = pendingOperator, !shouldResetInputOnNextDigit {
+            let previousExpression = expression
+            let previousLhsToken = accumulatorToken ?? currentToken
+            let previousRhsToken = currentToken
+            let previousRhsInput = currentInput
+            let shouldGroupCompletedExpression =
+                (existingPending == .add || existingPending == .subtract)
+                && (op == .multiply || op == .divide)
+                && (previousExpression.contains(BinaryOperator.multiply.symbol)
+                    || previousExpression.contains(BinaryOperator.divide.symbol))
             if (existingPending == .add || existingPending == .subtract),
                (op == .multiply || op == .divide) {
                 let lhsToken = accumulatorToken ?? currentToken
@@ -750,12 +784,30 @@ public final class CalculatorViewModel: ObservableObject {
                 completeUndoableChange(from: snapshot)
                 return
             }
+            // Keep the currently typed right operand visible until evaluate, even when
+            // the internal pending accumulator advances for chained operations.
+            currentInput = previousRhsInput
+            currentToken = previousRhsToken
+            expression = chainedExpressionPreview(
+                existingExpression: previousExpression,
+                lhsToken: previousLhsToken,
+                completedOperator: existingPending,
+                rhsToken: previousRhsToken,
+                nextOperator: op,
+                shouldGroupCompletedExpression: shouldGroupCompletedExpression
+            )
+            didBuildChainedExpression = true
         } else if accumulator == nil {
             accumulator = currentValue
             accumulatorToken = currentToken
+            didBuildChainedExpression = false
+        } else {
+            didBuildChainedExpression = false
         }
         pendingOperator = op
-        expression = makeExpressionPreview()
+        if !didBuildChainedExpression {
+            expression = makeExpressionPreview()
+        }
         shouldResetInputOnNextDigit = true
         justEvaluated = false
         updateDisplay()
@@ -789,12 +841,13 @@ public final class CalculatorViewModel: ObservableObject {
             case .success(let result):
                 let resultText = format(result)
                 let evaluatedExpression = evaluationTokens.joined(separator: " ")
-                appendHistory(expression: evaluatedExpression, result: resultText)
-                lastResultSummary = evaluatedExpression + " ="
+                let displayExpression = completedOperationDisplayExpression(evaluatedExpression)
+                appendHistory(expression: evaluatedExpression, result: resultText, displayExpressionOverride: displayExpression)
+                lastResultSummary = displayExpression + " ="
                 currentInput = resultText
-                currentToken = displayString(for: resultText)
+                currentToken = displayString(for: resultText, useActiveCurrency: false)
                 accumulator = result
-                accumulatorToken = displayString(for: resultText)
+                accumulatorToken = displayString(for: resultText, useActiveCurrency: false)
                 pendingOperator = nil
                 lastOperator = nil
                 lastOperand = nil
@@ -835,51 +888,98 @@ public final class CalculatorViewModel: ObservableObject {
             if shouldFinalizeCurrencyPendingPercentAsStandaloneResult {
                 finalizeCurrencyPendingPercentAsStandaloneResult()
                 updateDisplay()
+            } else if evaluatePendingExpressionWithDisplayedPrecedence() {
+                // handled inside helper
             } else {
                 performPendingOperation(addToHistory: true)
             }
-        } else if let lastOp = lastOperator, let lastOperand = lastOperand {
-            let lhs = currentValue
-            if lastOp == .multiply,
-               multiplicationWouldOverflowDisplay(lhs, lastOperand) {
-                setError("error.outOfRange")
-                completeUndoableChange(from: snapshot)
-                return
+        } else if justEvaluated {
+            // Repeated equals should not replay the previous operation.
+            if lastResultSummary.isEmpty {
+                lastResultSummary = "\(currentToken) ="
             }
-            let result = lastOp.apply(lhs, lastOperand)
-            if valueWouldUnderflowDisplay(result) {
-                setError("error.outOfRange")
-                completeUndoableChange(from: snapshot)
-                return
-            }
-            let resultText = format(result)
-            let lhsToken = currentToken
-            let rhsToken: String
-            if let lastOperandToken, lastOperandToken.hasSuffix("%") {
-                rhsToken = displayString(for: format(lastOperand))
-            } else {
-                rhsToken = lastOperandToken ?? displayString(for: format(lastOperand))
-            }
-            let exp = "\(lhsToken) \(lastOp.symbol) \(rhsToken)"
-            appendHistory(expression: exp, result: resultText)
-            lastResultSummary = exp + " ="
-            accumulator = result
-            currentInput = resultText
-            currentToken = displayString(for: resultText)
-            accumulatorToken = displayString(for: resultText)
-            expression = ""
             shouldResetInputOnNextDigit = true
-            justEvaluated = true
             updateDisplay()
         } else {
             accumulator = currentValue
-            accumulatorToken = displayString(for: currentInput)
+            accumulatorToken = displayString(for: currentInput, useActiveCurrency: false)
             lastResultSummary = "\(currentToken) ="
             shouldResetInputOnNextDigit = true
             justEvaluated = true
             updateDisplay()
         }
         completeUndoableChange(from: snapshot)
+    }
+
+    private func evaluatePendingExpressionWithDisplayedPrecedence() -> Bool {
+        guard let pending = pendingOperator else { return false }
+
+        // Preserve existing calculator-style percent semantics (e.g. 10 + 10% = 11)
+        // by falling back to immediate pending-operation evaluation when % is present.
+        let visibleExpression = expressionDisplay.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedVisibleExpression = visibleExpression.lowercased()
+        let hasAdditiveOperator = visibleExpression.contains(BinaryOperator.add.symbol)
+            || visibleExpression.contains(BinaryOperator.subtract.symbol)
+        let hasMultiplicativeOperator = visibleExpression.contains(BinaryOperator.multiply.symbol)
+            || visibleExpression.contains(BinaryOperator.divide.symbol)
+        guard !visibleExpression.isEmpty,
+              !visibleExpression.contains("%"),
+              !normalizedVisibleExpression.contains("e+"),
+              !normalizedVisibleExpression.contains("e-"),
+              hasAdditiveOperator,
+              hasMultiplicativeOperator else {
+            return false
+        }
+
+        let pendingExpression = visibleExpression
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "=").union(.whitespacesAndNewlines))
+
+        let evaluationExpression: String
+        if pendingExpression.hasSuffix(pending.symbol) {
+            evaluationExpression = "\(pendingExpression) \(currentToken)"
+        } else {
+            evaluationExpression = pendingExpression
+        }
+
+        let evaluationTokens = evaluationExpression
+            .split(separator: " ", omittingEmptySubsequences: true)
+            .map(String.init)
+        guard !evaluationTokens.isEmpty else { return false }
+
+        switch evaluateExpressionTokens(evaluationTokens) {
+        case .success(let result):
+            let resultText = format(result)
+            let evaluatedExpression = evaluationTokens.joined(separator: " ")
+            let displayExpression = completedOperationDisplayExpression(evaluatedExpression)
+            appendHistory(expression: evaluatedExpression, result: resultText, displayExpressionOverride: displayExpression)
+            lastResultSummary = displayExpression + " ="
+            currentInput = resultText
+            currentToken = displayString(for: resultText, useActiveCurrency: false)
+            accumulator = result
+            accumulatorToken = displayString(for: resultText, useActiveCurrency: false)
+            pendingOperator = nil
+            lastOperator = nil
+            lastOperand = nil
+            lastOperandToken = nil
+            expression = ""
+            shouldResetInputOnNextDigit = true
+            justEvaluated = true
+            updateDisplay()
+            return true
+        case .failure(.divideByZero):
+            setError("error.divideByZero")
+            return true
+        case .failure(.invalidInput):
+            setError("error.invalidInput")
+            return true
+        case .failure(.overflow):
+            setError("error.outOfRange")
+            return true
+        case .failure(.underflow):
+            setError("error.outOfRange")
+            return true
+        }
     }
 
     public func reciprocal() {
@@ -1037,7 +1137,7 @@ public final class CalculatorViewModel: ObservableObject {
             let isReplacingPendingOperand = pendingOperator != nil || accumulator != nil
             currentInput = formattedPastedInput(fromCanonical: normalized, value: value)
             shouldPreserveTypedCurrencyInput = false
-            currentToken = displayString(for: currentInput)
+            currentToken = displayString(for: currentInput, useActiveCurrency: false)
             if !isReplacingPendingOperand {
                 expression = ""
                 lastOperator = nil
@@ -1108,7 +1208,7 @@ public final class CalculatorViewModel: ObservableObject {
         lastOperator = nil
         lastOperand = nil
         expression = ""
-        currentToken = entry.displayResult
+        currentToken = displayString(for: currentInput, useActiveCurrency: false)
         accumulatorToken = nil
         lastOperandToken = nil
         shouldResetInputOnNextDigit = true
@@ -1154,7 +1254,7 @@ public final class CalculatorViewModel: ObservableObject {
         let formatted = format(value)
         currentInput = formatted
         shouldPreserveTypedCurrencyInput = false
-        currentToken = displayString(for: formatted)
+        currentToken = displayString(for: formatted, useActiveCurrency: false)
         shouldResetInputOnNextDigit = true
         justEvaluated = false
         isErrorState = false
@@ -1313,6 +1413,162 @@ public final class CalculatorViewModel: ObservableObject {
         return grouped.joined(separator: " ")
     }
 
+    private indirect enum DisplayExpressionNode {
+        case value(String)
+        case binary(String, DisplayExpressionNode, DisplayExpressionNode)
+    }
+
+    private func completedOperationDisplayExpression(_ expression: String) -> String {
+        let groupedExpression = groupedExpressionString(expression)
+        let tokens = groupedExpression.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
+        guard shouldUseStackedOperationDisplay(tokens: tokens),
+              let node = buildDisplayExpressionNode(tokens: tokens) else {
+            return groupedExpression
+        }
+
+        return renderDisplayExpressionNode(node, isRoot: true)
+    }
+
+    private func shouldUseStackedOperationDisplay(tokens: [String]) -> Bool {
+        let operatorTokens = tokens.filter(isDisplayBinaryOperatorToken)
+        let hasAdditiveOperator = operatorTokens.contains { isDisplayAdditiveOperator($0) }
+        let hasMultiplicativeOperator = operatorTokens.contains { isDisplayMultiplicativeOperator($0) }
+        return hasAdditiveOperator && hasMultiplicativeOperator
+    }
+
+    private func isDisplayBinaryOperatorToken(_ token: String) -> Bool {
+        switch token {
+        case BinaryOperator.add.symbol,
+             BinaryOperator.subtract.symbol,
+             BinaryOperator.multiply.symbol,
+             BinaryOperator.divide.symbol,
+             "×",
+             "x",
+             "X",
+             "*",
+             "÷",
+             "/",
+             "-",
+             "−":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func isDisplayAdditiveOperator(_ token: String) -> Bool {
+        token == BinaryOperator.add.symbol || token == BinaryOperator.subtract.symbol || token == "-" || token == "−"
+    }
+
+    private func isDisplayMultiplicativeOperator(_ token: String) -> Bool {
+        token == BinaryOperator.multiply.symbol || token == BinaryOperator.divide.symbol || token == "×" || token == "x" || token == "X" || token == "*" || token == "÷" || token == "/"
+    }
+
+    private func buildDisplayExpressionNode(tokens: [String]) -> DisplayExpressionNode? {
+        var values: [DisplayExpressionNode] = []
+        var operators: [String] = []
+
+        func precedence(for token: String) -> Int {
+            switch token {
+            case BinaryOperator.multiply.symbol, BinaryOperator.divide.symbol, "×", "x", "X", "*", "÷", "/":
+                return 2
+            case BinaryOperator.add.symbol, BinaryOperator.subtract.symbol, "-", "−":
+                return 1
+            default:
+                return 0
+            }
+        }
+
+        func applyTopOperator() -> Bool {
+            guard let operatorToken = operators.popLast(),
+                  let rhs = values.popLast(),
+                  let lhs = values.popLast() else {
+                return false
+            }
+
+            values.append(.binary(operatorToken, lhs, rhs))
+            return true
+        }
+
+        for token in tokens {
+            if token == "(" {
+                operators.append(token)
+            } else if token == ")" {
+                while let last = operators.last, last != "(" {
+                    guard applyTopOperator() else { return nil }
+                }
+                guard operators.popLast() == "(" else { return nil }
+            } else if isDisplayBinaryOperatorToken(token) {
+                while let last = operators.last, last != "(", precedence(for: last) >= precedence(for: token) {
+                    guard applyTopOperator() else { return nil }
+                }
+                operators.append(token)
+            } else {
+                values.append(.value(token))
+            }
+        }
+
+        while let last = operators.last {
+            guard last != "(" else { return nil }
+            guard applyTopOperator() else { return nil }
+        }
+
+        return values.count == 1 ? values[0] : nil
+    }
+
+    private func collectSignedAdditiveTerms(
+        from node: DisplayExpressionNode,
+        inheritedSign: Int = 1
+    ) -> [(sign: Int, node: DisplayExpressionNode)] {
+        guard case let .binary(operatorToken, lhs, rhs) = node,
+              isDisplayAdditiveOperator(operatorToken) else {
+            return [(sign: inheritedSign, node: node)]
+        }
+
+        let lhsTerms = collectSignedAdditiveTerms(from: lhs, inheritedSign: inheritedSign)
+        let rhsSign = operatorToken == BinaryOperator.subtract.symbol || operatorToken == "-" || operatorToken == "−"
+            ? -inheritedSign
+            : inheritedSign
+        let rhsTerms = collectSignedAdditiveTerms(from: rhs, inheritedSign: rhsSign)
+        return lhsTerms + rhsTerms
+    }
+
+    private func renderDisplayExpressionNode(_ node: DisplayExpressionNode, isRoot: Bool) -> String {
+        switch node {
+        case .value(let token):
+            let formattedToken = formatExpressionTokenForDisplay(token)
+            if !isRoot, formattedToken.hasPrefix("-") {
+                return "(\(formattedToken))"
+            }
+            return formattedToken
+        case .binary(let operatorToken, let lhs, let rhs):
+            if isDisplayAdditiveOperator(operatorToken) {
+                let terms = collectSignedAdditiveTerms(from: node)
+                guard let first = terms.first else { return "" }
+
+                var combined = renderDisplayExpressionNode(first.node, isRoot: false)
+                if first.sign < 0 {
+                    combined = "-(\(combined))"
+                }
+
+                for term in terms.dropFirst() {
+                    let renderedTerm = renderDisplayExpressionNode(term.node, isRoot: false)
+                    if term.sign < 0 {
+                        combined += " \(BinaryOperator.subtract.symbol) \(renderedTerm)"
+                    } else {
+                        combined += " \(BinaryOperator.add.symbol) \(renderedTerm)"
+                    }
+                }
+                return isRoot ? combined : "(\(combined))"
+            }
+
+            let lhsExpression = renderDisplayExpressionNode(lhs, isRoot: false)
+            let rhsExpression = renderDisplayExpressionNode(rhs, isRoot: false)
+            let expression = "\(lhsExpression) \(operatorToken) \(rhsExpression)"
+            return isRoot ? expression : "(\(expression))"
+        }
+    }
+
     private func enterExpressionModeIfNeeded() {
         guard !isExpressionMode else { return }
         if let seedTokens = pendingParenthesisExpressionSeedTokens,
@@ -1337,6 +1593,10 @@ public final class CalculatorViewModel: ObservableObject {
         let didHavePendingOperator = pendingOperator != nil
         let wasEnteringRightOperand = didHavePendingOperator && !shouldResetInputOnNextDigit
         let rightOperandToken = currentToken
+        let pendingExpressionTokens = expression
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: " ", omittingEmptySubsequences: true)
+            .map(String.init)
 
         isExpressionMode = true
         expressionTokens.removeAll()
@@ -1345,7 +1605,16 @@ public final class CalculatorViewModel: ObservableObject {
         lastOperand = nil
         lastOperandToken = nil
 
-        if let pending = pendingOperator {
+        if didHavePendingOperator, !pendingExpressionTokens.isEmpty {
+            expressionTokens = pendingExpressionTokens
+            if wasEnteringRightOperand {
+                if let last = expressionTokens.last, isExpressionOperatorToken(last) {
+                    expressionTokens.append(rightOperandToken)
+                } else if let last = expressionTokens.last, isExpressionNumberToken(last) {
+                    expressionTokens[expressionTokens.count - 1] = rightOperandToken
+                }
+            }
+        } else if let pending = pendingOperator {
             let lhs = accumulatorToken ?? currentToken
             expressionTokens.append(lhs)
             expressionTokens.append(pending.symbol)
@@ -1521,7 +1790,7 @@ public final class CalculatorViewModel: ObservableObject {
         }
 
         if let normalized = normalizeDisplayNumberToken(token) {
-            return displayString(for: normalized)
+            return displayString(for: normalized, useActiveCurrency: false)
         }
 
         if let inner = wrappedExpressionOperand(token, prefix: "sqr(") {
@@ -1647,7 +1916,7 @@ public final class CalculatorViewModel: ObservableObject {
         let resultText = format(result)
 
         if addToHistory {
-            let exp = "\(lhsToken) \(pending.symbol) \(rhsToken)"
+            let exp = completedPendingExpression(lhsToken: lhsToken, pending: pending, rhsToken: rhsToken)
             appendHistory(expression: exp, result: resultText)
             lastResultSummary = exp + " ="
             expression = ""
@@ -1659,9 +1928,9 @@ public final class CalculatorViewModel: ObservableObject {
             shouldResetInputOnNextDigit = true
         } else {
             accumulator = result
-            accumulatorToken = displayString(for: resultText)
-            currentToken = accumulatorToken ?? displayString(for: resultText)
-            expression = "\(accumulatorToken ?? displayString(for: resultText)) \(pending.symbol)"
+            accumulatorToken = displayString(for: resultText, useActiveCurrency: false)
+            currentToken = accumulatorToken ?? displayString(for: resultText, useActiveCurrency: false)
+            expression = "\(accumulatorToken ?? displayString(for: resultText, useActiveCurrency: false)) \(pending.symbol)"
             lastOperator = nil
             lastOperand = nil
             shouldResetInputOnNextDigit = true
@@ -1670,12 +1939,12 @@ public final class CalculatorViewModel: ObservableObject {
 
         currentInput = resultText
         accumulator = result
-        accumulatorToken = displayString(for: resultText)
-        currentToken = displayString(for: resultText)
+        accumulatorToken = displayString(for: resultText, useActiveCurrency: false)
+        currentToken = displayString(for: resultText, useActiveCurrency: false)
         updateDisplay()
     }
 
-    private func appendHistory(expression: String, result: String) {
+    private func appendHistory(expression: String, result: String, displayExpressionOverride: String? = nil) {
         let historyExpression: String
         let historyResult: String
         let displayResult: String
@@ -1700,7 +1969,7 @@ public final class CalculatorViewModel: ObservableObject {
             historyExpression = expression
             historyResult = storedHistoryResultString(from: result)
             displayResult = displayString(for: historyResult, useActiveCurrency: false)
-            displayExpression = groupedExpressionString(expression)
+            displayExpression = displayExpressionOverride ?? completedOperationDisplayExpression(expression)
         }
 
         let boundedExpression = String(historyExpression.prefix(Limits.maxHistoryExpressionCharacters))
@@ -1970,6 +2239,48 @@ public final class CalculatorViewModel: ObservableObject {
         return "\(lhsText) \(op.symbol)"
     }
 
+    private func completedPendingExpression(lhsToken: String, pending: BinaryOperator, rhsToken: String) -> String {
+        let pendingExpression = expression.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !pendingExpression.isEmpty else {
+            return "\(lhsToken) \(pending.symbol) \(rhsToken)"
+        }
+
+        if pendingExpression.hasSuffix(pending.symbol) {
+            return "\(pendingExpression) \(rhsToken)"
+        }
+
+        return pendingExpression
+    }
+
+    private func chainedExpressionPreview(
+        existingExpression: String,
+        lhsToken: String,
+        completedOperator: BinaryOperator,
+        rhsToken: String,
+        nextOperator: BinaryOperator,
+        shouldGroupCompletedExpression: Bool
+    ) -> String {
+        let trimmedExpression = existingExpression.trimmingCharacters(in: .whitespacesAndNewlines)
+        let completedExpression: String
+        if trimmedExpression.isEmpty {
+            completedExpression = "\(lhsToken) \(completedOperator.symbol) \(rhsToken)"
+        } else if trimmedExpression.hasSuffix(completedOperator.symbol) {
+            completedExpression = "\(trimmedExpression) \(rhsToken)"
+        } else {
+            completedExpression = trimmedExpression
+        }
+
+        let groupedCompletedExpression: String
+        if shouldGroupCompletedExpression,
+           !(completedExpression.hasPrefix("(") && completedExpression.hasSuffix(")")) {
+            groupedCompletedExpression = "( \(completedExpression) )"
+        } else {
+            groupedCompletedExpression = completedExpression
+        }
+
+        return "\(groupedCompletedExpression) \(nextOperator.symbol)"
+    }
+
     private var isStandaloneUnaryResult: Bool {
         guard pendingOperator == nil,
               !isExpressionMode,
@@ -2082,12 +2393,23 @@ public final class CalculatorViewModel: ObservableObject {
                 header = expressionPreviewHeader()
                 expression = header
             } else if let op = pendingOperator {
-                let lhsText = accumulatorToken ?? currentToken
-                let rhsText = shouldResetInputOnNextDigit ? nil : currentToken
-                if let rhsText {
-                    header = "\(lhsText) \(op.symbol) \(rhsText)"
+                let pendingExpression = expression.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !pendingExpression.isEmpty {
+                    if shouldResetInputOnNextDigit {
+                        header = pendingExpression
+                    } else if pendingExpression.hasSuffix(op.symbol) {
+                        header = "\(pendingExpression) \(currentToken)"
+                    } else {
+                        header = pendingExpression
+                    }
                 } else {
-                    header = "\(lhsText) \(op.symbol)"
+                    let lhsText = accumulatorToken ?? currentToken
+                    let rhsText = shouldResetInputOnNextDigit ? nil : currentToken
+                    if let rhsText {
+                        header = "\(lhsText) \(op.symbol) \(rhsText)"
+                    } else {
+                        header = "\(lhsText) \(op.symbol)"
+                    }
                 }
             } else if !expression.isEmpty {
                 header = expression
@@ -2114,12 +2436,23 @@ public final class CalculatorViewModel: ObservableObject {
             header = expressionPreviewHeader()
             expression = header
         } else if let op = pendingOperator {
-            let lhsText = accumulatorToken ?? currentToken
-            let rhsText = shouldResetInputOnNextDigit ? nil : currentToken
-            if let rhsText {
-                header = "\(lhsText) \(op.symbol) \(rhsText)"
+            let pendingExpression = expression.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !pendingExpression.isEmpty {
+                if shouldResetInputOnNextDigit {
+                    header = pendingExpression
+                } else if pendingExpression.hasSuffix(op.symbol) {
+                    header = "\(pendingExpression) \(currentToken)"
+                } else {
+                    header = pendingExpression
+                }
             } else {
-                header = "\(lhsText) \(op.symbol)"
+                let lhsText = accumulatorToken ?? currentToken
+                let rhsText = shouldResetInputOnNextDigit ? nil : currentToken
+                if let rhsText {
+                    header = "\(lhsText) \(op.symbol) \(rhsText)"
+                } else {
+                    header = "\(lhsText) \(op.symbol)"
+                }
             }
         } else if !expression.isEmpty {
             header = expression
@@ -2450,7 +2783,11 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func setCurrentTokenToCurrentInput() {
-        let formatted = displayString(for: currentInput, preserveTrailingZeros: shouldPreserveTypedCurrencyInput)
+        let formatted = displayString(
+            for: currentInput,
+            useActiveCurrency: false,
+            preserveTrailingZeros: shouldPreserveTypedCurrencyInput
+        )
         currentToken = boundedDisplayToken(formatted, fallback: formatted)
 
         // When a binary operator is armed but no RHS entry has started yet, the
@@ -2459,7 +2796,31 @@ public final class CalculatorViewModel: ObservableObject {
         if pendingOperator != nil, shouldResetInputOnNextDigit {
             accumulator = currentValue
             accumulatorToken = currentToken
+            if shouldRefreshPendingExpressionPreview {
+                expression = makeExpressionPreview()
+            }
         }
+    }
+
+    private var shouldRefreshPendingExpressionPreview: Bool {
+        let trimmedExpression = expression.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedExpression.isEmpty {
+            return true
+        }
+
+        let operatorTokenCount = trimmedExpression
+            .split(separator: " ", omittingEmptySubsequences: true)
+            .filter { token in
+                token == BinaryOperator.add.symbol
+                    || token == BinaryOperator.subtract.symbol
+                    || token == BinaryOperator.multiply.symbol
+                    || token == BinaryOperator.divide.symbol
+            }
+            .count
+
+        // Preserve already-built chains when token formatting changes (for example,
+        // after switching to a currency symbol mid-expression).
+        return operatorTokenCount <= 1
     }
 
     private func resetPostEvaluateStateForDirectDisplayEditingIfNeeded() {
@@ -2710,7 +3071,7 @@ public final class CalculatorViewModel: ObservableObject {
         appendHistory(expression: expressionText, result: resultText)
         lastResultSummary = expressionText + " ="
         currentInput = resultText
-        currentToken = displayString(for: resultText)
+        currentToken = displayString(for: resultText, useActiveCurrency: false)
         accumulator = parseStoredNumber(resultText)
         accumulatorToken = currentToken
         pendingOperator = nil
@@ -2758,16 +3119,16 @@ public final class CalculatorViewModel: ObservableObject {
         }
 
         if let accumulator {
-            accumulatorToken = displayString(for: format(accumulator))
+            accumulatorToken = displayString(for: format(accumulator), useActiveCurrency: false)
         }
 
         if let lastOperand {
-            lastOperandToken = displayString(for: format(lastOperand))
+            lastOperandToken = displayString(for: format(lastOperand), useActiveCurrency: false)
         }
 
         expressionTokens = expressionTokens.map { token in
             guard let normalized = normalizeDisplayNumberToken(token) else { return token }
-            return displayString(for: normalized)
+            return displayString(for: normalized, useActiveCurrency: false)
         }
 
         memoryEntries = memoryEntries.map {
@@ -2814,16 +3175,16 @@ public final class CalculatorViewModel: ObservableObject {
         }
 
         if let accumulator {
-            accumulatorToken = displayString(for: format(accumulator))
+            accumulatorToken = displayString(for: format(accumulator), useActiveCurrency: false)
         }
 
         if let lastOperand {
-            lastOperandToken = displayString(for: format(lastOperand))
+            lastOperandToken = displayString(for: format(lastOperand), useActiveCurrency: false)
         }
 
         expressionTokens = expressionTokens.map { token in
             guard let normalized = normalizeDisplayNumberToken(token) else { return token }
-            return displayString(for: normalized)
+            return displayString(for: normalized, useActiveCurrency: false)
         }
 
         updateDisplay()
@@ -3235,7 +3596,7 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func roundedOperationDisplayString(baseExpression: String, sourceValue: String, precision: Int, relationSymbol: String) -> String {
-        let displayExpression = ungroupedExpressionString(groupedExpressionString(baseExpression))
+        let displayExpression = ungroupedExpressionString(completedOperationDisplayExpression(baseExpression))
         let scale = spreadsheetRoundScale(fromStoredNumber: sourceValue, precision: precision)
         let prefix = "=round(\(displayExpression)\(numberFormatStyle.spreadsheetArgumentSeparator) \(scale))"
         return relationSymbol == "≈" ? "\(prefix) ≈" : prefix
