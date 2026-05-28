@@ -23,7 +23,7 @@ You enter the numbers, EnterCalc handles the math. EnterCalc is a modern native 
 
 ## Version 1.0.0 Scope
 
-The initial `1.0.0` release focuses on the core Standard calculator experience.
+The initial `1.0.0` release focuses on the core Basic calculator experience.
 
 Planned future enhancements include:
 
