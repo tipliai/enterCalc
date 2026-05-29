@@ -951,7 +951,10 @@ private extension EnterCalcIOSView {
                         isEnabled: activeScreen.viewModel.isResultRoundingEnabled,
                         precision: activeScreen.viewModel.resultRoundingPrecision,
                         maxPrecision: activeScreen.viewModel.maxResultRoundingPrecision,
-                        bottomSafeAreaInset: metrics.mode == .phonePortrait ? safeAreaInsets.bottom : 0,
+                        bottomSafeAreaInset: metrics.mode == .phonePortrait
+                            ? (counterRotatesForUpsideDownPortrait ? 0 : safeAreaInsets.bottom)
+                            : 0,
+                        isUpsideDownPortrait: counterRotatesForUpsideDownPortrait,
                         onSelectionChanged: { digits in
                             if let digits {
                                 activeScreen.viewModel.setResultRoundingPrecision(digits)
@@ -976,8 +979,12 @@ private extension EnterCalcIOSView {
             if metrics.mode == .phonePortrait {
                 content()
                     .frame(maxWidth: .infinity)
+                    .background(
+                        palette.historyBackground
+                            .ignoresSafeArea(edges: counterRotatesForUpsideDownPortrait ? .top : .bottom)
+                    )
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                    .ignoresSafeArea(edges: .bottom)
+                    .ignoresSafeArea(edges: counterRotatesForUpsideDownPortrait ? .top : .bottom)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             } else if metrics.mode == .phoneLandscape {
                 // In landscape, rounding panel should stretch to full width with background filling safe areas
@@ -2655,12 +2662,23 @@ private extension EnterCalcIOSView {
         return true
     }
 
+    @ViewBuilder
     func overlayScrim(metrics: IOSLayoutMetrics) -> some View {
-        Color.black.opacity(metrics.mode == .padWide ? 0.22 : 0.4)
-            .ignoresSafeArea()
-            .onTapGesture {
-                dismissActiveOverlay()
-            }
+        let scrim = Color.black.opacity(metrics.mode == .padWide ? 0.22 : 0.4)
+
+        if metrics.mode == .phonePortrait && counterRotatesForUpsideDownPortrait {
+            scrim
+                .ignoresSafeArea(edges: [.leading, .trailing, .bottom])
+                .onTapGesture {
+                    dismissActiveOverlay()
+                }
+        } else {
+            scrim
+                .ignoresSafeArea()
+                .onTapGesture {
+                    dismissActiveOverlay()
+                }
+        }
     }
 
     @ViewBuilder
@@ -3009,6 +3027,7 @@ private struct IOSRoundingPanel: View {
     let precision: Int
     let maxPrecision: Int
     let bottomSafeAreaInset: CGFloat
+    let isUpsideDownPortrait: Bool
     let onSelectionChanged: (Int?) -> Void
     let onDisableAndDismiss: () -> Void
     let onDismiss: () -> Void
@@ -3033,6 +3052,7 @@ private struct IOSRoundingPanel: View {
         precision: Int,
         maxPrecision: Int,
         bottomSafeAreaInset: CGFloat = 0,
+        isUpsideDownPortrait: Bool = false,
         onSelectionChanged: @escaping (Int?) -> Void,
         onDisableAndDismiss: @escaping () -> Void,
         onDismiss: @escaping () -> Void
@@ -3043,6 +3063,7 @@ private struct IOSRoundingPanel: View {
         self.precision = precision
         self.maxPrecision = max(0, maxPrecision)
         self.bottomSafeAreaInset = bottomSafeAreaInset
+        self.isUpsideDownPortrait = isUpsideDownPortrait
         self.onSelectionChanged = onSelectionChanged
         self.onDisableAndDismiss = onDisableAndDismiss
         self.onDismiss = onDismiss
@@ -3102,8 +3123,8 @@ private struct IOSRoundingPanel: View {
                 .fill(palette.historyBackground)
         )
         .overlay(
-            // Hide border in landscape mode to avoid visual interference
-            metrics.mode == .phoneLandscape ? 
+            // Hide border in landscape and upside-down portrait to avoid visible seams.
+            (metrics.mode == .phoneLandscape || (metrics.mode == .phonePortrait && isUpsideDownPortrait)) ?
                 AnyView(Rectangle().stroke(Color.clear, lineWidth: 0)) :
                 AnyView(Rectangle().stroke(palette.buttonBorder, lineWidth: 1))
         )
