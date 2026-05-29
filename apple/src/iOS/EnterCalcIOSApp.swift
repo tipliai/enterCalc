@@ -294,6 +294,9 @@ struct EnterCalcIOSView: View {
     @State private var liveHistoryOverlayHeight: CGFloat? = nil
     @State private var liveHistoryOverlayScreenID: UUID? = nil
     @State private var historyClearFeedbackVersionByScreen: [UUID: Int] = [:]
+    @State private var operationTextHeightByScreen: [UUID: CGFloat] = [:]
+    @State private var landscapeDisplayScrollResetTriggerByScreen: [UUID: Int] = [:]
+    @State private var landscapeDisplayGlobalFrameByScreen: [UUID: CGRect] = [:]
     @AppStorage("settings.theme") private var preferredThemeRaw: String = AppTheme.system.rawValue
     @AppStorage("settings.language") private var preferredLanguage: String = defaultLocalizationSelectionCode
     @AppStorage("settings.numberFormat.scientific") private var preferredScientificNotation: Bool = true
@@ -534,6 +537,7 @@ struct EnterCalcIOSView: View {
                 resetHistoryOverlayResizeState()
                 syncPhoneUpsideDownPresentation()
                 updateDisplayShimmerParallax()
+                reconcileDisplayLayoutAfterOrientationChange()
             }
             .onReceive(NotificationCenter.default.publisher(for: .enterCalcIOSToggleRoundingPanel)) { _ in
                 #if canImport(UIKit)
@@ -633,6 +637,8 @@ private extension EnterCalcIOSView {
     }
 
     func handleHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
+        resetLandscapeDisplayScroll(for: activeScreen)
+
         let unsupportedModifiers = event.modifierFlags.intersection([.control])
         guard unsupportedModifiers.isEmpty else {
             DebugLog.emit(
@@ -1029,6 +1035,35 @@ private extension EnterCalcIOSView {
 #else
         counterRotatesForUpsideDownPortrait = false
 #endif
+    }
+
+    func reconcileDisplayLayoutAfterOrientationChange() {
+        // Landscape-only gesture exclusion frames are no longer valid after rotation.
+        landscapeDisplayGlobalFrameByScreen.removeAll()
+
+        // If orientation is currently landscape and the user had scrolled up,
+        // ensure result visibility is restored on the active screen.
+        if isCurrentDeviceLandscapeOrientation() {
+            resetLandscapeDisplayScroll(for: activeScreen)
+        }
+    }
+
+    func isCurrentDeviceLandscapeOrientation() -> Bool {
+#if canImport(UIKit)
+        switch UIDevice.current.orientation {
+        case .landscapeLeft, .landscapeRight:
+            return true
+        default:
+            return false
+        }
+#else
+        return false
+#endif
+    }
+
+    func isActiveUpsideDownPortraitMode(metrics: IOSLayoutMetrics) -> Bool {
+        guard metrics.mode == .phonePortrait else { return false }
+        return counterRotatesForUpsideDownPortrait
     }
 
     func updateDisplayShimmerParallax() {
@@ -1603,6 +1638,13 @@ private extension EnterCalcIOSView {
                     showsMemoryLabel: !isLandscapeMode
                 )
                     .frame(maxWidth: .infinity, minHeight: resultAreaHeight, maxHeight: resultAreaHeight, alignment: .top)
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { newFrame in
+                        if isLandscapeMode {
+                            landscapeDisplayGlobalFrameByScreen[screen.id] = newFrame
+                        } else {
+                            landscapeDisplayGlobalFrameByScreen.removeValue(forKey: screen.id)
+                        }
+                    }
 
                 VStack(spacing: 0) {
                     if allowsKeypadResize {
@@ -1637,7 +1679,7 @@ private extension EnterCalcIOSView {
             .simultaneousGesture(
                 DragGesture(minimumDistance: 18, coordinateSpace: .global)
                     .onEnded { value in
-                        guard shouldOpenRoundingOverlayForSwipe(screen: screen, translation: value.translation) else { return }
+                        guard shouldOpenRoundingOverlayForSwipe(screen: screen, translation: value.translation, gestureStartLocation: value.startLocation) else { return }
                         toggleOverlay(.rounding)
                     }
             )
@@ -1645,11 +1687,17 @@ private extension EnterCalcIOSView {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    func shouldOpenRoundingOverlayForSwipe(screen: CalculatorScreenSession, translation: CGSize) -> Bool {
+    func shouldOpenRoundingOverlayForSwipe(screen: CalculatorScreenSession, translation: CGSize, gestureStartLocation: CGPoint = .zero) -> Bool {
         guard !screen.settings.disablesSwipeDownToRound else { return false }
         guard !showSettingsSheet else { return false }
         guard activeOverlay == nil else { return false }
         guard !isResizingKeypadHeight else { return false }
+
+        // Suppress if the gesture started inside the landscape scrollable display area.
+        if let displayFrame = landscapeDisplayGlobalFrameByScreen[screen.id],
+           displayFrame.contains(gestureStartLocation) {
+            return false
+        }
 
         // Use screen-space movement so direction checks stay consistent in iPad landscape.
         let verticalTravel = translation.height
@@ -1811,8 +1859,6 @@ private extension EnterCalcIOSView {
         let parallaxY = max(-8, min(8, displayShimmerParallaxOffset.height * 1.8))
         let displayShape = RoundedRectangle(cornerRadius: metrics.surfaceCornerRadius, style: .continuous)
         let shimmerHardMask = RoundedRectangle(cornerRadius: max(metrics.surfaceCornerRadius - 2.0, 0), style: .continuous)
-        let displayHeight = metrics.displayHeight
-        let resultsTextHeight = showsMemoryLabel ? displayHeight : expandedResultAreaHeight
         let displayBaseColor = isBlueTheme
             ? Color(red: 0.408, green: 0.424, blue: 0.982)
             : palette.buttonOperation
@@ -1838,6 +1884,42 @@ private extension EnterCalcIOSView {
                 .init(color: .clear, location: 0.14),
                 .init(color: shimmerTailColor, location: 1.0)
             ]
+        let expressionFontSize = metrics.mode == .phonePortrait
+            ? metrics.expressionFontSize
+            : metrics.expressionFontSize(for: metrics.displayHeight)
+        let isLandscapeMode = metrics.mode == .phoneLandscape || metrics.mode == .padWide
+        let isUpsideDownPortrait = isActiveUpsideDownPortraitMode(metrics: metrics)
+        let verticalPaddingTotal = isLandscapeMode ? (metrics.displayVerticalPadding * 2) : metrics.displayVerticalPadding
+        let resultFontSize = metrics.displayFontSize(for: metrics.displayHeight)
+        let resultLineHeight = resultFontSize * 1.12
+        let measuredOperationHeight = max(
+            operationTextHeightByScreen[screen.id] ?? (expressionFontSize * 1.3),
+            expressionFontSize * 1.3
+        )
+        let basePortraitDisplayAreaHeight = expandedResultAreaHeight - (showsMemoryLabel ? metrics.memoryHeight : 0)
+        let baseContentHeight = max(1, basePortraitDisplayAreaHeight - verticalPaddingTotal)
+        let baseOperationOffsetY = operationContentOffsetY(
+            operationHeight: measuredOperationHeight,
+            resultLineHeight: resultLineHeight,
+            spacing: metrics.displaySpacing,
+            availableHeight: baseContentHeight
+        )
+        let basicSpaceBorrowed = min(
+            max(0, -baseOperationOffsetY),
+            showsMemoryLabel ? metrics.memoryHeight : 0
+        )
+        let isBasicSpaceInUse = showsMemoryLabel && basicSpaceBorrowed > 0
+        let visibleBasicHeight = isBasicSpaceInUse ? 0 : (showsMemoryLabel ? metrics.memoryHeight : 0)
+        let portraitDisplayAreaHeight = expandedResultAreaHeight - visibleBasicHeight
+        let contentHeight = max(1, portraitDisplayAreaHeight - verticalPaddingTotal)
+        let operationOffsetY = operationContentOffsetY(
+            operationHeight: measuredOperationHeight,
+            resultLineHeight: resultLineHeight,
+            spacing: metrics.displaySpacing,
+            availableHeight: contentHeight
+        )
+        let portraitOperationOffsetY = operationOffsetY
+        let basicOpacity = 0.5
 
         return IOSContextMenuContainer(
             sections: clipboardContextMenuSections(for: screen.viewModel),
@@ -1962,73 +2044,153 @@ private extension EnterCalcIOSView {
                     .allowsHitTesting(false)
                 }
 
-                let operationTextCompactionProgress = CalculatorDisplayMetrics.operationTextCompactionProgress(
-                    for: screen.viewModel.expressionDisplay.count
-                )
-
                 VStack(spacing: 0) {
-                    VStack(alignment: .trailing, spacing: metrics.displaySpacing) {
-                        let expressionFontSize = metrics.expressionFontSize(for: resultsTextHeight)
-                        let resultFontSize = metrics.displayFontSize(for: resultsTextHeight)
-                        let resultLineHeight = resultFontSize * 1.12
-                        let operationLineHeight = max(0, resultsTextHeight - resultLineHeight - metrics.displaySpacing)
+                    let scrollResetTrigger = landscapeDisplayScrollResetTriggerByScreen[screen.id, default: 0]
+                    
+                    if isLandscapeMode {
+                        ScrollViewReader { scrollProxy in
+                            ScrollView(.vertical, showsIndicators: false) {
+                                VStack(alignment: .trailing, spacing: metrics.displaySpacing) {
+                                    Text(screen.viewModel.expressionDisplay)
+                                        .font(EnterCalcFont.appFont(size: expressionFontSize))
+                                        .foregroundStyle(palette.textSecondary)
+                                        .frame(maxWidth: .infinity, alignment: .trailing)
+                                        .multilineTextAlignment(.trailing)
+                                        .lineLimit(nil)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .background(
+                                            GeometryReader { operationGeometry in
+                                                Color.clear
+                                                    .onAppear {
+                                                        updateOperationTextHeight(operationGeometry.size.height, for: screen.id)
+                                                    }
+                                                    .onChange(of: operationGeometry.size.height) { _, newHeight in
+                                                        updateOperationTextHeight(newHeight, for: screen.id)
+                                                    }
+                                            }
+                                        )
 
-                        Text(screen.viewModel.expressionDisplay)
-                            .font(EnterCalcFont.appFont(size: expressionFontSize))
-                            .foregroundStyle(palette.textSecondary)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                            .multilineTextAlignment(.trailing)
-                            .lineLimit(nil)
-                            .fixedSize(horizontal: false, vertical: true)
+                                    if screen.viewModel.canDirectlyEditDisplay {
+                                        EditableDisplayResultText(
+                                            text: screen.viewModel.display,
+                                            fontSize: resultFontSize,
+                                            foregroundColor: palette.textPrimary,
+                                            minScaleFactor: 0.22,
+                                            caretBoundaryIndex: screen.viewModel.displayEditCaretBoundaryIndex,
+                                            caretColor: palette.textPrimary,
+                                            onTapBoundary: { boundaryIndex in
+                                                screen.viewModel.setDisplayEditCursor(displayBoundaryIndex: boundaryIndex)
+                                            }
+                                        )
+                                        .frame(maxWidth: .infinity, minHeight: resultLineHeight, maxHeight: resultLineHeight, alignment: .trailing)
+                                        .id("resultDisplayLine")
+                                    } else {
+                                        Text(screen.viewModel.display)
+                                            .font(EnterCalcFont.appFont(size: resultFontSize))
+                                            .foregroundStyle(palette.textPrimary)
+                                            .frame(maxWidth: .infinity, minHeight: resultLineHeight, maxHeight: resultLineHeight, alignment: .trailing)
+                                            .lineLimit(1)
+                                            .allowsTightening(true)
+                                            .minimumScaleFactor(0.22)
+                                            .id("resultDisplayLine")
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .topTrailing)
+                                .padding(.horizontal, metrics.displayHorizontalPadding)
+                                .padding(.vertical, metrics.displayVerticalPadding)
+                            }
+                            .defaultScrollAnchor(.bottom)
+                            .onChange(of: scrollResetTrigger) { _, _ in
+                                var transaction = Transaction()
+                                transaction.disablesAnimations = true
+                                withTransaction(transaction) {
+                                    scrollProxy.scrollTo("resultDisplayLine", anchor: .bottom)
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: contentHeight, alignment: .topTrailing)
+                        .clipped()
+                    } else {
+                        ZStack(alignment: .bottomLeading) {
+                            VStack(alignment: .trailing, spacing: metrics.displaySpacing) {
+                                Text(screen.viewModel.expressionDisplay)
+                                    .font(EnterCalcFont.appFont(size: expressionFontSize))
+                                    .foregroundStyle(palette.textSecondary)
+                                    .frame(maxWidth: .infinity, alignment: .trailing)
+                                    .multilineTextAlignment(.trailing)
+                                    .lineLimit(nil)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .background(
+                                        GeometryReader { operationGeometry in
+                                            Color.clear
+                                                .onAppear {
+                                                    updateOperationTextHeight(operationGeometry.size.height, for: screen.id)
+                                                }
+                                                .onChange(of: operationGeometry.size.height) { _, newHeight in
+                                                    updateOperationTextHeight(newHeight, for: screen.id)
+                                                }
+                                        }
+                                    )
+
+                                if screen.viewModel.canDirectlyEditDisplay {
+                                    EditableDisplayResultText(
+                                        text: screen.viewModel.display,
+                                        fontSize: resultFontSize,
+                                        foregroundColor: palette.textPrimary,
+                                        minScaleFactor: 0.22,
+                                        caretBoundaryIndex: screen.viewModel.displayEditCaretBoundaryIndex,
+                                        caretColor: palette.textPrimary,
+                                        onTapBoundary: { boundaryIndex in
+                                            screen.viewModel.setDisplayEditCursor(displayBoundaryIndex: boundaryIndex)
+                                        }
+                                    )
+                                    .frame(maxWidth: .infinity, minHeight: resultLineHeight, maxHeight: resultLineHeight, alignment: .trailing)
+                                } else {
+                                    Text(screen.viewModel.display)
+                                        .font(EnterCalcFont.appFont(size: resultFontSize))
+                                        .foregroundStyle(palette.textPrimary)
+                                        .frame(maxWidth: .infinity, minHeight: resultLineHeight, maxHeight: resultLineHeight, alignment: .trailing)
+                                        .lineLimit(1)
+                                        .allowsTightening(true)
+                                        .minimumScaleFactor(0.22)
+                                }
+                            }
+                            .offset(y: portraitOperationOffsetY)
                             .frame(
                                 maxWidth: .infinity,
-                                minHeight: operationLineHeight,
-                                maxHeight: operationLineHeight,
-                                alignment: .bottomTrailing
+                                maxHeight: contentHeight,
+                                alignment: isUpsideDownPortrait ? .bottomTrailing : .topTrailing
+                            )
+                            .padding(.horizontal, metrics.displayHorizontalPadding)
+                            .padding(.top, isUpsideDownPortrait ? 0 : metrics.displayVerticalPadding)
+                            .padding(.bottom, isUpsideDownPortrait ? metrics.displayVerticalPadding : 0)
+                            .frame(
+                                maxWidth: .infinity,
+                                minHeight: portraitDisplayAreaHeight,
+                                maxHeight: portraitDisplayAreaHeight,
+                                alignment: isUpsideDownPortrait ? .bottom : .top
                             )
                             .clipped()
-
-                        if screen.viewModel.canDirectlyEditDisplay {
-                            EditableDisplayResultText(
-                                text: screen.viewModel.display,
-                                fontSize: resultFontSize,
-                                foregroundColor: palette.textPrimary,
-                                minScaleFactor: 0.22,
-                                caretBoundaryIndex: screen.viewModel.displayEditCaretBoundaryIndex,
-                                caretColor: palette.textPrimary,
-                                onTapBoundary: { boundaryIndex in
-                                    screen.viewModel.setDisplayEditCursor(displayBoundaryIndex: boundaryIndex)
-                                }
-                            )
-                            .frame(maxWidth: .infinity, minHeight: resultLineHeight, maxHeight: resultLineHeight, alignment: .trailing)
-                        } else {
-                            Text(screen.viewModel.display)
-                                .font(EnterCalcFont.appFont(size: resultFontSize))
-                                .foregroundStyle(palette.textPrimary)
-                                .frame(maxWidth: .infinity, minHeight: resultLineHeight, maxHeight: resultLineHeight, alignment: .trailing)
-                                .lineLimit(1)
-                                .allowsTightening(true)
-                                .minimumScaleFactor(0.22)
                         }
                     }
-                    .padding(.horizontal, metrics.displayHorizontalPadding)
-                    .padding(.vertical, metrics.displayVerticalPadding)
-                    .frame(maxWidth: .infinity, minHeight: resultsTextHeight, maxHeight: resultsTextHeight, alignment: .topTrailing)
 
-                    if showsMemoryLabel {
-                        Spacer(minLength: 0)
-                        memoryControls(
-                            metrics: metrics,
-                            screen: screen,
-                            compactionProgress: operationTextCompactionProgress
-                        )
-                    }
                 }
             }
             .frame(maxWidth: .infinity, minHeight: expandedResultAreaHeight, maxHeight: expandedResultAreaHeight, alignment: .top)
             .mask { displayShape.padding(0.6) }
             .clipShape(displayShape, style: FillStyle(eoFill: false, antialiased: false))
             .clipped()
+            .overlay(alignment: .bottomLeading) {
+                if showsMemoryLabel {
+                    memoryControls(
+                        metrics: metrics,
+                        opacity: basicOpacity
+                    )
+                    .opacity(isBasicSpaceInUse ? 0 : 1)
+                    .animation(.easeInOut(duration: 0.5), value: isBasicSpaceInUse)
+                    .allowsHitTesting(false)
+                }
+            }
             .overlay(alignment: .top) {
                 if metrics.mode == .phonePortrait && counterRotatesForUpsideDownPortrait {
                     copyToastBubble
@@ -2049,17 +2211,30 @@ private extension EnterCalcIOSView {
         }
     }
 
-    func memoryControls(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, compactionProgress: Double) -> some View {
-        let basicLabelOpacity = activeTheme == .blue ? 0.24 : 0.15
-        let adjustedOpacity = basicLabelOpacity * (1 - compactionProgress)
-        let adjustedHeight = max(0, metrics.memoryHeight * (1 - compactionProgress))
+    func memoryControls(metrics: IOSLayoutMetrics, opacity: Double) -> some View {
         return Text("Basic")
             .font(EnterCalcFont.appFont(size: metrics.memoryFontSize))
-            .foregroundStyle(palette.textPrimary.opacity(adjustedOpacity))
-            .frame(maxWidth: .infinity, minHeight: adjustedHeight, maxHeight: adjustedHeight, alignment: .leading)
+            .foregroundStyle(palette.textPrimary.opacity(opacity))
+            .frame(maxWidth: .infinity, minHeight: metrics.memoryHeight, maxHeight: metrics.memoryHeight, alignment: .leading)
             .padding(.horizontal, metrics.displayHorizontalPadding)
             .lineLimit(1)
             .clipped()
+    }
+
+    func updateOperationTextHeight(_ height: CGFloat, for screenID: UUID) {
+        let normalizedHeight = max(0, height)
+        let previousHeight = operationTextHeightByScreen[screenID] ?? 0
+        guard abs(previousHeight - normalizedHeight) > 0.5 else { return }
+        operationTextHeightByScreen[screenID] = normalizedHeight
+    }
+
+    func operationContentOffsetY(
+        operationHeight: CGFloat,
+        resultLineHeight: CGFloat,
+        spacing: CGFloat,
+        availableHeight: CGFloat
+    ) -> CGFloat {
+        min(0, availableHeight - (operationHeight + spacing + resultLineHeight))
     }
 
     func copyDisplayToPasteboardWithFlash(from viewModel: CalculatorViewModel) {
@@ -2243,6 +2418,7 @@ private extension EnterCalcIOSView {
 
     func keypad(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, buttonHeight: CGFloat) -> some View {
         let columns = Array(repeating: GridItem(.flexible(), spacing: metrics.gridSpacing), count: 4)
+        let isLandscapeMode = metrics.mode == .phoneLandscape || metrics.mode == .padWide
 
         return LazyVGrid(columns: columns, spacing: metrics.gridSpacing) {
             ForEach(Array(flattenedButtons.enumerated()), id: \.offset) { _, button in
@@ -2252,13 +2428,22 @@ private extension EnterCalcIOSView {
                     metrics: metrics,
                     buttonHeight: buttonHeight,
                     pressFeedback: triggerKeyPressFeedback,
-                    action: { button.action(screen.viewModel) },
+                    action: {
+                        button.action(screen.viewModel)
+                        if isLandscapeMode {
+                            resetLandscapeDisplayScroll(for: screen)
+                        }
+                    },
                     operatorRevealProgress: operatorRevealProgress,
                     operatorAnimFadeOpacity: operatorAnimFadeOpacity
                 )
             }
         }
         .frame(maxWidth: .infinity, alignment: .bottom)
+    }
+
+    func resetLandscapeDisplayScroll(for screen: CalculatorScreenSession) {
+        landscapeDisplayScrollResetTriggerByScreen[screen.id, default: 0] += 1
     }
 
     func keypadResizeHandle(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, height: CGFloat) -> some View {

@@ -4,8 +4,8 @@ This document tracks the shared-module checks currently discovered by `swift tes
 Each row maps directly to a discovered test method in `apple/tests/CalculatorViewModelTests.swift`.
 
 Current verification status on macOS:
-- `swift test list` discovers `154` `CalculatorViewModelTests` methods.
-- This matrix documents the same `154` methods with no missing or extra entries.
+- `swift test list` discovers `170` `CalculatorViewModelTests` methods.
+- This matrix documents the same `170` methods with no missing or extra entries.
 - The current macOS run includes the AppKit-only clipboard tests guarded by `canImport(AppKit)`.
 
 ## UI Settings Expectations
@@ -112,7 +112,9 @@ These behaviors are product expectations for the app UI and persistence model. T
 | History | Repeatedly evaluate `1 + 1` more than `64` times | History count is capped at `64`; newest entry is kept first | `testHistoryIsCappedAtMaximumEntryCount` |
 | Memory | `MS 12`, clear, `M+ 3`, clear, `M- 5`, `MR`, `MC` | Memory progresses `12 -> 15 -> 10`; recall shows `10`; clear removes memory and entries | `testMemoryStoreRecallAddSubtractAndClearFlow` |
 | Memory | Store more than `64` distinct values | Memory entries keep only the newest `64` stored values | `testMemoryEntriesAreCappedAtMaximumEntryCount` |
-| Editing state | Perform more than `64` changes | Undo depth is capped at `64`; redo depth remains `0` | `testUndoDepthIsCappedAtMaximumEntryCount` |
+| Editing state | Perform more than `100` changes | Undo depth is capped at `100`; redo depth remains `0` | `testUndoDepthIsCappedAtMaximumEntryCount` |
+| Editing state | Compare operation-chunk cap with undo cap constants | Operation chunk cap equals undo depth (`100`) | `testOperationChunkLimitMatchesUndoDepthLimit` |
+| Arithmetic | Build a chained addition with `100` value chunks, then try to add one more operator chunk | Extra operator is ignored at the cap and evaluation still returns the sum of `1...100` (`5050`) | `testOperationChunkCountIsCappedAtMaximumUndoDepth` |
 | History | Evaluate `8 × 7 =`, reuse the saved history entry, then type `2` | Reuse restores display `56` and expression `8 × 7 =`; next digit starts fresh input with display `2` | `testReuseHistoryEntryRestoresResultAsNewInput` |
 | Screen management | Create a new screen store | Starts with one active home screen; it cannot be closed and can create more screens | `testScreenStoreStartsWithOneHomeScreen` |
 | Screen management | Insert screens, activate the middle one, then insert again | New screen is inserted immediately to the right of the active screen | `testScreenInsertionOccursImmediatelyRightOfActiveScreen` |

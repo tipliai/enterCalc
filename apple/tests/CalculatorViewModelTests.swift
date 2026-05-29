@@ -1312,6 +1312,38 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.redoDepth, 0)
     }
 
+    func testOperationChunkLimitMatchesUndoDepthLimit() {
+        XCTAssertEqual(
+            CalculatorViewModel.Limits.maxOperationChunks,
+            CalculatorViewModel.Limits.maxUndoDepth
+        )
+    }
+
+    func testOperationChunkCountIsCappedAtMaximumUndoDepth() {
+        let viewModel = CalculatorViewModel()
+        let maxChunks = CalculatorViewModel.Limits.maxOperationChunks
+
+        enter("1", into: viewModel)
+        if maxChunks > 1 {
+            for value in 2...maxChunks {
+                viewModel.setOperator(.add)
+                enter(String(value), into: viewModel)
+            }
+        }
+
+        let expressionBeforeExtraOperator = viewModel.expressionDisplay
+
+        // At the chunk cap, adding another operator should be a no-op.
+        viewModel.setOperator(.add)
+
+        XCTAssertEqual(viewModel.expressionDisplay, expressionBeforeExtraOperator)
+
+        viewModel.evaluate()
+
+        let expectedTotal = (maxChunks * (maxChunks + 1)) / 2
+        XCTAssertEqual(viewModel.history.first?.result, String(expectedTotal))
+    }
+
     func testReuseHistoryEntryRestoresResultAsNewInput() {
         let viewModel = CalculatorViewModel()
 

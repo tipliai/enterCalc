@@ -70,6 +70,7 @@ struct CalculatorWindowView: View {
     @State private var isResizingKeypadHeight: Bool = false
     @State private var keypadResizeGestureStartMultiplier: Double = 1.0
     @State private var liveKeypadHeightMultiplier: Double? = nil
+    @State private var operationTextMeasuredHeight: CGFloat = 0
 
     private let minimumWindowWidthPoints: CGFloat = 280
     private let minimumWindowHeightPoints: CGFloat = 452
@@ -276,7 +277,7 @@ struct CalculatorWindowView: View {
     private var calculatorPane: some View {
         let headerToDisplaySpacing: CGFloat = 8
         let separatorHeight: CGFloat = 32
-        let minimumDisplayHeight: CGFloat = 100
+        let minimumDisplayHeight: CGFloat = 108
         let minimumKeypadHeight: CGFloat = 140
 
         return VStack(alignment: .trailing, spacing: 0) {
@@ -483,54 +484,85 @@ struct CalculatorWindowView: View {
 
     private var display: some View {
         let basicFontSize: CGFloat = 12
-        let operationTextCompactionProgress = CalculatorDisplayMetrics.operationTextCompactionProgress(
-            for: viewModel.expressionDisplay.count
-        )
+        let resultFontSize: CGFloat = 48
+        let resultLineHeight: CGFloat = 54
+        let displaySpacing: CGFloat = 4
+        let basicRowHeight: CGFloat = 16
+        let basicBaseOpacity: Double = 0.15
 
-        return VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .trailing, spacing: 4) {
-                Text(viewModel.expressionDisplay)
-                    .font(EnterCalcFont.appFont(size: basicFontSize))
-                    .foregroundStyle(fadedForeground)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .multilineTextAlignment(.trailing)
-                    .lineLimit(nil)
-                    .fixedSize(horizontal: false, vertical: true)
+        return GeometryReader { displayGeometry in
+            let contentHeight = max(1, displayGeometry.size.height - 8 - 3)
+            let measuredOperationHeight = max(operationTextMeasuredHeight, basicFontSize * 1.3)
+            let operationOffsetY = operationContentOffsetY(
+                operationHeight: measuredOperationHeight,
+                resultLineHeight: resultLineHeight,
+                spacing: displaySpacing,
+                availableHeight: contentHeight
+            )
+            let resultBottom = measuredOperationHeight + displaySpacing + resultLineHeight + operationOffsetY
+            let basicOpacity = basicLabelOpacity(
+                baseOpacity: basicBaseOpacity,
+                resultBottom: resultBottom,
+                availableHeight: contentHeight,
+                basicHeight: basicRowHeight
+            )
 
-                if viewModel.canDirectlyEditDisplay {
-                    EditableDisplayResultText(
-                        text: viewModel.display,
-                        fontSize: 48,
-                        foregroundColor: primaryForeground,
-                        minScaleFactor: 0.15,
-                        caretBoundaryIndex: viewModel.displayEditCaretBoundaryIndex,
-                        caretColor: primaryForeground,
-                        onTapBoundary: { boundaryIndex in
-                            viewModel.setDisplayEditCursor(displayBoundaryIndex: boundaryIndex)
-                        }
-                    )
-                    .frame(maxWidth: .infinity, minHeight: 54, alignment: .trailing)
-                    .layoutPriority(1)
-                } else {
-                    Text(viewModel.display)
-                        .font(EnterCalcFont.appFont(size: 48))
-                        .foregroundStyle(primaryForeground)
+            ZStack(alignment: .bottomLeading) {
+                VStack(alignment: .trailing, spacing: displaySpacing) {
+                    Text(viewModel.expressionDisplay)
+                        .font(EnterCalcFont.appFont(size: basicFontSize))
+                        .foregroundStyle(fadedForeground)
                         .frame(maxWidth: .infinity, alignment: .trailing)
-                        .lineLimit(1)
-                        .allowsTightening(true)
-                        .minimumScaleFactor(0.15)
+                        .multilineTextAlignment(.trailing)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .background(
+                            GeometryReader { operationGeometry in
+                                Color.clear
+                                    .onAppear {
+                                        updateOperationTextMeasuredHeight(operationGeometry.size.height)
+                                    }
+                                    .onChange(of: operationGeometry.size.height) { _, newHeight in
+                                        updateOperationTextMeasuredHeight(newHeight)
+                                    }
+                            }
+                        )
+
+                    if viewModel.canDirectlyEditDisplay {
+                        EditableDisplayResultText(
+                            text: viewModel.display,
+                            fontSize: resultFontSize,
+                            foregroundColor: primaryForeground,
+                            minScaleFactor: 0.15,
+                            caretBoundaryIndex: viewModel.displayEditCaretBoundaryIndex,
+                            caretColor: primaryForeground,
+                            onTapBoundary: { boundaryIndex in
+                                viewModel.setDisplayEditCursor(displayBoundaryIndex: boundaryIndex)
+                            }
+                        )
+                        .frame(maxWidth: .infinity, minHeight: resultLineHeight, maxHeight: resultLineHeight, alignment: .trailing)
                         .layoutPriority(1)
+                    } else {
+                        Text(viewModel.display)
+                            .font(EnterCalcFont.appFont(size: resultFontSize))
+                            .foregroundStyle(primaryForeground)
+                            .frame(maxWidth: .infinity, minHeight: resultLineHeight, maxHeight: resultLineHeight, alignment: .trailing)
+                            .lineLimit(1)
+                            .allowsTightening(true)
+                            .minimumScaleFactor(0.15)
+                            .layoutPriority(1)
+                    }
                 }
+                .offset(y: operationOffsetY)
+                .frame(maxWidth: .infinity, maxHeight: contentHeight, alignment: .topTrailing)
+                .clipped()
+
+                memoryControls(opacity: basicOpacity)
             }
-            .frame(maxWidth: .infinity, alignment: .topTrailing)
-
-            Spacer(minLength: 0)
-
-            memoryControls(compactionProgress: operationTextCompactionProgress)
+            .padding(.top, 8)
+            .padding(.horizontal, 8)
+            .padding(.bottom, 3)
         }
-        .padding(.top, 8)
-        .padding(.horizontal, 8)
-        .padding(.bottom, 3)
         .background(displayHover ? panelColor : surfaceColor)
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         .overlay(
@@ -656,21 +688,48 @@ struct CalculatorWindowView: View {
             .allowsHitTesting(false)
     }
 
-    private func memoryControls(compactionProgress: Double) -> some View {
-        let adjustedOpacity = 0.15 * (1 - compactionProgress)
-        let adjustedHeight = max(0, 16 * (1 - compactionProgress))
+    private func memoryControls(opacity: Double) -> some View {
         return Text("Basic")
             .font(EnterCalcFont.appFont(size: 12))
-            .foregroundStyle(primaryForeground.opacity(adjustedOpacity))
+            .foregroundStyle(primaryForeground.opacity(opacity))
             .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: adjustedHeight, alignment: .leading)
+            .frame(height: 16, alignment: .leading)
             .lineLimit(1)
             .clipped()
+            .animation(.easeInOut(duration: 0.18), value: opacity)
             .anchorPreference(
                 key: MemoryControlsBoundsKey.self,
                 value: .bounds,
                 transform: { $0 }
             )
+    }
+
+    private func updateOperationTextMeasuredHeight(_ height: CGFloat) {
+        let normalizedHeight = max(0, height)
+        guard abs(operationTextMeasuredHeight - normalizedHeight) > 0.5 else { return }
+        operationTextMeasuredHeight = normalizedHeight
+    }
+
+    private func operationContentOffsetY(
+        operationHeight: CGFloat,
+        resultLineHeight: CGFloat,
+        spacing: CGFloat,
+        availableHeight: CGFloat
+    ) -> CGFloat {
+        min(0, availableHeight - (operationHeight + spacing + resultLineHeight))
+    }
+
+    private func basicLabelOpacity(
+        baseOpacity: Double,
+        resultBottom: CGFloat,
+        availableHeight: CGFloat,
+        basicHeight: CGFloat
+    ) -> Double {
+        let clampedBasicHeight = max(1, basicHeight)
+        let basicTop = availableHeight - clampedBasicHeight
+        let overlap = max(0, resultBottom - basicTop)
+        let visibility = max(0, min(1, 1 - Double(overlap / clampedBasicHeight)))
+        return baseOpacity * visibility
     }
 
     private var keypadArea: some View {
