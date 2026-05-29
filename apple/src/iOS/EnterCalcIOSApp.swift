@@ -1911,6 +1911,7 @@ private extension EnterCalcIOSView {
             spacing: metrics.displaySpacing,
             availableHeight: contentHeight
         )
+        let portraitOperationOffsetY = operationOffsetY
         let basicOpacity = 0.5
 
         return IOSContextMenuContainer(
@@ -2147,7 +2148,7 @@ private extension EnterCalcIOSView {
                                         .minimumScaleFactor(0.22)
                                 }
                             }
-                            .offset(y: isUpsideDownPortrait ? -operationOffsetY : operationOffsetY)
+                            .offset(y: portraitOperationOffsetY)
                             .frame(
                                 maxWidth: .infinity,
                                 maxHeight: contentHeight,
