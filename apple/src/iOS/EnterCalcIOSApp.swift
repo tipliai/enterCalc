@@ -1857,25 +1857,33 @@ private extension EnterCalcIOSView {
             : metrics.expressionFontSize(for: metrics.displayHeight)
         let resultFontSize = metrics.displayFontSize(for: metrics.displayHeight)
         let resultLineHeight = resultFontSize * 1.12
-        let contentHeight = max(1, expandedResultAreaHeight - metrics.displayVerticalPadding * 2)
         let measuredOperationHeight = max(
             operationTextHeightByScreen[screen.id] ?? (expressionFontSize * 1.3),
             expressionFontSize * 1.3
         )
+        let basePortraitDisplayAreaHeight = expandedResultAreaHeight - (showsMemoryLabel ? metrics.memoryHeight : 0)
+        let baseContentHeight = max(1, basePortraitDisplayAreaHeight - metrics.displayVerticalPadding * 2)
+        let baseOperationOffsetY = operationContentOffsetY(
+            operationHeight: measuredOperationHeight,
+            resultLineHeight: resultLineHeight,
+            spacing: metrics.displaySpacing,
+            availableHeight: baseContentHeight
+        )
+        let basicSpaceBorrowed = min(
+            max(0, -baseOperationOffsetY),
+            showsMemoryLabel ? metrics.memoryHeight : 0
+        )
+        let isBasicSpaceInUse = showsMemoryLabel && basicSpaceBorrowed > 0
+        let visibleBasicHeight = isBasicSpaceInUse ? 0 : (showsMemoryLabel ? metrics.memoryHeight : 0)
+        let portraitDisplayAreaHeight = expandedResultAreaHeight - visibleBasicHeight
+        let contentHeight = max(1, portraitDisplayAreaHeight - metrics.displayVerticalPadding * 2)
         let operationOffsetY = operationContentOffsetY(
             operationHeight: measuredOperationHeight,
             resultLineHeight: resultLineHeight,
             spacing: metrics.displaySpacing,
             availableHeight: contentHeight
         )
-        let resultBottom = measuredOperationHeight + metrics.displaySpacing + resultLineHeight + operationOffsetY
-        let basicVisibilityProgress = basicLabelVisibilityProgress(
-            resultBottom: resultBottom,
-            availableHeight: contentHeight,
-            basicHeight: metrics.memoryHeight
-        )
-        let basicBaseOpacity = activeTheme == .blue ? 0.24 : 0.15
-        let basicOpacity = basicBaseOpacity * basicVisibilityProgress
+        let basicOpacity = 0.5
 
         return IOSContextMenuContainer(
             sections: clipboardContextMenuSections(for: screen.viewModel),
@@ -2114,12 +2122,12 @@ private extension EnterCalcIOSView {
                             .frame(maxWidth: .infinity, maxHeight: contentHeight, alignment: .topTrailing)
                             .padding(.horizontal, metrics.displayHorizontalPadding)
                             .padding(.vertical, metrics.displayVerticalPadding)
-                            .frame(maxWidth: .infinity, minHeight: expandedResultAreaHeight, maxHeight: expandedResultAreaHeight, alignment: .top)
+                            .frame(maxWidth: .infinity, minHeight: portraitDisplayAreaHeight, maxHeight: portraitDisplayAreaHeight, alignment: .top)
                             .clipped()
                         }
                     }
 
-                    if showsMemoryLabel {
+                    if showsMemoryLabel && !isBasicSpaceInUse {
                         memoryControls(
                             metrics: metrics,
                             opacity: basicOpacity
@@ -2159,7 +2167,6 @@ private extension EnterCalcIOSView {
             .padding(.horizontal, metrics.displayHorizontalPadding)
             .lineLimit(1)
             .clipped()
-            .animation(.easeInOut(duration: 0.18), value: opacity)
     }
 
     func updateOperationTextHeight(_ height: CGFloat, for screenID: UUID) {
@@ -2176,17 +2183,6 @@ private extension EnterCalcIOSView {
         availableHeight: CGFloat
     ) -> CGFloat {
         min(0, availableHeight - (operationHeight + spacing + resultLineHeight))
-    }
-
-    func basicLabelVisibilityProgress(
-        resultBottom: CGFloat,
-        availableHeight: CGFloat,
-        basicHeight: CGFloat
-    ) -> Double {
-        let clampedBasicHeight = max(1, basicHeight)
-        let basicTop = availableHeight - clampedBasicHeight
-        let overlap = max(0, resultBottom - basicTop)
-        return max(0, min(1, 1 - Double(overlap / clampedBasicHeight)))
     }
 
     func copyDisplayToPasteboardWithFlash(from viewModel: CalculatorViewModel) {
