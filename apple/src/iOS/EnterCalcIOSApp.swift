@@ -295,6 +295,7 @@ struct EnterCalcIOSView: View {
     @State private var liveHistoryOverlayScreenID: UUID? = nil
     @State private var historyClearFeedbackVersionByScreen: [UUID: Int] = [:]
     @State private var operationTextHeightByScreen: [UUID: CGFloat] = [:]
+    @State private var portraitDisplayStackHeightByScreen: [UUID: CGFloat] = [:]
     @State private var landscapeDisplayScrollResetTriggerByScreen: [UUID: Int] = [:]
     @State private var landscapeDisplayGlobalFrameByScreen: [UUID: CGRect] = [:]
     @AppStorage("settings.theme") private var preferredThemeRaw: String = AppTheme.system.rawValue
@@ -1074,6 +1075,10 @@ private extension EnterCalcIOSView {
     func reconcileDisplayLayoutAfterOrientationChange() {
         // Landscape-only gesture exclusion frames are no longer valid after rotation.
         landscapeDisplayGlobalFrameByScreen.removeAll()
+
+        // Portrait display stack height is measured from the rendered layout.
+        // Clear it on rotation so the next pass uses fresh geometry instead of a stale orientation.
+        portraitDisplayStackHeightByScreen.removeAll()
 
         // If orientation is currently landscape and the user had scrolled up,
         // ensure result visibility is restored on the active screen.
@@ -1936,12 +1941,15 @@ private extension EnterCalcIOSView {
             operationTextHeightByScreen[screen.id] ?? (expressionFontSize * 1.3),
             expressionFontSize * 1.3
         )
+        let estimatedPortraitStackHeight = measuredOperationHeight + metrics.displaySpacing + resultLineHeight
+        let measuredPortraitStackHeight = max(
+            portraitDisplayStackHeightByScreen[screen.id] ?? 0,
+            estimatedPortraitStackHeight
+        )
         let basePortraitDisplayAreaHeight = expandedResultAreaHeight - (showsMemoryLabel ? metrics.memoryHeight : 0)
         let baseContentHeight = max(1, basePortraitDisplayAreaHeight - verticalPaddingTotal)
         let baseOperationOffsetY = operationContentOffsetY(
-            operationHeight: measuredOperationHeight,
-            resultLineHeight: resultLineHeight,
-            spacing: metrics.displaySpacing,
+            totalContentHeight: measuredPortraitStackHeight,
             availableHeight: baseContentHeight
         )
         let basicSpaceBorrowed = min(
@@ -1953,9 +1961,7 @@ private extension EnterCalcIOSView {
         let portraitDisplayAreaHeight = expandedResultAreaHeight - visibleBasicHeight
         let contentHeight = max(1, portraitDisplayAreaHeight - verticalPaddingTotal)
         let operationOffsetY = operationContentOffsetY(
-            operationHeight: measuredOperationHeight,
-            resultLineHeight: resultLineHeight,
-            spacing: metrics.displaySpacing,
+            totalContentHeight: measuredPortraitStackHeight,
             availableHeight: contentHeight
         )
         let portraitOperationOffsetY = operationOffsetY
@@ -2195,20 +2201,31 @@ private extension EnterCalcIOSView {
                                         .minimumScaleFactor(0.22)
                                 }
                             }
+                            .background(
+                                GeometryReader { stackGeometry in
+                                    Color.clear
+                                        .onAppear {
+                                            updatePortraitDisplayStackHeight(stackGeometry.size.height, for: screen.id)
+                                        }
+                                        .onChange(of: stackGeometry.size.height) { _, newHeight in
+                                            updatePortraitDisplayStackHeight(newHeight, for: screen.id)
+                                        }
+                                }
+                            )
                             .offset(y: portraitOperationOffsetY)
                             .frame(
                                 maxWidth: .infinity,
                                 maxHeight: contentHeight,
-                                alignment: isUpsideDownPortrait ? .bottomTrailing : .topTrailing
+                                alignment: .topTrailing
                             )
                             .padding(.horizontal, metrics.displayHorizontalPadding)
-                            .padding(.top, isUpsideDownPortrait ? 0 : metrics.displayVerticalPadding)
-                            .padding(.bottom, isUpsideDownPortrait ? metrics.displayVerticalPadding : 0)
+                            .padding(.top, metrics.displayVerticalPadding)
+                            .padding(.bottom, 0)
                             .frame(
                                 maxWidth: .infinity,
                                 minHeight: portraitDisplayAreaHeight,
                                 maxHeight: portraitDisplayAreaHeight,
-                                alignment: isUpsideDownPortrait ? .bottom : .top
+                                alignment: .top
                             )
                             .clipped()
                         }
@@ -2268,13 +2285,18 @@ private extension EnterCalcIOSView {
         operationTextHeightByScreen[screenID] = normalizedHeight
     }
 
+    func updatePortraitDisplayStackHeight(_ height: CGFloat, for screenID: UUID) {
+        let normalizedHeight = max(0, height)
+        let previousHeight = portraitDisplayStackHeightByScreen[screenID] ?? 0
+        guard abs(previousHeight - normalizedHeight) > 0.5 else { return }
+        portraitDisplayStackHeightByScreen[screenID] = normalizedHeight
+    }
+
     func operationContentOffsetY(
-        operationHeight: CGFloat,
-        resultLineHeight: CGFloat,
-        spacing: CGFloat,
+        totalContentHeight: CGFloat,
         availableHeight: CGFloat
     ) -> CGFloat {
-        min(0, availableHeight - (operationHeight + spacing + resultLineHeight))
+        min(0, availableHeight - totalContentHeight)
     }
 
     func copyDisplayToPasteboardWithFlash(from viewModel: CalculatorViewModel) {
