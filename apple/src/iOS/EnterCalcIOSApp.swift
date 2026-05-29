@@ -537,6 +537,13 @@ struct EnterCalcIOSView: View {
                 resetHistoryOverlayResizeState()
                 syncPhoneUpsideDownPresentation()
                 updateDisplayShimmerParallax()
+                reconcileDisplayLayoutAfterOrientationChange()
+
+                // Run a second pass after UIKit finishes the current orientation/layout tick.
+                DispatchQueue.main.async {
+                    syncPhoneUpsideDownPresentation()
+                    reconcileDisplayLayoutAfterOrientationChange()
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .enterCalcIOSToggleRoundingPanel)) { _ in
                 #if canImport(UIKit)
@@ -1034,6 +1041,22 @@ private extension EnterCalcIOSView {
 #else
         counterRotatesForUpsideDownPortrait = false
 #endif
+    }
+
+    func reconcileDisplayLayoutAfterOrientationChange() {
+        // Landscape-only gesture exclusion frames are no longer valid after rotation.
+        landscapeDisplayGlobalFrameByScreen.removeAll()
+
+        // If the new orientation is landscape and the user had scrolled up,
+        // ensure result visibility is restored immediately.
+        for screen in screenStore.screens {
+            resetLandscapeDisplayScroll(for: screen)
+        }
+    }
+
+    func isActiveUpsideDownPortraitMode(metrics: IOSLayoutMetrics) -> Bool {
+        guard metrics.mode == .phonePortrait else { return false }
+        return counterRotatesForUpsideDownPortrait
     }
 
     func updateDisplayShimmerParallax() {
@@ -1858,7 +1881,7 @@ private extension EnterCalcIOSView {
             ? metrics.expressionFontSize
             : metrics.expressionFontSize(for: metrics.displayHeight)
         let isLandscapeMode = metrics.mode == .phoneLandscape || metrics.mode == .padWide
-        let isUpsideDownPortrait = metrics.mode == .phonePortrait && counterRotatesForUpsideDownPortrait
+        let isUpsideDownPortrait = isActiveUpsideDownPortraitMode(metrics: metrics)
         let verticalPaddingTotal = isLandscapeMode ? (metrics.displayVerticalPadding * 2) : metrics.displayVerticalPadding
         let resultFontSize = metrics.displayFontSize(for: metrics.displayHeight)
         let resultLineHeight = resultFontSize * 1.12
