@@ -1858,6 +1858,7 @@ private extension EnterCalcIOSView {
             ? metrics.expressionFontSize
             : metrics.expressionFontSize(for: metrics.displayHeight)
         let isLandscapeMode = metrics.mode == .phoneLandscape || metrics.mode == .padWide
+        let isUpsideDownPortrait = metrics.mode == .phonePortrait && counterRotatesForUpsideDownPortrait
         let verticalPaddingTotal = isLandscapeMode ? (metrics.displayVerticalPadding * 2) : metrics.displayVerticalPadding
         let resultFontSize = metrics.displayFontSize(for: metrics.displayHeight)
         let resultLineHeight = resultFontSize * 1.12
@@ -2123,11 +2124,21 @@ private extension EnterCalcIOSView {
                                         .minimumScaleFactor(0.22)
                                 }
                             }
-                            .offset(y: operationOffsetY)
-                            .frame(maxWidth: .infinity, maxHeight: contentHeight, alignment: .topTrailing)
+                            .offset(y: isUpsideDownPortrait ? -operationOffsetY : operationOffsetY)
+                            .frame(
+                                maxWidth: .infinity,
+                                maxHeight: contentHeight,
+                                alignment: isUpsideDownPortrait ? .bottomTrailing : .topTrailing
+                            )
                             .padding(.horizontal, metrics.displayHorizontalPadding)
-                            .padding(.top, metrics.displayVerticalPadding)
-                            .frame(maxWidth: .infinity, minHeight: portraitDisplayAreaHeight, maxHeight: portraitDisplayAreaHeight, alignment: .top)
+                            .padding(.top, isUpsideDownPortrait ? 0 : metrics.displayVerticalPadding)
+                            .padding(.bottom, isUpsideDownPortrait ? metrics.displayVerticalPadding : 0)
+                            .frame(
+                                maxWidth: .infinity,
+                                minHeight: portraitDisplayAreaHeight,
+                                maxHeight: portraitDisplayAreaHeight,
+                                alignment: isUpsideDownPortrait ? .bottom : .top
+                            )
                             .clipped()
                         }
                     }
