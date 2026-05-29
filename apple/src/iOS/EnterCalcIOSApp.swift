@@ -1855,6 +1855,8 @@ private extension EnterCalcIOSView {
         let expressionFontSize = metrics.mode == .phonePortrait
             ? metrics.expressionFontSize
             : metrics.expressionFontSize(for: metrics.displayHeight)
+        let isLandscapeMode = metrics.mode == .phoneLandscape || metrics.mode == .padWide
+        let verticalPaddingTotal = isLandscapeMode ? (metrics.displayVerticalPadding * 2) : metrics.displayVerticalPadding
         let resultFontSize = metrics.displayFontSize(for: metrics.displayHeight)
         let resultLineHeight = resultFontSize * 1.12
         let measuredOperationHeight = max(
@@ -1862,7 +1864,7 @@ private extension EnterCalcIOSView {
             expressionFontSize * 1.3
         )
         let basePortraitDisplayAreaHeight = expandedResultAreaHeight - (showsMemoryLabel ? metrics.memoryHeight : 0)
-        let baseContentHeight = max(1, basePortraitDisplayAreaHeight - metrics.displayVerticalPadding * 2)
+        let baseContentHeight = max(1, basePortraitDisplayAreaHeight - verticalPaddingTotal)
         let baseOperationOffsetY = operationContentOffsetY(
             operationHeight: measuredOperationHeight,
             resultLineHeight: resultLineHeight,
@@ -1876,7 +1878,7 @@ private extension EnterCalcIOSView {
         let isBasicSpaceInUse = showsMemoryLabel && basicSpaceBorrowed > 0
         let visibleBasicHeight = isBasicSpaceInUse ? 0 : (showsMemoryLabel ? metrics.memoryHeight : 0)
         let portraitDisplayAreaHeight = expandedResultAreaHeight - visibleBasicHeight
-        let contentHeight = max(1, portraitDisplayAreaHeight - metrics.displayVerticalPadding * 2)
+        let contentHeight = max(1, portraitDisplayAreaHeight - verticalPaddingTotal)
         let operationOffsetY = operationContentOffsetY(
             operationHeight: measuredOperationHeight,
             resultLineHeight: resultLineHeight,
@@ -2009,7 +2011,6 @@ private extension EnterCalcIOSView {
                 }
 
                 VStack(spacing: 0) {
-                    let isLandscapeMode = metrics.mode == .phoneLandscape || metrics.mode == .padWide
                     let scrollResetTrigger = landscapeDisplayScrollResetTriggerByScreen[screen.id, default: 0]
                     
                     if isLandscapeMode {
@@ -2121,24 +2122,29 @@ private extension EnterCalcIOSView {
                             .offset(y: operationOffsetY)
                             .frame(maxWidth: .infinity, maxHeight: contentHeight, alignment: .topTrailing)
                             .padding(.horizontal, metrics.displayHorizontalPadding)
-                            .padding(.vertical, metrics.displayVerticalPadding)
+                            .padding(.top, metrics.displayVerticalPadding)
                             .frame(maxWidth: .infinity, minHeight: portraitDisplayAreaHeight, maxHeight: portraitDisplayAreaHeight, alignment: .top)
                             .clipped()
                         }
                     }
 
-                    if showsMemoryLabel && !isBasicSpaceInUse {
-                        memoryControls(
-                            metrics: metrics,
-                            opacity: basicOpacity
-                        )
-                    }
                 }
             }
             .frame(maxWidth: .infinity, minHeight: expandedResultAreaHeight, maxHeight: expandedResultAreaHeight, alignment: .top)
             .mask { displayShape.padding(0.6) }
             .clipShape(displayShape, style: FillStyle(eoFill: false, antialiased: false))
             .clipped()
+            .overlay(alignment: .bottomLeading) {
+                if showsMemoryLabel {
+                    memoryControls(
+                        metrics: metrics,
+                        opacity: basicOpacity
+                    )
+                    .opacity(isBasicSpaceInUse ? 0 : 1)
+                    .animation(.easeInOut(duration: 0.5), value: isBasicSpaceInUse)
+                    .allowsHitTesting(false)
+                }
+            }
             .overlay(alignment: .top) {
                 if metrics.mode == .phonePortrait && counterRotatesForUpsideDownPortrait {
                     copyToastBubble
