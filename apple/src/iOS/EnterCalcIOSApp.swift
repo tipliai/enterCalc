@@ -538,12 +538,6 @@ struct EnterCalcIOSView: View {
                 syncPhoneUpsideDownPresentation()
                 updateDisplayShimmerParallax()
                 reconcileDisplayLayoutAfterOrientationChange()
-
-                // Run a second pass after UIKit finishes the current orientation/layout tick.
-                DispatchQueue.main.async {
-                    syncPhoneUpsideDownPresentation()
-                    reconcileDisplayLayoutAfterOrientationChange()
-                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .enterCalcIOSToggleRoundingPanel)) { _ in
                 #if canImport(UIKit)
@@ -1047,11 +1041,24 @@ private extension EnterCalcIOSView {
         // Landscape-only gesture exclusion frames are no longer valid after rotation.
         landscapeDisplayGlobalFrameByScreen.removeAll()
 
-        // If the new orientation is landscape and the user had scrolled up,
-        // ensure result visibility is restored immediately.
-        for screen in screenStore.screens {
-            resetLandscapeDisplayScroll(for: screen)
+        // If orientation is currently landscape and the user had scrolled up,
+        // ensure result visibility is restored on the active screen.
+        if isCurrentDeviceLandscapeOrientation() {
+            resetLandscapeDisplayScroll(for: activeScreen)
         }
+    }
+
+    func isCurrentDeviceLandscapeOrientation() -> Bool {
+#if canImport(UIKit)
+        switch UIDevice.current.orientation {
+        case .landscapeLeft, .landscapeRight:
+            return true
+        default:
+            return false
+        }
+#else
+        return false
+#endif
     }
 
     func isActiveUpsideDownPortraitMode(metrics: IOSLayoutMetrics) -> Bool {
