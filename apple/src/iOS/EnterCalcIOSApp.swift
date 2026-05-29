@@ -636,6 +636,8 @@ private extension EnterCalcIOSView {
     }
 
     func handleHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
+        resetLandscapeDisplayScroll(for: activeScreen)
+
         let unsupportedModifiers = event.modifierFlags.intersection([.control])
         guard unsupportedModifiers.isEmpty else {
             DebugLog.emit(
@@ -2067,7 +2069,9 @@ private extension EnterCalcIOSView {
                             }
                             .defaultScrollAnchor(.bottom)
                             .onChange(of: scrollResetTrigger) { _, _ in
-                                withAnimation(.easeOut(duration: 0.15)) {
+                                var transaction = Transaction()
+                                transaction.disablesAnimations = true
+                                withTransaction(transaction) {
                                     scrollProxy.scrollTo("resultDisplayLine", anchor: .bottom)
                                 }
                             }
