@@ -979,6 +979,20 @@ private extension EnterCalcIOSView {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .ignoresSafeArea(edges: .bottom)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else if metrics.mode == .phoneLandscape {
+                // In landscape, rounding panel should stretch to full width with background filling safe areas
+                content()
+                    .frame(maxWidth: UIScreen.main.bounds.width * 0.75)
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, metrics.overlayBottomPadding)
+                    .background(
+                        // Background extends to all edges
+                        palette.historyBackground
+                            .ignoresSafeArea()
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .ignoresSafeArea(edges: [.leading, .trailing, .bottom])
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             } else {
                 content()
                     .frame(width: metrics.overlayPanelWidth)
@@ -1679,7 +1693,7 @@ private extension EnterCalcIOSView {
             .simultaneousGesture(
                 DragGesture(minimumDistance: 18, coordinateSpace: .global)
                     .onEnded { value in
-                        guard shouldOpenRoundingOverlayForSwipe(screen: screen, translation: value.translation, gestureStartLocation: value.startLocation) else { return }
+                        guard shouldOpenRoundingOverlayForSwipe(screen: screen, translation: value.translation, gestureStartLocation: value.startLocation, isUpsideDownPortrait: counterRotatesForUpsideDownPortrait) else { return }
                         toggleOverlay(.rounding)
                     }
             )
@@ -1687,7 +1701,7 @@ private extension EnterCalcIOSView {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    func shouldOpenRoundingOverlayForSwipe(screen: CalculatorScreenSession, translation: CGSize, gestureStartLocation: CGPoint = .zero) -> Bool {
+    func shouldOpenRoundingOverlayForSwipe(screen: CalculatorScreenSession, translation: CGSize, gestureStartLocation: CGPoint = .zero, isUpsideDownPortrait: Bool = false) -> Bool {
         guard !screen.settings.disablesSwipeDownToRound else { return false }
         guard !showSettingsSheet else { return false }
         guard activeOverlay == nil else { return false }
@@ -1702,7 +1716,13 @@ private extension EnterCalcIOSView {
         // Use screen-space movement so direction checks stay consistent in iPad landscape.
         let verticalTravel = translation.height
         let horizontalTravel = translation.width
-        guard verticalTravel > 36 else { return false }
+        
+        // In upside-down portrait mode, the view is rotated 180 degrees, so swipe directions are inverted.
+        // A physical downward swipe becomes negative vertical travel in the rotated coordinate space.
+        let threshold: CGFloat = isUpsideDownPortrait ? -36 : 36
+        let isValidVerticalTravel = isUpsideDownPortrait ? verticalTravel < threshold : verticalTravel > threshold
+        
+        guard isValidVerticalTravel else { return false }
         guard abs(verticalTravel) > abs(horizontalTravel) * 1.1 else { return false }
         return true
     }
@@ -2464,7 +2484,12 @@ private extension EnterCalcIOSView {
 
                 let totalHeight = max(metrics.keypadHeight + metrics.displayHeight, 1)
                 let verticalTranslation = verticalLockedTranslation(value)
-                let delta = Double(verticalTranslation / totalHeight)
+                // In upside-down portrait mode, the view is rotated 180 degrees, so gesture translations are inverted.
+                // We need to invert the delta calculation to maintain consistent resize behavior.
+                var delta = Double(verticalTranslation / totalHeight)
+                if counterRotatesForUpsideDownPortrait && metrics.mode == .phonePortrait {
+                    delta = -delta
+                }
                 let newMultiplier = clamp(keypadResizeGestureStartMultiplier - delta, to: 0.5...1.0)
                 let translationText = String(format: "%.1f", verticalTranslation)
                 let deltaText = String(format: "%.3f", delta)
@@ -3077,8 +3102,10 @@ private struct IOSRoundingPanel: View {
                 .fill(palette.historyBackground)
         )
         .overlay(
-            Rectangle()
-                .stroke(palette.buttonBorder, lineWidth: 1)
+            // Hide border in landscape mode to avoid visual interference
+            metrics.mode == .phoneLandscape ? 
+                AnyView(Rectangle().stroke(Color.clear, lineWidth: 0)) :
+                AnyView(Rectangle().stroke(palette.buttonBorder, lineWidth: 1))
         )
         .onChange(of: precision) { _, newValue in
             sliderValue = sliderPosition(for: Self.stepIndex(isEnabled: isEnabled, precision: newValue, maxPrecision: maxPrecision))
