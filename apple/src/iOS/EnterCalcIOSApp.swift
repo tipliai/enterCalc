@@ -951,9 +951,7 @@ private extension EnterCalcIOSView {
                         isEnabled: activeScreen.viewModel.isResultRoundingEnabled,
                         precision: activeScreen.viewModel.resultRoundingPrecision,
                         maxPrecision: activeScreen.viewModel.maxResultRoundingPrecision,
-                        bottomSafeAreaInset: metrics.mode == .phonePortrait
-                            ? (counterRotatesForUpsideDownPortrait ? 0 : safeAreaInsets.bottom)
-                            : 0,
+                        bottomSafeAreaInset: roundingPanelBottomInset(mode: metrics.mode, isUpsideDown: counterRotatesForUpsideDownPortrait, safeAreaBottom: safeAreaInsets.bottom),
                         isUpsideDownPortrait: counterRotatesForUpsideDownPortrait,
                         onSelectionChanged: { digits in
                             if let digits {
@@ -973,6 +971,20 @@ private extension EnterCalcIOSView {
         }
     }
 
+    // Width constraint for rounding panel in landscape mode
+    private static let landscapeRoundingPanelWidthRatio: CGFloat = 0.75
+
+    /// Provides the bottom safe area inset for the rounding panel based on layout mode and orientation.
+    /// - Parameters:
+    ///   - mode: The current layout mode (portrait, landscape, or padWide)
+    ///   - isUpsideDown: Whether the device is rotated upside-down
+    ///   - safeAreaBottom: The bottom safe area inset value
+    /// - Returns: The inset value to apply (0 in upside-down portrait, otherwise based on mode and orientation)
+    private func roundingPanelBottomInset(mode: IOSLayoutMode, isUpsideDown: Bool, safeAreaBottom: CGFloat) -> CGFloat {
+        guard mode == .phonePortrait else { return 0 }
+        return isUpsideDown ? 0 : safeAreaBottom
+    }
+
     @ViewBuilder
     func roundingOverlayPanel<Content: View>(metrics: IOSLayoutMetrics, @ViewBuilder content: () -> Content) -> some View {
         if metrics.usesBottomOverlaySheet {
@@ -987,9 +999,10 @@ private extension EnterCalcIOSView {
                     .ignoresSafeArea(edges: counterRotatesForUpsideDownPortrait ? .top : .bottom)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             } else if metrics.mode == .phoneLandscape {
-                // In landscape, rounding panel should stretch to full width with background filling safe areas
+                // In landscape, rounding panel should stretch to full width with background filling safe areas.
+                // First constrain to a percentage, then expand to fill available width.
                 content()
-                    .frame(maxWidth: UIScreen.main.bounds.width * 0.75)
+                    .frame(maxWidth: UIScreen.main.bounds.width * Self.landscapeRoundingPanelWidthRatio)
                     .frame(maxWidth: .infinity)
                     .padding(.bottom, metrics.overlayBottomPadding)
                     .background(
@@ -2665,20 +2678,16 @@ private extension EnterCalcIOSView {
     @ViewBuilder
     func overlayScrim(metrics: IOSLayoutMetrics) -> some View {
         let scrim = Color.black.opacity(metrics.mode == .padWide ? 0.22 : 0.4)
+        // In upside-down portrait mode, exclude top edge to avoid dimming the nav area
+        let edges: Edge.Set = (metrics.mode == .phonePortrait && counterRotatesForUpsideDownPortrait)
+            ? [.leading, .trailing, .bottom]
+            : .all
 
-        if metrics.mode == .phonePortrait && counterRotatesForUpsideDownPortrait {
-            scrim
-                .ignoresSafeArea(edges: [.leading, .trailing, .bottom])
-                .onTapGesture {
-                    dismissActiveOverlay()
-                }
-        } else {
-            scrim
-                .ignoresSafeArea()
-                .onTapGesture {
-                    dismissActiveOverlay()
-                }
-        }
+        scrim
+            .ignoresSafeArea(edges: edges)
+            .onTapGesture {
+                dismissActiveOverlay()
+            }
     }
 
     @ViewBuilder
@@ -3027,6 +3036,7 @@ private struct IOSRoundingPanel: View {
     let precision: Int
     let maxPrecision: Int
     let bottomSafeAreaInset: CGFloat
+    /// Whether the device is rotated upside-down; used to conditionally hide borders and adjust safe-area handling
     let isUpsideDownPortrait: Bool
     let onSelectionChanged: (Int?) -> Void
     let onDisableAndDismiss: () -> Void
@@ -3123,10 +3133,7 @@ private struct IOSRoundingPanel: View {
                 .fill(palette.historyBackground)
         )
         .overlay(
-            // Hide border in landscape and upside-down portrait to avoid visible seams.
-            (metrics.mode == .phoneLandscape || (metrics.mode == .phonePortrait && isUpsideDownPortrait)) ?
-                AnyView(Rectangle().stroke(Color.clear, lineWidth: 0)) :
-                AnyView(Rectangle().stroke(palette.buttonBorder, lineWidth: 1))
+            panelBorder()
         )
         .onChange(of: precision) { _, newValue in
             sliderValue = sliderPosition(for: Self.stepIndex(isEnabled: isEnabled, precision: newValue, maxPrecision: maxPrecision))
@@ -3224,7 +3231,7 @@ private struct IOSRoundingPanel: View {
     }
 
     private func offIconOffset(width: CGFloat) -> CGFloat {
-        markerOffset(for: Self.offStepIndex, width: width, markerWidth: 14) + 17
+        markerOffset(for: Self.offStepIndex, width: width, markerWidth: 14) + 13
     }
 
     private func markerOffset(for stepIndex: Int, width: CGFloat, markerWidth: CGFloat) -> CGFloat {
@@ -3245,6 +3252,18 @@ private struct IOSRoundingPanel: View {
 
         let normalized = (exp(exponentialK * value) - 1) / denominator
         return min(max(normalized, 0), 1)
+    }
+
+    /// Provides the border for the rounding panel with conditional hiding in landscape and upside-down modes.
+    /// - Returns: A clear border in landscape/upside-down modes, otherwise a visible border
+    @ViewBuilder
+    private func panelBorder() -> some View {
+        let shouldHideBorder = metrics.mode == .phoneLandscape || (metrics.mode == .phonePortrait && isUpsideDownPortrait)
+        if shouldHideBorder {
+            Rectangle().stroke(Color.clear, lineWidth: 0)
+        } else {
+            Rectangle().stroke(palette.buttonBorder, lineWidth: 1)
+        }
     }
 }
 
