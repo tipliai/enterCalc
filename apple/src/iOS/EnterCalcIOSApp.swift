@@ -893,6 +893,8 @@ private extension EnterCalcIOSView {
             liveHistoryOverlayScreenID = nil
             if screenStore.closeActiveScreen() {
                 historyClearFeedbackVersionByScreen.removeValue(forKey: closingScreenID)
+                operationTextHeightByScreen.removeValue(forKey: closingScreenID)
+                portraitDisplayStackHeightByScreen.removeValue(forKey: closingScreenID)
             }
         }
         applyActiveScreenConfiguration()
@@ -1933,7 +1935,6 @@ private extension EnterCalcIOSView {
             ? metrics.expressionFontSize
             : metrics.expressionFontSize(for: metrics.displayHeight)
         let isLandscapeMode = metrics.mode == .phoneLandscape || metrics.mode == .padWide
-        let isUpsideDownPortrait = isActiveUpsideDownPortraitMode(metrics: metrics)
         let verticalPaddingTotal = isLandscapeMode ? (metrics.displayVerticalPadding * 2) : metrics.displayVerticalPadding
         let resultFontSize = metrics.displayFontSize(for: metrics.displayHeight)
         let resultLineHeight = resultFontSize * 1.12
