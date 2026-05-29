@@ -951,7 +951,8 @@ private extension EnterCalcIOSView {
                         isEnabled: activeScreen.viewModel.isResultRoundingEnabled,
                         precision: activeScreen.viewModel.resultRoundingPrecision,
                         maxPrecision: activeScreen.viewModel.maxResultRoundingPrecision,
-                        bottomSafeAreaInset: metrics.mode == .phonePortrait ? safeAreaInsets.bottom : 0,
+                        bottomSafeAreaInset: roundingPanelBottomInset(mode: metrics.mode, isUpsideDown: counterRotatesForUpsideDownPortrait, safeAreaBottom: safeAreaInsets.bottom),
+                        isUpsideDownPortrait: counterRotatesForUpsideDownPortrait,
                         onSelectionChanged: { digits in
                             if let digits {
                                 activeScreen.viewModel.setResultRoundingPrecision(digits)
@@ -970,14 +971,47 @@ private extension EnterCalcIOSView {
         }
     }
 
+    // Width constraint for rounding panel in landscape mode
+    private static let landscapeRoundingPanelWidthRatio: CGFloat = 0.75
+
+    /// Provides the bottom safe area inset for the rounding panel based on layout mode and orientation.
+    /// - Parameters:
+    ///   - mode: The current layout mode (portrait, landscape, or padWide)
+    ///   - isUpsideDown: Whether the device is rotated upside-down
+    ///   - safeAreaBottom: The bottom safe area inset value
+    /// - Returns: The inset value to apply (0 in upside-down portrait, otherwise based on mode and orientation)
+    private func roundingPanelBottomInset(mode: IOSLayoutMode, isUpsideDown: Bool, safeAreaBottom: CGFloat) -> CGFloat {
+        guard mode == .phonePortrait else { return 0 }
+        return isUpsideDown ? 0 : safeAreaBottom
+    }
+
     @ViewBuilder
     func roundingOverlayPanel<Content: View>(metrics: IOSLayoutMetrics, @ViewBuilder content: () -> Content) -> some View {
         if metrics.usesBottomOverlaySheet {
             if metrics.mode == .phonePortrait {
                 content()
                     .frame(maxWidth: .infinity)
+                    .background(
+                        palette.historyBackground
+                            .ignoresSafeArea(edges: counterRotatesForUpsideDownPortrait ? .top : .bottom)
+                    )
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                    .ignoresSafeArea(edges: .bottom)
+                    .ignoresSafeArea(edges: counterRotatesForUpsideDownPortrait ? .top : .bottom)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else if metrics.mode == .phoneLandscape {
+                // In landscape, rounding panel should stretch to full width with background filling safe areas.
+                // First constrain to a percentage, then expand to fill available width.
+                content()
+                    .frame(maxWidth: UIScreen.main.bounds.width * Self.landscapeRoundingPanelWidthRatio)
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, metrics.overlayBottomPadding)
+                    .background(
+                        // Background extends to all edges
+                        palette.historyBackground
+                            .ignoresSafeArea()
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .ignoresSafeArea(edges: [.leading, .trailing, .bottom])
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             } else {
                 content()
@@ -1679,7 +1713,7 @@ private extension EnterCalcIOSView {
             .simultaneousGesture(
                 DragGesture(minimumDistance: 18, coordinateSpace: .global)
                     .onEnded { value in
-                        guard shouldOpenRoundingOverlayForSwipe(screen: screen, translation: value.translation, gestureStartLocation: value.startLocation) else { return }
+                        guard shouldOpenRoundingOverlayForSwipe(screen: screen, translation: value.translation, gestureStartLocation: value.startLocation, isUpsideDownPortrait: counterRotatesForUpsideDownPortrait) else { return }
                         toggleOverlay(.rounding)
                     }
             )
@@ -1687,7 +1721,7 @@ private extension EnterCalcIOSView {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    func shouldOpenRoundingOverlayForSwipe(screen: CalculatorScreenSession, translation: CGSize, gestureStartLocation: CGPoint = .zero) -> Bool {
+    func shouldOpenRoundingOverlayForSwipe(screen: CalculatorScreenSession, translation: CGSize, gestureStartLocation: CGPoint = .zero, isUpsideDownPortrait: Bool = false) -> Bool {
         guard !screen.settings.disablesSwipeDownToRound else { return false }
         guard !showSettingsSheet else { return false }
         guard activeOverlay == nil else { return false }
@@ -1702,7 +1736,13 @@ private extension EnterCalcIOSView {
         // Use screen-space movement so direction checks stay consistent in iPad landscape.
         let verticalTravel = translation.height
         let horizontalTravel = translation.width
-        guard verticalTravel > 36 else { return false }
+        
+        // In upside-down portrait mode, the view is rotated 180 degrees, so swipe directions are inverted.
+        // A physical downward swipe becomes negative vertical travel in the rotated coordinate space.
+        let threshold: CGFloat = isUpsideDownPortrait ? -36 : 36
+        let isValidVerticalTravel = isUpsideDownPortrait ? verticalTravel < threshold : verticalTravel > threshold
+        
+        guard isValidVerticalTravel else { return false }
         guard abs(verticalTravel) > abs(horizontalTravel) * 1.1 else { return false }
         return true
     }
@@ -2464,7 +2504,12 @@ private extension EnterCalcIOSView {
 
                 let totalHeight = max(metrics.keypadHeight + metrics.displayHeight, 1)
                 let verticalTranslation = verticalLockedTranslation(value)
-                let delta = Double(verticalTranslation / totalHeight)
+                // In upside-down portrait mode, the view is rotated 180 degrees, so gesture translations are inverted.
+                // We need to invert the delta calculation to maintain consistent resize behavior.
+                var delta = Double(verticalTranslation / totalHeight)
+                if counterRotatesForUpsideDownPortrait && metrics.mode == .phonePortrait {
+                    delta = -delta
+                }
                 let newMultiplier = clamp(keypadResizeGestureStartMultiplier - delta, to: 0.5...1.0)
                 let translationText = String(format: "%.1f", verticalTranslation)
                 let deltaText = String(format: "%.3f", delta)
@@ -2630,9 +2675,16 @@ private extension EnterCalcIOSView {
         return true
     }
 
+    @ViewBuilder
     func overlayScrim(metrics: IOSLayoutMetrics) -> some View {
-        Color.black.opacity(metrics.mode == .padWide ? 0.22 : 0.4)
-            .ignoresSafeArea()
+        let scrim = Color.black.opacity(metrics.mode == .padWide ? 0.22 : 0.4)
+        // In upside-down portrait mode, exclude top edge to avoid dimming the nav area
+        let edges: Edge.Set = (metrics.mode == .phonePortrait && counterRotatesForUpsideDownPortrait)
+            ? [.leading, .trailing, .bottom]
+            : .all
+
+        scrim
+            .ignoresSafeArea(edges: edges)
             .onTapGesture {
                 dismissActiveOverlay()
             }
@@ -2984,6 +3036,8 @@ private struct IOSRoundingPanel: View {
     let precision: Int
     let maxPrecision: Int
     let bottomSafeAreaInset: CGFloat
+    /// Whether the device is rotated upside-down; used to conditionally hide borders and adjust safe-area handling
+    let isUpsideDownPortrait: Bool
     let onSelectionChanged: (Int?) -> Void
     let onDisableAndDismiss: () -> Void
     let onDismiss: () -> Void
@@ -3008,6 +3062,7 @@ private struct IOSRoundingPanel: View {
         precision: Int,
         maxPrecision: Int,
         bottomSafeAreaInset: CGFloat = 0,
+        isUpsideDownPortrait: Bool = false,
         onSelectionChanged: @escaping (Int?) -> Void,
         onDisableAndDismiss: @escaping () -> Void,
         onDismiss: @escaping () -> Void
@@ -3018,6 +3073,7 @@ private struct IOSRoundingPanel: View {
         self.precision = precision
         self.maxPrecision = max(0, maxPrecision)
         self.bottomSafeAreaInset = bottomSafeAreaInset
+        self.isUpsideDownPortrait = isUpsideDownPortrait
         self.onSelectionChanged = onSelectionChanged
         self.onDisableAndDismiss = onDisableAndDismiss
         self.onDismiss = onDismiss
@@ -3077,8 +3133,7 @@ private struct IOSRoundingPanel: View {
                 .fill(palette.historyBackground)
         )
         .overlay(
-            Rectangle()
-                .stroke(palette.buttonBorder, lineWidth: 1)
+            panelBorder()
         )
         .onChange(of: precision) { _, newValue in
             sliderValue = sliderPosition(for: Self.stepIndex(isEnabled: isEnabled, precision: newValue, maxPrecision: maxPrecision))
@@ -3176,7 +3231,7 @@ private struct IOSRoundingPanel: View {
     }
 
     private func offIconOffset(width: CGFloat) -> CGFloat {
-        markerOffset(for: Self.offStepIndex, width: width, markerWidth: 14) + 17
+        markerOffset(for: Self.offStepIndex, width: width, markerWidth: 14) + 13
     }
 
     private func markerOffset(for stepIndex: Int, width: CGFloat, markerWidth: CGFloat) -> CGFloat {
@@ -3197,6 +3252,18 @@ private struct IOSRoundingPanel: View {
 
         let normalized = (exp(exponentialK * value) - 1) / denominator
         return min(max(normalized, 0), 1)
+    }
+
+    /// Provides the border for the rounding panel with conditional hiding in landscape and upside-down modes.
+    /// - Returns: A clear border in landscape/upside-down modes, otherwise a visible border
+    @ViewBuilder
+    private func panelBorder() -> some View {
+        let shouldHideBorder = metrics.mode == .phoneLandscape || (metrics.mode == .phonePortrait && isUpsideDownPortrait)
+        if shouldHideBorder {
+            Rectangle().stroke(Color.clear, lineWidth: 0)
+        } else {
+            Rectangle().stroke(palette.buttonBorder, lineWidth: 1)
+        }
     }
 }
 
