@@ -4785,9 +4785,13 @@ private struct IOSKeypadButton: View {
         symbolBaseSize * 0.72
     }
 
+    private var enterKeyTextFontSize: CGFloat {
+        max(10, metrics.memoryFontSize)
+    }
+
     private var buttonFont: Font {
         if button.kind == .equals && button.title != "=" {
-            return EnterCalcFont.thinAppFont(size: max(10, symbolBaseSize))
+            return EnterCalcFont.thinAppFont(size: enterKeyTextFontSize)
         }
         return EnterCalcFont.thinAppFont(size: symbolBaseSize)
     }

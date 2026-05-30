@@ -1858,6 +1858,11 @@ private struct CompactActionButton: View {
             min(max(height * 0.38, 14), 28)
         }
 
+        private var enterKeyTextFontSize: CGFloat {
+            let normalizedProgress = min(max((primaryFontSize - 14) / 14, 0), 1)
+            return 10 + normalizedProgress * 18
+        }
+
         private var isEnterKeyTextButton: Bool {
             kind == .accent && title != "="
         }
@@ -1941,7 +1946,7 @@ private struct CompactActionButton: View {
 
         private var baseLabel: some View {
             Text(title)
-                .font(EnterCalcFont.thinAppFont(size: isEnterKeyTextButton ? max(10, primaryFontSize) : primaryFontSize))
+                .font(EnterCalcFont.thinAppFont(size: isEnterKeyTextButton ? enterKeyTextFontSize : primaryFontSize))
                 .minimumScaleFactor(0.7)
                 .lineLimit(1)
         }
