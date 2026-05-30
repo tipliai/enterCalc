@@ -51,7 +51,6 @@ struct CalculatorWindowView: View {
     @State private var menuHover: Bool = false
     @State private var newWindowHover: Bool = false
     @State private var historyHover: Bool = false
-    @State private var roundingHover: Bool = false
     @State private var activeOverlay: OverlayPane? = nil
     @State private var historyTrashHover: Bool = false
     @State private var historyCloseHover: Bool = false
@@ -419,6 +418,10 @@ struct CalculatorWindowView: View {
 
             Spacer()
 
+            Color.clear
+                .frame(width: 30, height: 30)
+                .allowsHitTesting(false)
+
             Button {
                 toggleHistoryVisibility()
             } label: {
@@ -437,25 +440,6 @@ struct CalculatorWindowView: View {
                 hovering ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
             }
             .help(macLocalized("history.toggle", bundle: currentLocalizationBundle))
-
-            Button {
-                toggleRoundingOverlay()
-            } label: {
-                Image(systemName: "slider.horizontal.below.rectangle")
-                    .frame(width: 18, height: 18, alignment: .center)
-                    .padding(6)
-                    .background(headerHoverBackground(roundingHover))
-                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-                    .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(primaryForeground)
-            .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-            .onHover { hovering in
-                roundingHover = hovering
-                hovering ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
-            }
-            .help(macLocalized("rounding.title", bundle: currentLocalizationBundle))
 
             Button {
                 storeWindowSize()
@@ -766,14 +750,54 @@ struct CalculatorWindowView: View {
                     .padding(.bottom, spacing)
                 }
 
-                LazyVGrid(columns: keypadColumns, spacing: spacing) {
-                    ForEach(buttons.indices, id: \.self) { index in
-                        let button = buttons[index]
-                        CalculatorButton(title: button.title, kind: button.kind, height: cellHeight, disablesButtonSound: windowSettings.disablesButtonSound, action: button.action, enabled: button.enabled, palette: palette, operatorRevealProgress: operatorRevealProgress, operatorAnimFadeOpacity: operatorAnimFadeOpacity)
+                let buttonRows = groupedKeypadRows(from: buttons)
+                let cellWidth = max(0, (geo.size.width - spacing * 3) / 4)
+
+                VStack(spacing: spacing) {
+                    ForEach(buttonRows.indices, id: \.self) { rowIndex in
+                        let row = buttonRows[rowIndex]
+                        HStack(spacing: spacing) {
+                            ForEach(row.indices, id: \.self) { buttonIndex in
+                                let button = row[buttonIndex]
+                                CalculatorButton(title: button.title, kind: button.kind, height: cellHeight, disablesButtonSound: windowSettings.disablesButtonSound, action: button.action, enabled: button.enabled, palette: palette, operatorRevealProgress: operatorRevealProgress, operatorAnimFadeOpacity: operatorAnimFadeOpacity)
+                                    .frame(width: cellWidth * CGFloat(button.columnSpan) + spacing * CGFloat(button.columnSpan - 1))
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
         }
+    }
+
+    private func groupedKeypadRows(from buttons: [ButtonItem], columns: Int = 4) -> [[ButtonItem]] {
+        var rows: [[ButtonItem]] = []
+        var currentRow: [ButtonItem] = []
+        var usedColumns = 0
+
+        for button in buttons {
+            let span = max(1, min(columns, button.columnSpan))
+            if usedColumns + span > columns && !currentRow.isEmpty {
+                rows.append(currentRow)
+                currentRow = []
+                usedColumns = 0
+            }
+
+            currentRow.append(button)
+            usedColumns += span
+
+            if usedColumns == columns {
+                rows.append(currentRow)
+                currentRow = []
+                usedColumns = 0
+            }
+        }
+
+        if !currentRow.isEmpty {
+            rows.append(currentRow)
+        }
+
+        return rows
     }
 
     private func keypadResizeHandle(defaultKeypadHeight: CGFloat, height: CGFloat) -> some View {
@@ -1448,6 +1472,21 @@ struct CalculatorWindowView: View {
         let kind: CalculatorButton.Kind
         let action: () -> Void
         let enabled: Bool
+        let columnSpan: Int
+
+        init(
+            title: String,
+            kind: CalculatorButton.Kind,
+            action: @escaping () -> Void,
+            enabled: Bool,
+            columnSpan: Int = 1
+        ) {
+            self.title = title
+            self.kind = kind
+            self.action = action
+            self.enabled = enabled
+            self.columnSpan = columnSpan
+        }
     }
 
     private struct CompactActionItem {
@@ -1532,14 +1571,14 @@ struct CalculatorWindowView: View {
             ButtonItem(title: "2", kind: .number, action: { viewModel.inputDigit("2") }, enabled: isEnabled(title: "2", kind: .number)),
             ButtonItem(title: "3", kind: .number, action: { viewModel.inputDigit("3") }, enabled: isEnabled(title: "3", kind: .number)),
             ButtonItem(title: "+", kind: .operation, action: { viewModel.setOperator(.add) }, enabled: isEnabled(title: "+", kind: .operation)),
-            ButtonItem(title: "+/−", kind: .function, action: { viewModel.toggleSign() }, enabled: isEnabled(title: "+/−", kind: .function)),
-            ButtonItem(title: "0", kind: .number, action: { viewModel.inputDigit("0") }, enabled: isEnabled(title: "0", kind: .number)),
             ButtonItem(title: ".", kind: .number, action: { viewModel.inputDecimal() }, enabled: isEnabled(title: ".", kind: .number)),
+            ButtonItem(title: "0", kind: .number, action: { viewModel.inputDigit("0") }, enabled: isEnabled(title: "0", kind: .number)),
             ButtonItem(
                 title: windowSettings.usesEnterKeySymbol ? "⏎" : "=",
                 kind: .accent,
                 action: { viewModel.evaluate() },
-                enabled: isEnabled(title: windowSettings.usesEnterKeySymbol ? "⏎" : "=", kind: .accent)
+                enabled: isEnabled(title: windowSettings.usesEnterKeySymbol ? "⏎" : "=", kind: .accent),
+                columnSpan: 2
             )
         ]
     }
@@ -1549,8 +1588,8 @@ struct CalculatorWindowView: View {
         return [
             CompactActionItem(symbol: "arrow.uturn.backward", isBare: false, action: { viewModel.undo() }),
             CompactActionItem(symbol: "arrow.uturn.forward", isBare: false, action: { viewModel.redo() }),
-            CompactActionItem(symbol: "", isBare: false, action: nil),
-            CompactActionItem(symbol: "", isBare: false, action: nil),
+            CompactActionItem(symbol: "plusminus", isBare: false, action: { viewModel.toggleSign() }),
+            CompactActionItem(symbol: "slider.horizontal.below.rectangle", isBare: false, action: { toggleRoundingOverlay() }),
             CompactActionItem(symbol: "delete.left", isBare: false, action: { viewModel.backspace() })
         ]
     }

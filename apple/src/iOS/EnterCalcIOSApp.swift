@@ -427,10 +427,9 @@ struct EnterCalcIOSView: View {
                 .digit("1"), .digit("2"), .digit("3"), .operation("+", action: { $0.setOperator(.add) })
             ],
             [
-                .function("+/−", action: { $0.toggleSign() }),
-                .digit("0"),
                 .decimal(),
-                .equals(title: equalsButtonTitle)
+                .digit("0"),
+                .equals(title: equalsButtonTitle, columnSpan: 2)
             ]
         ]
     }
@@ -442,11 +441,11 @@ struct EnterCalcIOSView: View {
     private var actionRowButtons: [IOSActionRowButton] {
         guard !usesAlternativeKeypad else { return [] }
         return [
-            IOSActionRowButton(symbol: "arrow.uturn.backward", action: { $0.undo() }),
-            IOSActionRowButton(symbol: "arrow.uturn.forward", action: { $0.redo() }),
-            IOSActionRowButton.placeholder,
-            IOSActionRowButton.placeholder,
-            IOSActionRowButton(symbol: "delete.left", action: { $0.backspace() })
+            IOSActionRowButton(symbol: "arrow.uturn.backward", action: { $0.viewModel.undo() }),
+            IOSActionRowButton(symbol: "arrow.uturn.forward", action: { $0.viewModel.redo() }),
+            IOSActionRowButton(symbol: "plusminus", action: { $0.viewModel.toggleSign() }),
+            IOSActionRowButton(symbol: "slider.horizontal.below.rectangle", action: { _ in toggleOverlay(.rounding) }),
+            IOSActionRowButton(symbol: "delete.left", action: { $0.viewModel.backspace() })
         ]
     }
 
@@ -1695,25 +1694,36 @@ private extension EnterCalcIOSView {
             let baseKeypadHeight = metrics.keypadHeight
             let baseButtonHeight = metrics.buttonHeight * keypadHeightMultiplier
             let baseRowUnits: CGFloat = usesAlternativeKeypad ? 6 : (5 + (1.0 / 3.0))
-            let baseActualKeypadHeight = baseButtonHeight * baseRowUnits + metrics.gridSpacing * 5
-            let resultAreaHeight = metrics.displayHeight + metrics.memoryHeight + (baseKeypadHeight - baseActualKeypadHeight)
+            let keypadSpacingUnits: CGFloat = usesAlternativeKeypad ? 5 : 6
+            let baseActualKeypadHeight = baseButtonHeight * baseRowUnits + metrics.gridSpacing * keypadSpacingUnits
+            let baseResultAreaHeight = metrics.displayHeight + metrics.memoryHeight + (baseKeypadHeight - baseActualKeypadHeight)
             let separatorHeight: CGFloat = 10
             let headerHeightContribution = showsInlineLandscapeHeader ? metrics.headerHeight : 0
             let outerSpacingTotal = CGFloat(showsInlineLandscapeHeader ? 2 : 1) * metrics.sectionSpacing
             let verticalPaddingTotal = metrics.contentTopPadding + metrics.contentBottomPadding
-            let fixedHeight = verticalPaddingTotal
-                + headerHeightContribution
-                + resultAreaHeight
-                + separatorHeight
-                + outerSpacingTotal
-            let availableKeypadHeight = max(0, geometry.size.height - fixedHeight - paginationBottomInset)
-            let fittedButtonHeight = max(0, (availableKeypadHeight - metrics.gridSpacing * 5) / baseRowUnits)
+            let availableSurfaceHeight = max(
+                0,
+                geometry.size.height
+                    - verticalPaddingTotal
+                    - headerHeightContribution
+                    - separatorHeight
+                    - outerSpacingTotal
+                    - paginationBottomInset
+            )
+            let initialResultAreaHeight = max(0, min(baseResultAreaHeight, availableSurfaceHeight - baseActualKeypadHeight))
+            let availableKeypadHeight = max(0, availableSurfaceHeight - initialResultAreaHeight)
+            let fittedButtonHeight = max(0, (availableKeypadHeight - metrics.gridSpacing * keypadSpacingUnits) / baseRowUnits)
             let actualButtonHeight = fillsHeightWithoutScaling
                 ? fittedButtonHeight
                 : (isLandscapeMode
-                    ? max(baseButtonHeight, fittedButtonHeight)
+                    ? min(baseButtonHeight, fittedButtonHeight)
                     : min(baseButtonHeight, fittedButtonHeight))
-            let actualKeypadHeight = actualButtonHeight * baseRowUnits + metrics.gridSpacing * 5
+            let proposedKeypadHeight = actualButtonHeight * baseRowUnits + metrics.gridSpacing * keypadSpacingUnits
+            let actualKeypadHeight = min(availableKeypadHeight, proposedKeypadHeight)
+            let landscapeDisplayTrim: CGFloat = isLandscapeMode ? 6 : 0
+            let resultAreaHeight = isLandscapeMode
+                ? max(0, availableSurfaceHeight - actualKeypadHeight - landscapeDisplayTrim)
+                : initialResultAreaHeight
 
             VStack(spacing: metrics.sectionSpacing) {
                 if showsInlineLandscapeHeader {
@@ -2527,7 +2537,6 @@ private extension EnterCalcIOSView {
     }
 
     func keypad(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, buttonHeight: CGFloat) -> some View {
-        let columns = Array(repeating: GridItem(.flexible(), spacing: metrics.gridSpacing), count: 4)
         let actionColumns = Array(repeating: GridItem(.flexible(), spacing: metrics.gridSpacing), count: 5)
         let isLandscapeMode = metrics.mode == .phoneLandscape || metrics.mode == .padWide
         let compactActionHeight = max(18, buttonHeight / 3)
@@ -2543,7 +2552,7 @@ private extension EnterCalcIOSView {
                             height: compactActionHeight,
                             pressFeedback: triggerActionFeedback,
                             action: {
-                                button.action?(screen.viewModel)
+                                button.action?(screen)
                                 if isLandscapeMode {
                                     resetLandscapeDisplayScroll(for: screen)
                                 }
@@ -2554,24 +2563,39 @@ private extension EnterCalcIOSView {
                 .padding(.bottom, metrics.gridSpacing)
             }
 
-            LazyVGrid(columns: columns, spacing: metrics.gridSpacing) {
-                ForEach(Array(flattenedMainButtons.enumerated()), id: \.offset) { _, button in
-                    IOSKeypadButton(
-                        button: button,
-                        palette: palette,
-                        metrics: metrics,
-                        buttonHeight: buttonHeight,
-                        pressFeedback: triggerKeyPressFeedback,
-                        action: {
-                            button.action(screen.viewModel)
-                            if isLandscapeMode {
-                                resetLandscapeDisplayScroll(for: screen)
+            GeometryReader { keypadGeometry in
+                let spacing = metrics.gridSpacing
+                let cellWidth = max(0, (keypadGeometry.size.width - spacing * 3) / 4)
+                let rows = mainRows
+
+                VStack(spacing: spacing) {
+                    ForEach(rows.indices, id: \.self) { rowIndex in
+                        let row = rows[rowIndex]
+                        HStack(spacing: spacing) {
+                            ForEach(row.indices, id: \.self) { buttonIndex in
+                                let button = row[buttonIndex]
+                                IOSKeypadButton(
+                                    button: button,
+                                    palette: palette,
+                                    metrics: metrics,
+                                    buttonHeight: buttonHeight,
+                                    pressFeedback: triggerKeyPressFeedback,
+                                    action: {
+                                        button.action(screen.viewModel)
+                                        if isLandscapeMode {
+                                            resetLandscapeDisplayScroll(for: screen)
+                                        }
+                                    },
+                                    operatorRevealProgress: operatorRevealProgress,
+                                    operatorAnimFadeOpacity: operatorAnimFadeOpacity
+                                )
+                                .frame(width: cellWidth * CGFloat(button.columnSpan) + spacing * CGFloat(button.columnSpan - 1))
                             }
-                        },
-                        operatorRevealProgress: operatorRevealProgress,
-                        operatorAnimFadeOpacity: operatorAnimFadeOpacity
-                    )
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             }
         }
         .frame(maxWidth: .infinity, alignment: .bottom)
@@ -4373,25 +4397,26 @@ private struct IOSCalcButton {
     let title: String
     let kind: Kind
     let action: (CalculatorViewModel) -> Void
+    let columnSpan: Int
 
     static func digit(_ title: String) -> IOSCalcButton {
-        IOSCalcButton(title: title, kind: .digit, action: { $0.inputDigit(title) })
+        IOSCalcButton(title: title, kind: .digit, action: { $0.inputDigit(title) }, columnSpan: 1)
     }
 
     static func decimal() -> IOSCalcButton {
-        IOSCalcButton(title: ".", kind: .digit, action: { $0.inputDecimal() })
+        IOSCalcButton(title: ".", kind: .digit, action: { $0.inputDecimal() }, columnSpan: 1)
     }
 
     static func operation(_ title: String, action: @escaping (CalculatorViewModel) -> Void) -> IOSCalcButton {
-        IOSCalcButton(title: title, kind: .operation, action: action)
+        IOSCalcButton(title: title, kind: .operation, action: action, columnSpan: 1)
     }
 
     static func function(_ title: String, action: @escaping (CalculatorViewModel) -> Void) -> IOSCalcButton {
-        IOSCalcButton(title: title, kind: .function, action: action)
+        IOSCalcButton(title: title, kind: .function, action: action, columnSpan: 1)
     }
 
-    static func equals(title: String = "⏎") -> IOSCalcButton {
-        IOSCalcButton(title: title, kind: .equals, action: { $0.evaluate() })
+    static func equals(title: String = "⏎", columnSpan: Int = 1) -> IOSCalcButton {
+        IOSCalcButton(title: title, kind: .equals, action: { $0.evaluate() }, columnSpan: max(1, columnSpan))
     }
 
     private static let highlightedTitles: Set<String> = []
@@ -4424,7 +4449,7 @@ private struct IOSCalcButton {
 
 private struct IOSActionRowButton {
     let symbol: String
-    let action: ((CalculatorViewModel) -> Void)?
+    let action: ((CalculatorScreenSession) -> Void)?
 
     static let placeholder = IOSActionRowButton(symbol: "", action: nil)
 }
