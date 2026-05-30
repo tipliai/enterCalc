@@ -147,7 +147,6 @@ public final class CalculatorViewModel: ObservableObject {
     @Published public private(set) var isErrorState: Bool = false
     @Published public private(set) var usesScientificNotation: Bool = true
     @Published public private(set) var numberFormatStyle: NumberFormatStyle = .western
-    @Published public private(set) var usesClassicPercentBehavior: Bool = false
     @Published public private(set) var isResultRoundingEnabled: Bool = false
     @Published public private(set) var resultRoundingPrecision: Int = 4
     @Published public private(set) var activeCurrencySymbol: String?
@@ -1173,7 +1172,6 @@ public final class CalculatorViewModel: ObservableObject {
         case .replay(let steps, let currencySymbol):
             let tempModel = CalculatorViewModel(numberFormatStyle: numberFormatStyle, usesScientificNotation: usesScientificNotation)
             tempModel.suppressHistoryTracking = true
-            tempModel.setClassicPercentBehaviorEnabled(usesClassicPercentBehavior)
             if let currencySymbol {
                 tempModel.inputCurrencySymbol(currencySymbol)
             }
@@ -1188,7 +1186,6 @@ public final class CalculatorViewModel: ObservableObject {
         case .roundedReplay(let steps, let precision, let currencySymbol):
             let tempModel = CalculatorViewModel(numberFormatStyle: numberFormatStyle, usesScientificNotation: usesScientificNotation)
             tempModel.suppressHistoryTracking = true
-            tempModel.setClassicPercentBehaviorEnabled(usesClassicPercentBehavior)
             if let currencySymbol {
                 tempModel.inputCurrencySymbol(currencySymbol)
             }
@@ -2914,10 +2911,6 @@ public final class CalculatorViewModel: ObservableObject {
         refreshFormattedState()
     }
 
-    public func setClassicPercentBehaviorEnabled(_ enabled: Bool) {
-        usesClassicPercentBehavior = enabled
-    }
-
     private var currentInputDigitCount: Int {
         significantDigitCount(in: currentInput)
     }
@@ -3143,13 +3136,6 @@ public final class CalculatorViewModel: ObservableObject {
             case .multiply, .divide:
                 return currentValue / 100
             }
-        }
-
-        if usesClassicPercentBehavior {
-            if justEvaluated {
-                return currentValue * currentValue / 100
-            }
-            return 0
         }
 
         return currentValue / 100

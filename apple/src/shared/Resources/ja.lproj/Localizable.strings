@@ -19,7 +19,7 @@
 "settings.calculation" = "計算";
 "settings.numberFormat.style" = "数値スタイル";
 "settings.numberFormat.scientific" = "科学表記を使用";
-"settings.percent.classicBehavior" = "クラシックな % ボタンを使う";
+"settings.percent.classicBehavior" = "代替キーパッドを使用";
 "settings.buttonSound.disabled" = "ボタン音を無効にする";
 "settings.credits" = "情報";
 "settings.credits.version" = "バージョン %@";

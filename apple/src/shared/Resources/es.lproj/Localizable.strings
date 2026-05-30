@@ -19,7 +19,7 @@
 "settings.calculation" = "Cálculo";
 "settings.numberFormat.style" = "Estilo numérico";
 "settings.numberFormat.scientific" = "Usar notación científica";
-"settings.percent.classicBehavior" = "Usar el botón clásico de %";
+"settings.percent.classicBehavior" = "Usar teclado alternativo";
 "settings.buttonSound.disabled" = "Desactivar sonido de botones";
 "settings.credits" = "Acerca de";
 "settings.credits.version" = "Versión %@";
