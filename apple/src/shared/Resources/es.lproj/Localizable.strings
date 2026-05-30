@@ -33,6 +33,7 @@
 "history.emptyAfterClear" = "";
 "history.clear" = "Borrar historial";
 "history.copyOperation" = "Copiar operación";
+"key.enter" = "Intro";
 "settings.rounding.disableSwipeDown" = "Desactivar deslizamiento hacia abajo para redondear";
 "rounding.toggle" = "Mostrar/ocultar panel de redondeo";
 "rounding.title" = "Redondear el resultado";

@@ -1535,10 +1535,10 @@ struct CalculatorWindowView: View {
             ButtonItem(title: "0", kind: .number, action: { viewModel.inputDigit("0") }, enabled: isEnabled(title: "0", kind: .number)),
             ButtonItem(title: ".", kind: .number, action: { viewModel.inputDecimal() }, enabled: isEnabled(title: ".", kind: .number)),
             ButtonItem(
-                title: windowSettings.usesEnterKeySymbol ? "⏎" : "=",
+                title: windowSettings.usesEnterKeySymbol ? macLocalized("key.enter", bundle: currentLocalizationBundle) : "=",
                 kind: .accent,
                 action: { viewModel.evaluate() },
-                enabled: isEnabled(title: windowSettings.usesEnterKeySymbol ? "⏎" : "=", kind: .accent)
+                enabled: isEnabled(title: windowSettings.usesEnterKeySymbol ? macLocalized("key.enter", bundle: currentLocalizationBundle) : "=", kind: .accent)
             )
         ]
     }
@@ -1574,10 +1574,10 @@ struct CalculatorWindowView: View {
             ButtonItem(title: ".", kind: .number, action: { viewModel.inputDecimal() }, enabled: isEnabled(title: ".", kind: .number)),
             ButtonItem(title: "0", kind: .number, action: { viewModel.inputDigit("0") }, enabled: isEnabled(title: "0", kind: .number)),
             ButtonItem(
-                title: windowSettings.usesEnterKeySymbol ? "⏎" : "=",
+                title: windowSettings.usesEnterKeySymbol ? macLocalized("key.enter", bundle: currentLocalizationBundle) : "=",
                 kind: .accent,
                 action: { viewModel.evaluate() },
-                enabled: isEnabled(title: windowSettings.usesEnterKeySymbol ? "⏎" : "=", kind: .accent),
+                enabled: isEnabled(title: windowSettings.usesEnterKeySymbol ? macLocalized("key.enter", bundle: currentLocalizationBundle) : "=", kind: .accent),
                 columnSpan: 2
             )
         ]
@@ -1858,6 +1858,10 @@ private struct CompactActionButton: View {
             min(max(height * 0.38, 14), 28)
         }
 
+        private var isEnterKeyTextButton: Bool {
+            kind == .accent && title != "="
+        }
+
         @ViewBuilder
         private var labelView: some View {
             if title == "1/x" {
@@ -1937,7 +1941,7 @@ private struct CompactActionButton: View {
 
         private var baseLabel: some View {
             Text(title)
-                .font(EnterCalcFont.thinAppFont(size: primaryFontSize))
+                .font(EnterCalcFont.thinAppFont(size: isEnterKeyTextButton ? max(10, primaryFontSize) : primaryFontSize))
                 .minimumScaleFactor(0.7)
                 .lineLimit(1)
         }

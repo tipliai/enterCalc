@@ -33,6 +33,7 @@
 "history.emptyAfterClear" = "";
 "history.clear" = "Effacer l'historique";
 "history.copyOperation" = "Copier l'opération";
+"key.enter" = "Entrée";
 "settings.rounding.disableSwipeDown" = "Désactiver le balayage vers le bas pour arrondir";
 "rounding.toggle" = "Afficher/masquer le panneau d'arrondi";
 "rounding.title" = "Arrondir le résultat";

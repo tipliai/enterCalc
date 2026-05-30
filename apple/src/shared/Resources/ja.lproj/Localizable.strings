@@ -33,6 +33,7 @@
 "history.emptyAfterClear" = "";
 "history.clear" = "履歴をクリア";
 "history.copyOperation" = "式をコピー";
+"key.enter" = "入力";
 "settings.rounding.disableSwipeDown" = "下スワイプで丸める操作を無効にする";
 "rounding.toggle" = "丸めパネルを表示/非表示";
 "rounding.title" = "結果を丸める";

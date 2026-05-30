@@ -335,7 +335,7 @@ struct EnterCalcIOSView: View {
     }
 
     private var equalsButtonTitle: String {
-        activeScreen.settings.usesEnterKeySymbol ? "⏎" : "="
+        activeScreen.settings.usesEnterKeySymbol ? localized("key.enter") : "="
     }
 
     private var clearButtonTitle: String {
@@ -4786,7 +4786,10 @@ private struct IOSKeypadButton: View {
     }
 
     private var buttonFont: Font {
-        EnterCalcFont.thinAppFont(size: symbolBaseSize)
+        if button.kind == .equals && button.title != "=" {
+            return EnterCalcFont.thinAppFont(size: max(10, symbolBaseSize))
+        }
+        return EnterCalcFont.thinAppFont(size: symbolBaseSize)
     }
 }
 

@@ -33,6 +33,7 @@
 "history.emptyAfterClear" = "";
 "history.clear" = "Verlauf löschen";
 "history.copyOperation" = "Operation kopieren";
+"key.enter" = "Eingabe";
 "settings.rounding.disableSwipeDown" = "Runterwischen zum Runden deaktivieren";
 "rounding.toggle" = "Rundungspanel ein-/ausblenden";
 "rounding.title" = "Ergebnis runden";

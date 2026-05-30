@@ -33,6 +33,7 @@
 "history.emptyAfterClear" = "";
 "history.clear" = "清除历史";
 "history.copyOperation" = "复制算式";
+"key.enter" = "回车";
 "settings.rounding.disableSwipeDown" = "禁用下滑进行四舍五入";
 "rounding.toggle" = "切换四舍五入面板";
 "rounding.title" = "对结果进行四舍五入";
