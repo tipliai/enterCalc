@@ -19,7 +19,7 @@
 "settings.calculation" = "Berechnung";
 "settings.numberFormat.style" = "Zahlenstil";
 "settings.numberFormat.scientific" = "Wissenschaftliche Notation verwenden";
-"settings.percent.classicBehavior" = "Klassische %-Taste verwenden";
+"settings.percent.classicBehavior" = "Alternatives Tastenfeld verwenden";
 "settings.buttonSound.disabled" = "Tastenton deaktivieren";
 "settings.credits" = "Über";
 "settings.credits.version" = "Version %@";
@@ -33,6 +33,7 @@
 "history.emptyAfterClear" = "";
 "history.clear" = "Verlauf löschen";
 "history.copyOperation" = "Operation kopieren";
+"key.enter" = "Eingabe";
 "settings.rounding.disableSwipeDown" = "Runterwischen zum Runden deaktivieren";
 "rounding.toggle" = "Rundungspanel ein-/ausblenden";
 "rounding.title" = "Ergebnis runden";

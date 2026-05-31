@@ -6,7 +6,7 @@ public struct CalculatorScreenSettings: Equatable {
     public var languageCode: String
     public var usesScientificNotation: Bool
     public var numberFormatStyleRawValue: String
-    public var usesClassicPercentBehavior: Bool
+    public var usesAlternativeKeypad: Bool
     public var usesEnterKeySymbol: Bool
     public var disablesSwipeDownToRound: Bool
     public var disablesButtonSound: Bool
@@ -17,7 +17,7 @@ public struct CalculatorScreenSettings: Equatable {
         languageCode: String,
         usesScientificNotation: Bool,
         numberFormatStyleRawValue: String,
-        usesClassicPercentBehavior: Bool,
+        usesAlternativeKeypad: Bool,
         usesEnterKeySymbol: Bool = true,
         disablesSwipeDownToRound: Bool = false,
         disablesButtonSound: Bool = false,
@@ -27,7 +27,7 @@ public struct CalculatorScreenSettings: Equatable {
         self.languageCode = languageCode
         self.usesScientificNotation = usesScientificNotation
         self.numberFormatStyleRawValue = numberFormatStyleRawValue
-        self.usesClassicPercentBehavior = usesClassicPercentBehavior
+        self.usesAlternativeKeypad = usesAlternativeKeypad
         self.usesEnterKeySymbol = usesEnterKeySymbol
         self.disablesSwipeDownToRound = disablesSwipeDownToRound
         self.disablesButtonSound = disablesButtonSound
@@ -87,7 +87,6 @@ public final class CalculatorScreenSession: ObservableObject, Identifiable {
     public func applyCalculatorSettings() {
         viewModel.setScientificNotationEnabled(settings.usesScientificNotation)
         viewModel.setNumberFormatStyle(settings.numberFormatStyle)
-        viewModel.setClassicPercentBehaviorEnabled(settings.usesClassicPercentBehavior)
     }
 
     private func bindViewModel() {

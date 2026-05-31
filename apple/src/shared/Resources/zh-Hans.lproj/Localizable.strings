@@ -19,7 +19,7 @@
 "settings.calculation" = "计算";
 "settings.numberFormat.style" = "数字样式";
 "settings.numberFormat.scientific" = "使用科学计数法";
-"settings.percent.classicBehavior" = "使用经典 % 按钮";
+"settings.percent.classicBehavior" = "使用替代键盘布局";
 "settings.buttonSound.disabled" = "禁用按钮声音";
 "settings.credits" = "关于";
 "settings.credits.version" = "版本 %@";
@@ -33,6 +33,7 @@
 "history.emptyAfterClear" = "";
 "history.clear" = "清除历史";
 "history.copyOperation" = "复制算式";
+"key.enter" = "回车";
 "settings.rounding.disableSwipeDown" = "禁用下滑进行四舍五入";
 "rounding.toggle" = "切换四舍五入面板";
 "rounding.title" = "对结果进行四舍五入";

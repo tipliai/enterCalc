@@ -1002,27 +1002,25 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isErrorState)
     }
 
-    func testClassicPercentModeTreatsEvaluatedValuesLikeClassicBehavior() {
+    func testPercentAfterEvaluateUsesCanonicalBehavior() {
         let viewModel = CalculatorViewModel()
 
         enter("50", into: viewModel)
         viewModel.evaluate()
-        viewModel.setClassicPercentBehaviorEnabled(true)
         viewModel.applyPercent()
 
-        XCTAssertEqual(viewModel.display, "25")
+        XCTAssertEqual(viewModel.display, "0.5")
         XCTAssertEqual(viewModel.expressionDisplay, "50%")
         XCTAssertFalse(viewModel.isErrorState)
     }
 
-    func testClassicPercentModeTreatsStandaloneInputLikeCalculator() {
+    func testPercentStandaloneInputUsesCanonicalBehavior() {
         let viewModel = CalculatorViewModel()
 
-        viewModel.setClassicPercentBehaviorEnabled(true)
         enter("50", into: viewModel)
         viewModel.applyPercent()
 
-        XCTAssertEqual(viewModel.display, "0")
+        XCTAssertEqual(viewModel.display, "0.5")
         XCTAssertEqual(viewModel.expressionDisplay, "50%")
         XCTAssertFalse(viewModel.isErrorState)
     }
@@ -1528,7 +1526,7 @@ final class CalculatorViewModelTests: XCTestCase {
             $0.languageCode = "de"
             $0.usesScientificNotation = false
             $0.numberFormatStyleRawValue = NumberFormatStyle.european.rawValue
-            $0.usesClassicPercentBehavior = true
+            $0.usesAlternativeKeypad = true
         }
 
         XCTAssertTrue(store.insertScreenAfterActive(homeSettings: homeSettings))
@@ -2190,14 +2188,14 @@ final class CalculatorViewModelTests: XCTestCase {
         languageCode: String = "en",
         usesScientificNotation: Bool = true,
         numberFormatStyleRawValue: String = NumberFormatStyle.western.rawValue,
-        usesClassicPercentBehavior: Bool = false
+        usesAlternativeKeypad: Bool = false
     ) -> CalculatorScreenSettings {
         CalculatorScreenSettings(
             themeRawValue: themeRawValue,
             languageCode: languageCode,
             usesScientificNotation: usesScientificNotation,
             numberFormatStyleRawValue: numberFormatStyleRawValue,
-            usesClassicPercentBehavior: usesClassicPercentBehavior
+            usesAlternativeKeypad: usesAlternativeKeypad
         )
     }
 

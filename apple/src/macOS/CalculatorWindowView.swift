@@ -51,7 +51,6 @@ struct CalculatorWindowView: View {
     @State private var menuHover: Bool = false
     @State private var newWindowHover: Bool = false
     @State private var historyHover: Bool = false
-    @State private var roundingHover: Bool = false
     @State private var activeOverlay: OverlayPane? = nil
     @State private var historyTrashHover: Bool = false
     @State private var historyCloseHover: Bool = false
@@ -279,6 +278,10 @@ struct CalculatorWindowView: View {
         let separatorHeight: CGFloat = 32
         let minimumDisplayHeight: CGFloat = 108
         let minimumKeypadHeight: CGFloat = 140
+        let multiplier = activeKeypadHeightMultiplier()
+        // multiplier 1.0 = display shortest, 0.5 = display tallest
+        let displayProgress = CGFloat((1.0 - multiplier) / 0.5)
+        let keypadBottomPadding: CGFloat = outerHorizontalPadding / 2 - 1 + 3 * displayProgress
 
         return VStack(alignment: .trailing, spacing: 0) {
             HStack(spacing: 6) {
@@ -288,10 +291,9 @@ struct CalculatorWindowView: View {
             .padding(.bottom, headerToDisplaySpacing)
 
             GeometryReader { geo in
-                let availableHeight = max(geo.size.height, 1)
+                let availableHeight = max(geo.size.height - keypadBottomPadding, 1)
                 let maximumKeypadHeight = max(minimumKeypadHeight, availableHeight - minimumDisplayHeight - separatorHeight)
                 let defaultKeypadHeight = maximumKeypadHeight
-                let multiplier = activeKeypadHeightMultiplier()
                 let proposedKeypadHeight = defaultKeypadHeight * CGFloat(multiplier)
                 let keypadHeight = min(max(proposedKeypadHeight, minimumKeypadHeight), maximumKeypadHeight)
                 let displayHeight = max(minimumDisplayHeight, availableHeight - separatorHeight - keypadHeight)
@@ -313,6 +315,7 @@ struct CalculatorWindowView: View {
             maxHeight: .infinity,
             alignment: .top
         )
+        .padding(.bottom, keypadBottomPadding)
         .coordinateSpace(name: calculatorContentCoordinateSpace)
         .overlayPreferenceValue(MemoryControlsBoundsKey.self) { anchor in
             GeometryReader { geo in
@@ -437,25 +440,6 @@ struct CalculatorWindowView: View {
                 hovering ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
             }
             .help(macLocalized("history.toggle", bundle: currentLocalizationBundle))
-
-            Button {
-                toggleRoundingOverlay()
-            } label: {
-                Image(systemName: "slider.horizontal.below.rectangle")
-                    .frame(width: 18, height: 18, alignment: .center)
-                    .padding(6)
-                    .background(headerHoverBackground(roundingHover))
-                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-                    .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(primaryForeground)
-            .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-            .onHover { hovering in
-                roundingHover = hovering
-                hovering ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
-            }
-            .help(macLocalized("rounding.title", bundle: currentLocalizationBundle))
 
             Button {
                 storeWindowSize()
@@ -734,30 +718,90 @@ struct CalculatorWindowView: View {
 
     private var keypadArea: some View {
         keypadGrid
-            .padding(.bottom, 4)
     }
 
     private var keypadGrid: some View {
         GeometryReader { geo in
-            let rows: CGFloat = 6
+            let usesAlternativeKeypad = windowSettings.usesAlternativeKeypad
+            let rows: CGFloat = usesAlternativeKeypad ? 6 : (5 + (1.0 / 3.0))
             let spacing: CGFloat = 4
-            let availableHeight = max(geo.size.height, spacing * (rows - 1) + rows)
+            let availableHeight = max(geo.size.height, spacing * 5 + rows)
             let cellHeight = (availableHeight - spacing * (rows - 1)) / rows
             let buttons = keypadButtons()
+            let compactActionHeight = max(16, cellHeight / 3)
+            let compactButtons = compactActionRowButtons()
 
-            LazyVGrid(columns: keypadColumns, spacing: spacing) {
-                ForEach(buttons.indices, id: \.self) { index in
-                    let button = buttons[index]
-                    CalculatorButton(title: button.title, kind: button.kind, height: cellHeight, disablesButtonSound: windowSettings.disablesButtonSound, action: button.action, enabled: button.enabled, palette: palette, operatorRevealProgress: operatorRevealProgress, operatorAnimFadeOpacity: operatorAnimFadeOpacity)
+            VStack(spacing: spacing) {
+                if !usesAlternativeKeypad {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: 5), spacing: spacing) {
+                        ForEach(compactButtons.indices, id: \.self) { index in
+                            let button = compactButtons[index]
+                            CompactActionButton(
+                                symbol: button.symbol,
+                                isBare: button.isBare,
+                                height: compactActionHeight,
+                                disabled: button.action == nil,
+                                palette: palette,
+                                action: { button.action?() }
+                            )
+                        }
+                    }
+                    .padding(.bottom, spacing)
+                }
+
+                let buttonRows = groupedKeypadRows(from: buttons)
+                let cellWidth = max(0, (geo.size.width - spacing * 3) / 4)
+
+                VStack(spacing: spacing) {
+                    ForEach(buttonRows.indices, id: \.self) { rowIndex in
+                        let row = buttonRows[rowIndex]
+                        HStack(spacing: spacing) {
+                            ForEach(row.indices, id: \.self) { buttonIndex in
+                                let button = row[buttonIndex]
+                                CalculatorButton(title: button.title, kind: button.kind, height: cellHeight, disablesButtonSound: windowSettings.disablesButtonSound, action: button.action, enabled: button.enabled, palette: palette, operatorRevealProgress: operatorRevealProgress, operatorAnimFadeOpacity: operatorAnimFadeOpacity)
+                                    .frame(width: cellWidth * CGFloat(button.columnSpan) + spacing * CGFloat(button.columnSpan - 1))
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             }
         }
     }
 
+    private func groupedKeypadRows(from buttons: [ButtonItem], columns: Int = 4) -> [[ButtonItem]] {
+        var rows: [[ButtonItem]] = []
+        var currentRow: [ButtonItem] = []
+        var usedColumns = 0
+
+        for button in buttons {
+            let span = max(1, min(columns, button.columnSpan))
+            if usedColumns + span > columns && !currentRow.isEmpty {
+                rows.append(currentRow)
+                currentRow = []
+                usedColumns = 0
+            }
+
+            currentRow.append(button)
+            usedColumns += span
+
+            if usedColumns == columns {
+                rows.append(currentRow)
+                currentRow = []
+                usedColumns = 0
+            }
+        }
+
+        if !currentRow.isEmpty {
+            rows.append(currentRow)
+        }
+
+        return rows
+    }
+
     private func keypadResizeHandle(defaultKeypadHeight: CGFloat, height: CGFloat) -> some View {
-        let accentColor = palette.accent
-        let handleColor = isResizingKeypadHeight ? accentColor : palette.textSecondary.opacity(colorScheme == .dark ? 0.7 : 0.42)
-        let lineColor = handleColor
+        let lineColor = palette.buttonOperation
+        let handleColor = palette.buttonOperation
         let dragGesture = DragGesture(minimumDistance: 0, coordinateSpace: .global)
             .onChanged { value in
                 if !isResizingKeypadHeight {
@@ -789,7 +833,7 @@ struct CalculatorWindowView: View {
                 .padding(.vertical, 5)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(surfaceColor)
+                    .fill(surfaceColor)
                 )
         }
         .offset(y: -2)
@@ -1427,9 +1471,34 @@ struct CalculatorWindowView: View {
         let kind: CalculatorButton.Kind
         let action: () -> Void
         let enabled: Bool
+        let columnSpan: Int
+
+        init(
+            title: String,
+            kind: CalculatorButton.Kind,
+            action: @escaping () -> Void,
+            enabled: Bool,
+            columnSpan: Int = 1
+        ) {
+            self.title = title
+            self.kind = kind
+            self.action = action
+            self.enabled = enabled
+            self.columnSpan = columnSpan
+        }
+    }
+
+    private struct CompactActionItem {
+        let symbol: String
+        let isBare: Bool
+        let action: (() -> Void)?
     }
 
     private func keypadButtons() -> [ButtonItem] {
+        windowSettings.usesAlternativeKeypad ? legacyKeypadButtons() : basicKeypadButtons()
+    }
+
+    private func legacyKeypadButtons() -> [ButtonItem] {
         let errorMode = viewModel.isErrorState
         func isEnabled(title: String, kind: CalculatorButton.Kind) -> Bool {
             guard errorMode else { return true }
@@ -1465,11 +1534,62 @@ struct CalculatorWindowView: View {
             ButtonItem(title: "0", kind: .number, action: { viewModel.inputDigit("0") }, enabled: isEnabled(title: "0", kind: .number)),
             ButtonItem(title: ".", kind: .number, action: { viewModel.inputDecimal() }, enabled: isEnabled(title: ".", kind: .number)),
             ButtonItem(
-                title: windowSettings.usesEnterKeySymbol ? "⏎" : "=",
+                title: windowSettings.usesEnterKeySymbol ? macLocalized("key.enter", bundle: currentLocalizationBundle) : "=",
                 kind: .accent,
                 action: { viewModel.evaluate() },
-                enabled: isEnabled(title: windowSettings.usesEnterKeySymbol ? "⏎" : "=", kind: .accent)
+                enabled: isEnabled(title: windowSettings.usesEnterKeySymbol ? macLocalized("key.enter", bundle: currentLocalizationBundle) : "=", kind: .accent)
             )
+        ]
+    }
+
+    private func basicKeypadButtons() -> [ButtonItem] {
+        let errorMode = viewModel.isErrorState
+        func isEnabled(title: String, kind: CalculatorButton.Kind) -> Bool {
+            guard errorMode else { return true }
+            let allowedTitles: Set<String> = ["C", "AC", "( )", ".", "0","1","2","3","4","5","6","7","8","9"]
+            if allowedTitles.contains(title) { return true }
+            return kind == .number
+        }
+
+        let clearButtonTitle = viewModel.shouldShowAllClearButton ? "AC" : "C"
+
+        return [
+            ButtonItem(title: clearButtonTitle, kind: .function, action: { self.handleContextualClear() }, enabled: isEnabled(title: clearButtonTitle, kind: .function)),
+            ButtonItem(title: "( )", kind: .function, action: { viewModel.inputParentheses() }, enabled: isEnabled(title: "( )", kind: .function)),
+            ButtonItem(title: "%", kind: .function, action: { viewModel.applyPercent() }, enabled: isEnabled(title: "%", kind: .function)),
+            ButtonItem(title: "÷", kind: .operation, action: { viewModel.setOperator(.divide) }, enabled: isEnabled(title: "÷", kind: .operation)),
+            ButtonItem(title: "7", kind: .number, action: { viewModel.inputDigit("7") }, enabled: isEnabled(title: "7", kind: .number)),
+            ButtonItem(title: "8", kind: .number, action: { viewModel.inputDigit("8") }, enabled: isEnabled(title: "8", kind: .number)),
+            ButtonItem(title: "9", kind: .number, action: { viewModel.inputDigit("9") }, enabled: isEnabled(title: "9", kind: .number)),
+            ButtonItem(title: "×", kind: .operation, action: { viewModel.setOperator(.multiply) }, enabled: isEnabled(title: "×", kind: .operation)),
+            ButtonItem(title: "4", kind: .number, action: { viewModel.inputDigit("4") }, enabled: isEnabled(title: "4", kind: .number)),
+            ButtonItem(title: "5", kind: .number, action: { viewModel.inputDigit("5") }, enabled: isEnabled(title: "5", kind: .number)),
+            ButtonItem(title: "6", kind: .number, action: { viewModel.inputDigit("6") }, enabled: isEnabled(title: "6", kind: .number)),
+            ButtonItem(title: "−", kind: .operation, action: { viewModel.setOperator(.subtract) }, enabled: isEnabled(title: "−", kind: .operation)),
+            ButtonItem(title: "1", kind: .number, action: { viewModel.inputDigit("1") }, enabled: isEnabled(title: "1", kind: .number)),
+            ButtonItem(title: "2", kind: .number, action: { viewModel.inputDigit("2") }, enabled: isEnabled(title: "2", kind: .number)),
+            ButtonItem(title: "3", kind: .number, action: { viewModel.inputDigit("3") }, enabled: isEnabled(title: "3", kind: .number)),
+            ButtonItem(title: "+", kind: .operation, action: { viewModel.setOperator(.add) }, enabled: isEnabled(title: "+", kind: .operation)),
+            ButtonItem(title: ".", kind: .number, action: { viewModel.inputDecimal() }, enabled: isEnabled(title: ".", kind: .number)),
+            ButtonItem(title: "0", kind: .number, action: { viewModel.inputDigit("0") }, enabled: isEnabled(title: "0", kind: .number)),
+            ButtonItem(
+                title: windowSettings.usesEnterKeySymbol ? macLocalized("key.enter", bundle: currentLocalizationBundle) : "=",
+                kind: .accent,
+                action: { viewModel.evaluate() },
+                enabled: isEnabled(title: windowSettings.usesEnterKeySymbol ? macLocalized("key.enter", bundle: currentLocalizationBundle) : "=", kind: .accent),
+                columnSpan: 2
+            )
+        ]
+    }
+
+    private func compactActionRowButtons() -> [CompactActionItem] {
+        guard !windowSettings.usesAlternativeKeypad else { return [] }
+        return [
+            CompactActionItem(symbol: "arrow.uturn.backward", isBare: false, action: { viewModel.undo() }),
+            CompactActionItem(symbol: "arrow.uturn.forward", isBare: false, action: { viewModel.redo() }),
+            CompactActionItem(symbol: "plusminus", isBare: false, action: { viewModel.toggleSign() }),
+            CompactActionItem(symbol: "slider.horizontal.below.rectangle", isBare: false, action: { toggleRoundingOverlay() }),
+            CompactActionItem(symbol: "delete.left", isBare: false, action: { viewModel.backspace() })
         ]
     }
 
@@ -1505,6 +1625,58 @@ private struct MemoryControlsBoundsKey: PreferenceKey {
 
     static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
         value = nextValue() ?? value
+    }
+}
+
+private struct CompactActionButton: View {
+    let symbol: String
+    let isBare: Bool
+    let height: CGFloat
+    let disabled: Bool
+    let palette: Palette
+    let action: () -> Void
+    @State private var hovering: Bool = false
+
+    private var cornerRadius: CGFloat { min(max(height * 0.28, 5), 10) }
+
+    var body: some View {
+        Group {
+            if disabled {
+                Color.clear
+            } else {
+                Button(action: action) {
+                    Image(systemName: symbol)
+                        .font(EnterCalcFont.appFont(size: min(max(height * 0.52, 11), 17)))
+                        .foregroundStyle(Color.white)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .background(background)
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(palette.buttonHoverOverlay)
+                        .opacity(hovering ? 1.0 : 0.0)
+                        .allowsHitTesting(false)
+                )
+                .onHover { hovering in
+                    self.hovering = hovering
+                    if hovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+                }
+            }
+        }
+        .frame(height: height)
+    }
+
+    @ViewBuilder
+    private var background: some View {
+        if isBare {
+            Color.clear
+        } else {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(palette.buttonOperation)
+        }
     }
 }
 
@@ -1685,6 +1857,15 @@ private struct MemoryControlsBoundsKey: PreferenceKey {
             min(max(height * 0.38, 14), 28)
         }
 
+        private var enterKeyTextFontSize: CGFloat {
+            let normalizedProgress = min(max((primaryFontSize - 14) / 14, 0), 1)
+            return 10 + normalizedProgress * 18
+        }
+
+        private var isEnterKeyTextButton: Bool {
+            kind == .accent && title != "="
+        }
+
         @ViewBuilder
         private var labelView: some View {
             if title == "1/x" {
@@ -1764,7 +1945,7 @@ private struct MemoryControlsBoundsKey: PreferenceKey {
 
         private var baseLabel: some View {
             Text(title)
-                .font(EnterCalcFont.thinAppFont(size: primaryFontSize))
+                .font(EnterCalcFont.thinAppFont(size: isEnterKeyTextButton ? enterKeyTextFontSize : primaryFontSize))
                 .minimumScaleFactor(0.7)
                 .lineLimit(1)
         }
@@ -2007,7 +2188,7 @@ private struct SettingsSheet: View {
     @Binding var selectedLanguage: String
     @Binding var usesScientificNotation: Bool
     @Binding var selectedNumberFormat: NumberFormatStyle
-    @Binding var usesClassicPercentBehavior: Bool
+    @Binding var usesAlternativeKeypad: Bool
     @Binding var usesEnterKeySymbol: Bool
     @Binding var disablesSwipeDownToRound: Bool
     @Binding var disablesButtonSound: Bool
@@ -2076,7 +2257,7 @@ private struct SettingsSheet: View {
                             .font(.system(size: settingsSectionSize))
                         Toggle(macLocalized("settings.numberFormat.scientific", bundle: localizationBundle), isOn: $usesScientificNotation)
                             .font(.system(size: settingsBodySize))
-                        Toggle(macLocalized("settings.percent.classicBehavior", bundle: localizationBundle), isOn: $usesClassicPercentBehavior)
+                        Toggle(macLocalized("settings.percent.classicBehavior", bundle: localizationBundle), isOn: $usesAlternativeKeypad)
                             .font(.system(size: settingsBodySize))
                         Toggle(
                             macLocalized("settings.equals.enterKeySymbol", bundle: localizationBundle),
@@ -2427,11 +2608,10 @@ private extension CalculatorWindowView {
                     viewModel.setNumberFormatStyle(newValue)
                 }
             ),
-            usesClassicPercentBehavior: Binding(
-                get: { windowSettings.usesClassicPercentBehavior },
+            usesAlternativeKeypad: Binding(
+                get: { windowSettings.usesAlternativeKeypad },
                 set: { newValue in
-                    updateWindowSettings { $0.usesClassicPercentBehavior = newValue }
-                    viewModel.setClassicPercentBehaviorEnabled(newValue)
+                    updateWindowSettings { $0.usesAlternativeKeypad = newValue }
                 }
             ),
             usesEnterKeySymbol: Binding(
@@ -2627,7 +2807,6 @@ private extension CalculatorWindowView {
         applyLanguage(windowSettings.languageCode)
         viewModel.setScientificNotationEnabled(windowSettings.usesScientificNotation)
         viewModel.setNumberFormatStyle(currentNumberFormatStyle)
-        viewModel.setClassicPercentBehaviorEnabled(windowSettings.usesClassicPercentBehavior)
     }
 
     func normalizeWindowLanguageIfNeeded() {

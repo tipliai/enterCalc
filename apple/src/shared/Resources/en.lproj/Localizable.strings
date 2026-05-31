@@ -19,7 +19,7 @@
 "settings.calculation" = "Calculation";
 "settings.numberFormat.style" = "Number style";
 "settings.numberFormat.scientific" = "Use scientific notation";
-"settings.percent.classicBehavior" = "Use classic percent button";
+"settings.percent.classicBehavior" = "Use alternative keypad";
 "settings.rounding.disableSwipeDown" = "Disable swipe down to round";
 "settings.buttonSound.disabled" = "Disable button sound";
 "settings.credits" = "About";
@@ -34,6 +34,7 @@
 "history.emptyAfterClear" = "";
 "history.clear" = "Clear history";
 "history.copyOperation" = "Copy Operation";
+"key.enter" = "Enter";
 "rounding.toggle" = "Toggle Rounding Panel";
 "rounding.title" = "Round Result";
 "rounding.remove" = "Remove";
