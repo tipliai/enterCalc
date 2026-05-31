@@ -1,4 +1,4 @@
-"error.divideByZero" = "Durch Null kann nicht geteilt werden";
+"error.divideByZero" = "Division durch Null";
 "error.invalidInput" = "Ungültige Eingabe";
 "error.outOfRange" = "Außerhalb des Bereichs";
 "settings.title" = "Einstellungen";
@@ -21,13 +21,13 @@
 "settings.numberFormat.scientific" = "Wissenschaftliche Notation verwenden";
 "settings.percent.classicBehavior" = "Alternatives Tastenfeld verwenden";
 "settings.buttonSound.disabled" = "Tastenton deaktivieren";
-"settings.credits" = "Über";
+"settings.credits" = "Info";
 "settings.credits.version" = "Version %@";
-"mac.about.windowTitle" = "Über %@";
+"mac.about.windowTitle" = "Info %@";
 "settings.credit.part1" = "© 2026 Tipli AI, LLC. EnterCalc ist Open Source und wird unter der MIT-Lizenz veröffentlicht. Hilf mit, auf ";
 "settings.credit.linkText" = "GitHub";
 "settings.credit.middle" = " zum Projekt beizutragen.";
-"calculator.mode.basic" = "Basic";
+"calculator.mode.basic" = "Einfach";
 "history.title" = "Verlauf";
 "history.empty" = "Davon wird die Geschichte erst noch erzählen.";
 "history.emptyAfterClear" = "";
