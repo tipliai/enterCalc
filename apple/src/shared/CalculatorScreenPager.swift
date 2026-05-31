@@ -22,6 +22,7 @@ public struct CalculatorScreenPager<Content: View>: View {
     public let activationThresholdRatio: CGFloat
     public let trailingPlaceholder: AnyView?
     public let transitionOverlayColor: Color?
+    public let isGestureDisabled: Bool
     public let content: (Int) -> Content
 
     @GestureState private var dragState = DragState()
@@ -46,6 +47,7 @@ public struct CalculatorScreenPager<Content: View>: View {
         activationThresholdRatio: CGFloat = 0.22,
         trailingPlaceholder: AnyView? = nil,
         transitionOverlayColor: Color? = nil,
+        isGestureDisabled: Bool = false,
         @ViewBuilder content: @escaping (Int) -> Content
     ) {
         self.pagingAxis = pagingAxis
@@ -64,6 +66,7 @@ public struct CalculatorScreenPager<Content: View>: View {
         self.activationThresholdRatio = activationThresholdRatio
         self.trailingPlaceholder = trailingPlaceholder
         self.transitionOverlayColor = transitionOverlayColor
+        self.isGestureDisabled = isGestureDisabled
         self.content = content
     }
 
@@ -76,7 +79,10 @@ public struct CalculatorScreenPager<Content: View>: View {
             .animation(pageSnapAnimation, value: pageCount)
             .animation(.easeOut(duration: 0.12), value: isTransitionSettling)
             .animation(.easeOut(duration: 0.12), value: settlingDisplayIndex)
-            .simultaneousGesture(dragGesture(pageDimension: pagingDimension(for: geometry.size)), including: .all)
+            .simultaneousGesture(
+                !isGestureDisabled ? dragGesture(pageDimension: pagingDimension(for: geometry.size)) : nil,
+                including: .all
+            )
         }
     }
 
