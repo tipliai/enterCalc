@@ -4,8 +4,8 @@ This document tracks the shared-module checks currently discovered by `swift tes
 Each row maps directly to a discovered test method in `apple/tests/CalculatorViewModelTests.swift`.
 
 Current verification status on macOS:
-- `swift test list` discovers `170` `CalculatorViewModelTests` methods.
-- This matrix documents the same `170` methods with no missing or extra entries.
+- `swift test list` discovers `173` `CalculatorViewModelTests` methods.
+- This matrix documents the same `173` methods with no missing or extra entries.
 - The current macOS run includes the AppKit-only clipboard tests guarded by `canImport(AppKit)`.
 
 ## UI Settings Expectations
@@ -92,6 +92,10 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Error handling | Enter `0 ÷ 0 =` | Same divide-by-zero error state and cleared expression as the standard divide-by-zero case | `testZeroDividedByZeroSetsLocalizedErrorState` |
 | Error handling | Enter `9`, toggle sign, apply square root | Error state enabled, display `Invalid input`, empty expression | `testSquareRootOfNegativeNumberSetsInvalidInputError` |
 | Error handling | Trigger `Invalid input`, then press backspace once | Error state clears and display restores to `-9` | `testBackspaceOnInvalidInputUndoesErrorOnce` |
+| Backspace | Enter `3 + 3 + 3 + 3`, then backspace repeatedly | Backspace walks the pending expression left-to-right without implicit evaluate, keeping history empty until `=` | `testBackspaceOnPendingExpressionDoesNotAutoEvaluateAndKeepsRollbackEditable` |
+| Backspace | Enter `6 + 55 + 777 + 8888`, then delete through `8888` and `+`, then delete `777` | Removing the final `777` digit immediately removes that operand from the operation line (no extra backspace step) | `testBackspaceRemovingFinalDigitAlsoRemovesExpressionOperandWithoutExtraStep` |
+| Clear button | Enter `3 + 3 + 3 +`, then press `C` | With no active right-hand entry, `C` is a no-op that preserves the pending operation line and avoids pre-equals history/evaluation side effects | `testClearEntryOnPendingExpressionDoesNotAutoEvaluateOrMutateOperationLine` |
+| Clear button | Enter `6 + 55 + 777`, then press `AC` | `AC` clears both the result display and operation line back to a fresh state | `testClearAllFromPendingExpressionClearsDisplayAndOperationLine` |
 | Error handling | Apply reciprocal to zero | Error state enabled, display `Cannot divide by zero` | `testReciprocalOfZeroSetsDivideByZeroError` |
 | Editing state | Enter `12`, then undo twice and redo twice | Display steps `12 -> 1 -> 0 -> 1 -> 12`; redo becomes unavailable at the end | `testUndoAndRedoRestorePriorDisplayStates` |
 | Editing state | Build `2 × 2 × 2`, then undo and redo before evaluate | Undo restores the operation line to `2 × 2 ×`; redo restores `2 × 2 × 2`, preserving full chained expression state | `testUndoRedoRestoresFullChainedExpressionDuringConstruction` |

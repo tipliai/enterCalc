@@ -1223,6 +1223,99 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.expressionDisplay, "")
     }
 
+    func testBackspaceOnPendingExpressionDoesNotAutoEvaluateAndKeepsRollbackEditable() {
+        let viewModel = CalculatorViewModel()
+
+        enter("3", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("3", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("3", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("3", into: viewModel)
+
+        viewModel.backspace()
+        XCTAssertEqual(viewModel.expressionDisplay, "3 + 3 + 3 +")
+
+        viewModel.backspace()
+        XCTAssertEqual(viewModel.expressionDisplay, "3 + 3 + 3")
+        XCTAssertEqual(viewModel.display, "3")
+
+        viewModel.backspace()
+        XCTAssertEqual(viewModel.expressionDisplay, "3 + 3 +")
+        XCTAssertEqual(viewModel.display, "")
+
+        viewModel.backspace()
+        XCTAssertEqual(viewModel.expressionDisplay, "3 + 3")
+        XCTAssertEqual(viewModel.display, "3")
+        XCTAssertTrue(viewModel.history.isEmpty)
+    }
+
+    func testClearEntryOnPendingExpressionDoesNotAutoEvaluateOrMutateOperationLine() {
+        let viewModel = CalculatorViewModel()
+
+        enter("3", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("3", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("3", into: viewModel)
+        viewModel.setOperator(.add)
+
+        let displayBeforeClear = viewModel.display
+        let expressionBeforeClear = viewModel.expressionDisplay
+
+        viewModel.clearEntry()
+
+        XCTAssertEqual(viewModel.display, displayBeforeClear)
+        XCTAssertEqual(viewModel.expressionDisplay, expressionBeforeClear)
+        XCTAssertTrue(viewModel.history.isEmpty)
+
+        viewModel.evaluate()
+        XCTAssertEqual(viewModel.display, "12")
+    }
+
+    func testBackspaceRemovingFinalDigitAlsoRemovesExpressionOperandWithoutExtraStep() {
+        let viewModel = CalculatorViewModel()
+
+        enter("6", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("55", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("777", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("8888", into: viewModel)
+
+        for _ in 0..<5 {
+            viewModel.backspace()
+        }
+        XCTAssertEqual(viewModel.expressionDisplay, "6 + 55 + 777")
+
+        viewModel.backspace()
+        viewModel.backspace()
+        viewModel.backspace()
+
+        XCTAssertEqual(viewModel.expressionDisplay, "6 + 55 +")
+        XCTAssertTrue(viewModel.history.isEmpty)
+    }
+
+    func testClearAllFromPendingExpressionClearsDisplayAndOperationLine() {
+        let viewModel = CalculatorViewModel()
+
+        enter("6", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("55", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("777", into: viewModel)
+
+        XCTAssertEqual(viewModel.expressionDisplay, "6 + 55 + 777")
+
+        viewModel.clearAll()
+
+        XCTAssertEqual(viewModel.display, "0")
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+        XCTAssertTrue(viewModel.history.isEmpty)
+    }
+
     func testReciprocalOfZeroSetsDivideByZeroError() {
         let viewModel = CalculatorViewModel()
 
