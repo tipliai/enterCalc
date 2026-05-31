@@ -673,7 +673,7 @@ struct CalculatorWindowView: View {
     }
 
     private func memoryControls(opacity: Double) -> some View {
-        return Text("Basic")
+        return Text(macLocalized("calculator.mode.basic", bundle: currentLocalizationBundle))
             .font(EnterCalcFont.appFont(size: 12))
             .foregroundStyle(primaryForeground.opacity(opacity))
             .frame(maxWidth: .infinity, alignment: .leading)

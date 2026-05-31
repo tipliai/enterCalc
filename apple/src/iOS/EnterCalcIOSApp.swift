@@ -2327,7 +2327,7 @@ private extension EnterCalcIOSView {
     }
 
     func memoryControls(metrics: IOSLayoutMetrics, opacity: Double) -> some View {
-        return Text("Basic")
+        return Text(localized("calculator.mode.basic"))
             .font(EnterCalcFont.appFont(size: metrics.memoryFontSize))
             .foregroundStyle(palette.textPrimary.opacity(opacity))
             .frame(maxWidth: .infinity, minHeight: metrics.memoryHeight, maxHeight: metrics.memoryHeight, alignment: .leading)
