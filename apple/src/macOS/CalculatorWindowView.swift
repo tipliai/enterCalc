@@ -278,6 +278,10 @@ struct CalculatorWindowView: View {
         let separatorHeight: CGFloat = 32
         let minimumDisplayHeight: CGFloat = 108
         let minimumKeypadHeight: CGFloat = 140
+        let multiplier = activeKeypadHeightMultiplier()
+        // multiplier 1.0 = display shortest, 0.5 = display tallest
+        let displayProgress = CGFloat((1.0 - multiplier) / 0.5)
+        let keypadBottomPadding: CGFloat = outerHorizontalPadding / 2 - 1 + 3 * displayProgress
 
         return VStack(alignment: .trailing, spacing: 0) {
             HStack(spacing: 6) {
@@ -287,10 +291,9 @@ struct CalculatorWindowView: View {
             .padding(.bottom, headerToDisplaySpacing)
 
             GeometryReader { geo in
-                let availableHeight = max(geo.size.height, 1)
+                let availableHeight = max(geo.size.height - keypadBottomPadding, 1)
                 let maximumKeypadHeight = max(minimumKeypadHeight, availableHeight - minimumDisplayHeight - separatorHeight)
                 let defaultKeypadHeight = maximumKeypadHeight
-                let multiplier = activeKeypadHeightMultiplier()
                 let proposedKeypadHeight = defaultKeypadHeight * CGFloat(multiplier)
                 let keypadHeight = min(max(proposedKeypadHeight, minimumKeypadHeight), maximumKeypadHeight)
                 let displayHeight = max(minimumDisplayHeight, availableHeight - separatorHeight - keypadHeight)
@@ -312,6 +315,7 @@ struct CalculatorWindowView: View {
             maxHeight: .infinity,
             alignment: .top
         )
+        .padding(.bottom, keypadBottomPadding)
         .coordinateSpace(name: calculatorContentCoordinateSpace)
         .overlayPreferenceValue(MemoryControlsBoundsKey.self) { anchor in
             GeometryReader { geo in
@@ -718,7 +722,6 @@ struct CalculatorWindowView: View {
 
     private var keypadArea: some View {
         keypadGrid
-            .padding(.bottom, outerHorizontalPadding / 2 + 4)
     }
 
     private var keypadGrid: some View {
