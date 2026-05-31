@@ -422,10 +422,6 @@ struct CalculatorWindowView: View {
 
             Spacer()
 
-            Color.clear
-                .frame(width: 30, height: 30)
-                .allowsHitTesting(false)
-
             Button {
                 toggleHistoryVisibility()
             } label: {

@@ -2552,7 +2552,7 @@ private extension EnterCalcIOSView {
                             height: compactActionHeight,
                             pressFeedback: triggerActionFeedback,
                             action: {
-                                button.action?(screen)
+                                button.action(screen)
                                 if isLandscapeMode {
                                     resetLandscapeDisplayScroll(for: screen)
                                 }
@@ -4449,9 +4449,7 @@ private struct IOSCalcButton {
 
 private struct IOSActionRowButton {
     let symbol: String
-    let action: ((CalculatorScreenSession) -> Void)?
-
-    static let placeholder = IOSActionRowButton(symbol: "", action: nil)
+    let action: (CalculatorScreenSession) -> Void
 }
 
 private struct IOSCompactActionButton: View {
@@ -4460,35 +4458,26 @@ private struct IOSCompactActionButton: View {
     let height: CGFloat
     let pressFeedback: () -> Void
     let action: () -> Void
-
-    private var isPlaceholder: Bool { button.action == nil }
     private var cornerRadius: CGFloat { min(max(height * 0.28, 6), 12) }
 
     var body: some View {
-        Group {
-            if isPlaceholder {
-                Color.clear
-                    .frame(maxWidth: .infinity)
-            } else {
-                Button {
-                    pressFeedback()
-                    action()
-                } label: {
-                    Image(systemName: button.symbol)
-                        .font(EnterCalcFont.appFont(size: min(max(height * 0.55, 12), 20)))
-                        .foregroundStyle(Color.white)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+        Button {
+            pressFeedback()
+            action()
+        } label: {
+            Image(systemName: button.symbol)
+                .font(EnterCalcFont.appFont(size: min(max(height * 0.55, 12), 20)))
+                .foregroundStyle(Color.white)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .fill(palette.buttonFunction)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            }
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(palette.buttonFunction)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .frame(height: height)
     }
 }
