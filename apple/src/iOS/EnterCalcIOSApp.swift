@@ -377,6 +377,14 @@ struct EnterCalcIOSView: View {
         activeScreen.settings.usesAlternativeKeypad
     }
 
+    /// Determines if page switching gestures should be disabled.
+    /// Disables paging while height adjustments are active to prevent
+    /// accidental page switches from incidental horizontal movement during
+    /// display area or history overlay resize operations.
+    private var isInteractionDisabled: Bool {
+        isResizingKeypadHeight || liveHistoryOverlayHeight != nil
+    }
+
     private var legacyRows: [[IOSCalcButton]] {
         [
             [
@@ -1352,7 +1360,7 @@ private extension EnterCalcIOSView {
             activationThresholdRatio: 0.4,
             trailingPlaceholder: AnyView(trailingNewScreenPlaceholder(metrics: metrics)),
             transitionOverlayColor: palette.surface,
-            isGestureDisabled: isResizingKeypadHeight || liveHistoryOverlayHeight != nil
+            isGestureDisabled: isInteractionDisabled
         ) { index in
             screenBody(metrics: metrics, screen: screenStore.screens[index])
         }
