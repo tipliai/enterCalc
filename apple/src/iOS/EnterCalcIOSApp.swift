@@ -1351,7 +1351,8 @@ private extension EnterCalcIOSView {
             onCloseUpward: { closeActiveScreen() },
             activationThresholdRatio: 0.4,
             trailingPlaceholder: AnyView(trailingNewScreenPlaceholder(metrics: metrics)),
-            transitionOverlayColor: palette.surface
+            transitionOverlayColor: palette.surface,
+            isGestureDisabled: isResizingKeypadHeight || liveHistoryOverlayHeight != nil
         ) { index in
             screenBody(metrics: metrics, screen: screenStore.screens[index])
         }
