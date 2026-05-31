@@ -3,7 +3,7 @@
 "error.outOfRange" = "Fuera de rango";
 "settings.title" = "Configuración";
 "settings.screen.title" = "Configuración de pantalla";
-"settings.close" = "Cerrar configuración";
+"settings.close" = "Cerrar ajustes";
 "settings.appearance" = "Apariencia";
 "settings.appearance.label" = "Tema de la app";
 "settings.appearance.screenLabel" = "Tema de pantalla";
@@ -24,12 +24,12 @@
 "settings.credits" = "Acerca de";
 "settings.credits.version" = "Versión %@";
 "mac.about.windowTitle" = "Acerca de %@";
-"settings.credit.part1" = "© 2026 Tipli AI, LLC. EnterCalc es de código abierto y se publica bajo la licencia MIT. Ayuda a contribuir al proyecto en ";
+"settings.credit.part1" = "© 2026 Tipli AI, LLC. EnterCalc es de código abierto y se publica bajo la licencia MIT. Contribuye al proyecto en ";
 "settings.credit.linkText" = "GitHub";
 "settings.credit.middle" = ".";
-"calculator.mode.basic" = "Basic";
+"calculator.mode.basic" = "Básico";
 "history.title" = "Historial";
-"history.empty" = "Los libros de historia aún no hablan de ello.";
+"history.empty" = "La historia aún está por escribirse.";
 "history.emptyAfterClear" = "";
 "history.clear" = "Borrar historial";
 "history.copyOperation" = "Copiar operación";
