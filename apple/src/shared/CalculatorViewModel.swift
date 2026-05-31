@@ -558,20 +558,15 @@ public final class CalculatorViewModel: ObservableObject {
             return
         }
 
+        if pendingOperator != nil, shouldResetInputOnNextDigit {
+            // C should keep a pending expression intact when no right-hand entry is active.
+            updateDisplay()
+            completeUndoableChange(from: snapshot)
+            return
+        }
+
         if pendingOperator != nil {
-            if shouldResetInputOnNextDigit {
-                let lhsValue = accumulator ?? currentValue
-                currentInput = format(lhsValue)
-                currentToken = accumulatorToken ?? displayString(for: currentInput)
-                pendingOperator = nil
-                accumulator = nil
-                accumulatorToken = nil
-                shouldResetInputOnNextDigit = false
-                isPendingEntryClearedByClearButton = true
-                expression = ""
-            } else {
-                setBlankPendingEntryState()
-            }
+            setBlankPendingEntryState()
         } else {
             setBlankPendingEntryState()
         }
@@ -629,38 +624,16 @@ public final class CalculatorViewModel: ObservableObject {
             completeUndoableChange(from: snapshot)
             return
         }
-        if isExpressionMode, shouldResetInputOnNextDigit {
-            if let removed = expressionTokens.popLast() {
-                if removed == "(" {
-                    openParenthesisCount = max(0, openParenthesisCount - 1)
-                } else if removed == ")" {
-                    openParenthesisCount += 1
-                }
-                if expressionTokens.isEmpty {
-                    resetAllStateForClearAll()
-                } else if let last = expressionTokens.last,
-                          isExpressionNumberToken(last),
-                          let normalized = normalizeDisplayNumberToken(last) {
-                    currentInput = normalized
-                    currentToken = last
-                    shouldResetInputOnNextDigit = false
-                    isPendingEntryClearedByClearButton = false
-
-                    if expressionTokens.count == 1, openParenthesisCount == 0 {
-                        expressionTokens.removeAll()
-                        isExpressionMode = false
-                        expression = ""
-                    }
-                }
-            } else {
-                resetAllStateForClearAll()
-            }
+        if backspaceExpressionTokenIfNeeded() {
             updateDisplay()
             completeUndoableChange(from: snapshot)
             return
         }
         if shouldResetInputOnNextDigit, pendingOperator != nil {
-            removePendingOperatorPreservingLeftOperand(armAllClear: false)
+            // Convert non-expression pending previews into expression-mode editing
+            // so backspace walks tokens without forcing an implicit evaluation.
+            enterExpressionModeIfNeeded()
+            _ = backspaceExpressionTokenIfNeeded()
             updateDisplay()
             completeUndoableChange(from: snapshot)
             return
@@ -688,6 +661,12 @@ public final class CalculatorViewModel: ObservableObject {
         } else if currentInput.count > 1 {
             currentInput.removeLast()
         } else if currentInput != "0" {
+            if removeActiveExpressionValueTokenIfNeeded() {
+                updateDisplay()
+                completeUndoableChange(from: snapshot)
+                return
+            }
+
             if isExpressionMode || pendingOperator != nil {
                 setBlankPendingEntryState()
             } else {
@@ -2363,23 +2342,71 @@ public final class CalculatorViewModel: ObservableObject {
         isPendingEntryClearedByClearButton || isStandaloneUnaryResult || isErrorState || isResultStateUsingAllClear || isInClearAllState
     }
 
+    @discardableResult
+    private func removeActiveExpressionValueTokenIfNeeded() -> Bool {
+        guard isExpressionMode,
+              !shouldResetInputOnNextDigit,
+              let last = expressionTokens.last,
+              isExpressionNumberToken(last) else {
+            return false
+        }
+
+        expressionTokens.removeLast()
+        if expressionTokens.isEmpty {
+            resetAllStateForClearAll()
+        } else {
+            currentInput = "0"
+            currentToken = "0"
+            shouldResetInputOnNextDigit = true
+            isPendingEntryClearedByClearButton = true
+            justEvaluated = false
+            isErrorState = false
+            currentErrorKey = nil
+        }
+
+        return true
+    }
+
+    @discardableResult
+    private func backspaceExpressionTokenIfNeeded() -> Bool {
+        guard isExpressionMode, shouldResetInputOnNextDigit else {
+            return false
+        }
+
+        if let removed = expressionTokens.popLast() {
+            if removed == "(" {
+                openParenthesisCount = max(0, openParenthesisCount - 1)
+            } else if removed == ")" {
+                openParenthesisCount += 1
+            }
+            if expressionTokens.isEmpty {
+                resetAllStateForClearAll()
+            } else if let last = expressionTokens.last,
+                      isExpressionNumberToken(last),
+                      let normalized = normalizeDisplayNumberToken(last) {
+                currentInput = normalized
+                currentToken = last
+                shouldResetInputOnNextDigit = false
+                isPendingEntryClearedByClearButton = false
+
+                if expressionTokens.count == 1, openParenthesisCount == 0 {
+                    expressionTokens.removeAll()
+                    isExpressionMode = false
+                    expression = ""
+                }
+            }
+        } else {
+            resetAllStateForClearAll()
+        }
+
+        return true
+    }
+
     private func setBlankPendingEntryState() {
         currentInput = "0"
         currentToken = "0"
         shouldResetInputOnNextDigit = true
         isPendingEntryClearedByClearButton = true
-    }
-
-    private func removePendingOperatorPreservingLeftOperand(armAllClear: Bool) {
-        let lhsValue = accumulator ?? currentValue
-        currentInput = format(lhsValue)
-        currentToken = accumulatorToken ?? displayString(for: currentInput)
-        pendingOperator = nil
-        accumulator = nil
-        accumulatorToken = nil
-        shouldResetInputOnNextDigit = false
-        isPendingEntryClearedByClearButton = armAllClear
-        expression = ""
     }
 
     private func clearParenthesizedExpressionIfNeeded() -> Bool {
