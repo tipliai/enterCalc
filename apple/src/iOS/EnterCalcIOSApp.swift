@@ -809,6 +809,7 @@ private extension EnterCalcIOSView {
                 viewModel.clearDisplayEditCursor()
                 return true
             }
+            playEnterButtonSoundIfEnabled()
             viewModel.evaluate()
             return true
         default:
@@ -847,6 +848,7 @@ private extension EnterCalcIOSView {
             viewModel.inputCurrencySymbol(inputChars)
             return true
         case "=":
+            playEnterButtonSoundIfEnabled()
             viewModel.evaluate()
             return true
         default:
@@ -2510,6 +2512,14 @@ private extension EnterCalcIOSView {
 
         IOSActionHaptics.perform(emphasized: emphasized)
 #endif
+    }
+
+    func playEnterButtonSoundIfEnabled() {
+        guard !activeScreen.settings.disablesButtonSound else {
+            return
+        }
+
+        CalculatorButtonSound.playEnterClick()
     }
 
     func prepareActionFeedbackGenerators() {

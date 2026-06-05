@@ -1398,7 +1398,10 @@ struct CalculatorWindowView: View {
         case 69: viewModel.setOperator(.add); return true
         case 75: viewModel.setOperator(.divide); return true
         case 78: viewModel.setOperator(.subtract); return true
-        case 81, 76: viewModel.evaluate(); return true // keypad = / enter
+        case 81, 76:
+            playEnterButtonSoundIfEnabled()
+            viewModel.evaluate()
+            return true // keypad = / enter
         default:
             break
         }
@@ -1428,6 +1431,7 @@ struct CalculatorWindowView: View {
                 viewModel.clearDisplayEditCursor()
                 return true
             }
+            playEnterButtonSoundIfEnabled()
             viewModel.evaluate()
             return true
         }
@@ -1462,6 +1466,14 @@ struct CalculatorWindowView: View {
         }
 
         return handled
+    }
+
+    private func playEnterButtonSoundIfEnabled() {
+        guard !windowSettings.disablesButtonSound else {
+            return
+        }
+
+        CalculatorButtonSound.playEnterClick()
     }
 
     // MARK: - Button metadata
