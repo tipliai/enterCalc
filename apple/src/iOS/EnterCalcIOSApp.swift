@@ -2643,8 +2643,8 @@ private extension EnterCalcIOSView {
 
     func keypadResizeHandle(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, height: CGFloat) -> some View {
         let isActive = isResizingKeypadHeight
-        let handleColor = palette.buttonOperation
-        let lineColor = palette.buttonOperation
+        let handleColor = palette.textSecondary.opacity(colorScheme == .dark ? 0.31 : 0.225)
+        let lineColor = handleColor
         let handleBackground = palette.surface
         let verticalCenterOffset = -metrics.sectionSpacing / 2
         let dragGesture = DragGesture(minimumDistance: 0, coordinateSpace: .global)
@@ -4509,7 +4509,7 @@ private struct IOSCompactActionButton: View {
         } label: {
             Image(systemName: button.symbol)
                 .font(EnterCalcFont.appFont(size: min(max(height * 0.55, 12), 20)))
-                .foregroundStyle(Color.white)
+                .foregroundStyle(palette.textPrimary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
                 .scaleEffect(pressPopScale)
