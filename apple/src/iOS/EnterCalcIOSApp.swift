@@ -23,12 +23,14 @@ private enum IOSActionHaptics {
     }()
     static func performKeyPress(isEnterKey: Bool = false) {
         guard supportsHaptics else {
-            playFallbackClick(isEnterKey: isEnterKey)
+            if !isEnterKey {
+                playFallbackClick(isEnterKey: false)
+            }
             return
         }
 
         keyPressImpact.prepare()
-        keyPressImpact.impactOccurred(intensity: 0.95)
+        keyPressImpact.impactOccurred(intensity: 1.0)
     }
 
     static func perform(emphasized: Bool) {
@@ -39,7 +41,7 @@ private enum IOSActionHaptics {
             successNotification.notificationOccurred(.success)
         } else {
             lightImpact.prepare()
-            lightImpact.impactOccurred(intensity: 0.8)
+            lightImpact.impactOccurred(intensity: 1.0)
         }
     }
 
@@ -513,6 +515,7 @@ struct EnterCalcIOSView: View {
                 normalizePreferredLanguageIfNeeded()
                 syncHomeScreenFromStoredSettings()
                 applyActiveScreenConfiguration()
+                prepareActionFeedbackGenerators()
                 startDeviceOrientationObservation()
                 syncPhoneUpsideDownPresentation()
                 startDisplayShimmerParallaxMotion()
@@ -532,6 +535,7 @@ struct EnterCalcIOSView: View {
                 if isDefaultLocalizationSelection(activeScreen.settings.languageCode) {
                     applyActiveScreenConfiguration()
                 }
+                prepareActionFeedbackGenerators()
                 startDisplayShimmerParallaxMotion()
                 startOperatorIntroAnimation()
             }
@@ -805,6 +809,7 @@ private extension EnterCalcIOSView {
                 viewModel.clearDisplayEditCursor()
                 return true
             }
+            playEnterButtonSoundIfEnabled()
             viewModel.evaluate()
             return true
         default:
@@ -843,6 +848,7 @@ private extension EnterCalcIOSView {
             viewModel.inputCurrencySymbol(inputChars)
             return true
         case "=":
+            playEnterButtonSoundIfEnabled()
             viewModel.evaluate()
             return true
         default:
@@ -2486,6 +2492,10 @@ private extension EnterCalcIOSView {
 
     func triggerKeyPressFeedback(for kind: IOSCalcButton.Kind) {
 #if canImport(UIKit)
+        if kind == .equals {
+            CalculatorButtonSound.playEnterClick()
+        }
+
         guard !actionHapticsDisabled() else {
             return
         }
@@ -2501,6 +2511,23 @@ private extension EnterCalcIOSView {
         }
 
         IOSActionHaptics.perform(emphasized: emphasized)
+#endif
+    }
+
+    func playEnterButtonSoundIfEnabled() {
+        guard !activeScreen.settings.disablesButtonSound else {
+            return
+        }
+
+        CalculatorButtonSound.playEnterClick()
+    }
+
+    func prepareActionFeedbackGenerators() {
+#if canImport(UIKit)
+        IOSActionHaptics.keyPressImpact.prepare()
+        IOSActionHaptics.lightImpact.prepare()
+        IOSActionHaptics.mediumImpact.prepare()
+        IOSActionHaptics.successNotification.prepare()
 #endif
     }
 
@@ -4467,6 +4494,12 @@ private struct IOSCompactActionButton: View {
     let height: CGFloat
     let pressFeedback: () -> Void
     let action: () -> Void
+    @State private var pressPopScale: CGFloat = 1.0
+    @State private var pointerIsDown: Bool = false
+    @State private var pressPopGeneration: Int = 0
+    private static let popGrowDuration: TimeInterval = 0.05
+    private static let popSpringResponse: Double = 0.18
+    private static let popSpringDamping: Double = 0.62
     private var cornerRadius: CGFloat { min(max(height * 0.28, 6), 12) }
 
     var body: some View {
@@ -4479,15 +4512,44 @@ private struct IOSCompactActionButton: View {
                 .foregroundStyle(Color.white)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
+                .scaleEffect(pressPopScale)
         }
         .buttonStyle(.plain)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    guard !pointerIsDown else { return }
+                    pointerIsDown = true
+                    triggerPressPopAnimation()
+                }
+                .onEnded { _ in
+                    pointerIsDown = false
+                }
+        )
         .background(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(palette.buttonFunction)
         )
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .frame(height: height)
+    }
+
+    private func triggerPressPopAnimation() {
+        pressPopGeneration += 1
+        let currentGeneration = pressPopGeneration
+
+        withAnimation(.easeOut(duration: Self.popGrowDuration)) {
+            pressPopScale = 1.15
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.popGrowDuration) {
+            guard currentGeneration == pressPopGeneration else { return }
+            withAnimation(.spring(response: Self.popSpringResponse, dampingFraction: Self.popSpringDamping)) {
+                pressPopScale = 1.0
+            }
+        }
     }
 }
 
@@ -4504,6 +4566,11 @@ private struct IOSKeypadButton: View {
     @State private var touchCancelledBySwipe: Bool = false
     @State private var shimmerProgress: CGFloat = 0
     @State private var shimmerVisible: Bool = false
+    @State private var pressPopScale: CGFloat = 1.0
+    @State private var pressPopGeneration: Int = 0
+    private static let popGrowDuration: TimeInterval = 0.05
+    private static let popSpringResponse: Double = 0.18
+    private static let popSpringDamping: Double = 0.62
 
     // Reveal order from bottom (+) to top (÷): +→0, −→1, ×→2, ÷→3
     private static let operatorRevealOrder: [String: Int] = ["+": 0, "−": 1, "×": 2, "÷": 3]
@@ -4526,7 +4593,7 @@ private struct IOSKeypadButton: View {
 
     private static let horizontalSwipeCancellationDistance: CGFloat = 8
     private static let horizontalSwipeDominanceRatio: CGFloat = 1.15
-    private static let tapCommitDistance: CGFloat = 14
+    private static let tapCommitDistance: CGFloat = 22
     private static let pressedScale: CGFloat = 0.97
 
     private var isEqualsButton: Bool { button.kind == .equals }
@@ -4568,7 +4635,7 @@ private struct IOSKeypadButton: View {
             .foregroundStyle(button.foregroundColor(palette: palette))
             .frame(maxWidth: .infinity, minHeight: buttonHeight, maxHeight: buttonHeight)
             .background(buttonBackground)
-            .scaleEffect(isPressed ? Self.pressedScale : 1)
+            .scaleEffect(pressPopScale)
             .overlay(
                 RoundedRectangle(cornerRadius: scaledCornerRadius, style: .continuous)
                     .fill(palette.buttonHoverOverlay)
@@ -4606,6 +4673,7 @@ private struct IOSKeypadButton: View {
                     .allowsHitTesting(false)
                 }
             }
+            .zIndex(pressPopScale > 1.001 ? 1 : 0)
             .animation(.easeOut(duration: 0.08), value: isPressed)
     }
 
@@ -4626,7 +4694,11 @@ private struct IOSKeypadButton: View {
 
         let isInsideButton = contains(location: value.location, in: size)
         let isTapEligible = isTapEligible(translation: value.translation)
-        isPressed = isInsideButton && isTapEligible && !touchCancelledBySwipe
+        let shouldBePressed = isInsideButton && isTapEligible && !touchCancelledBySwipe
+        if shouldBePressed && !isPressed {
+            triggerPressPopAnimation()
+        }
+        isPressed = shouldBePressed
     }
 
     private func finishPress(for value: DragGesture.Value, in size: CGSize) {
@@ -4643,9 +4715,7 @@ private struct IOSKeypadButton: View {
     }
 
     private func contains(location: CGPoint, in size: CGSize) -> Bool {
-        let bounds = CGRect(origin: .zero, size: size)
-        let hitShape = RoundedRectangle(cornerRadius: scaledCornerRadius, style: .continuous)
-        return hitShape.path(in: bounds).contains(location)
+        CGRect(origin: .zero, size: size).contains(location)
     }
 
     private func isTapEligible(translation: CGSize) -> Bool {
@@ -4668,6 +4738,22 @@ private struct IOSKeypadButton: View {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             shimmerVisible = false
+        }
+    }
+
+    private func triggerPressPopAnimation() {
+        pressPopGeneration += 1
+        let currentGeneration = pressPopGeneration
+
+        withAnimation(.easeOut(duration: Self.popGrowDuration)) {
+            pressPopScale = 1.15
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.popGrowDuration) {
+            guard currentGeneration == pressPopGeneration else { return }
+            withAnimation(.spring(response: Self.popSpringResponse, dampingFraction: Self.popSpringDamping)) {
+                pressPopScale = 1.0
+            }
         }
     }
 

@@ -1398,7 +1398,10 @@ struct CalculatorWindowView: View {
         case 69: viewModel.setOperator(.add); return true
         case 75: viewModel.setOperator(.divide); return true
         case 78: viewModel.setOperator(.subtract); return true
-        case 81, 76: viewModel.evaluate(); return true // keypad = / enter
+        case 81, 76:
+            playEnterButtonSoundIfEnabled()
+            viewModel.evaluate()
+            return true // keypad = / enter
         default:
             break
         }
@@ -1428,6 +1431,7 @@ struct CalculatorWindowView: View {
                 viewModel.clearDisplayEditCursor()
                 return true
             }
+            playEnterButtonSoundIfEnabled()
             viewModel.evaluate()
             return true
         }
@@ -1462,6 +1466,14 @@ struct CalculatorWindowView: View {
         }
 
         return handled
+    }
+
+    private func playEnterButtonSoundIfEnabled() {
+        guard !windowSettings.disablesButtonSound else {
+            return
+        }
+
+        CalculatorButtonSound.playEnterClick()
     }
 
     // MARK: - Button metadata
@@ -1703,12 +1715,19 @@ private struct CompactActionButton: View {
         @State private var hovering: Bool = false
         @State private var shimmerProgress: CGFloat = 0
         @State private var shimmerVisible: Bool = false
+        @State private var pressPopScale: CGFloat = 1.0
+        @State private var pointerIsDown: Bool = false
+        @State private var pressPopGeneration: Int = 0
+        private static let popGrowDuration: TimeInterval = 0.05
+        private static let popSpringResponse: Double = 0.18
+        private static let popSpringDamping: Double = 0.62
         @Environment(\.colorScheme) private var colorScheme
 
         var body: some View {
             Button(action: handleTap) {
                 labelView
                     .scaleEffect(x: horizontalScale, y: 1.0, anchor: .center)
+                    .scaleEffect(pressPopScale)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .contentShape(Rectangle())
             }
@@ -1761,7 +1780,19 @@ private struct CompactActionButton: View {
                 }
             }
             .contentShape(RoundedRectangle(cornerRadius: 6))
+            .zIndex(pressPopScale > 1.001 ? 1 : 0)
             .disabled(!enabled)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in
+                        guard !pointerIsDown else { return }
+                        pointerIsDown = true
+                        triggerPressPopAnimation()
+                    }
+                    .onEnded { _ in
+                        pointerIsDown = false
+                    }
+            )
             .onHover { hovering in
                 self.hovering = hovering
                 if hovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
@@ -1779,6 +1810,22 @@ private struct CompactActionButton: View {
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 shimmerVisible = false
+            }
+        }
+
+        private func triggerPressPopAnimation() {
+            pressPopGeneration += 1
+            let currentGeneration = pressPopGeneration
+
+            withAnimation(.easeOut(duration: Self.popGrowDuration)) {
+                pressPopScale = 1.15
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.popGrowDuration) {
+                guard currentGeneration == pressPopGeneration else { return }
+                withAnimation(.spring(response: Self.popSpringResponse, dampingFraction: Self.popSpringDamping)) {
+                    pressPopScale = 1.0
+                }
             }
         }
 
