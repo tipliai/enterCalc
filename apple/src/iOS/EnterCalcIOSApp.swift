@@ -1167,7 +1167,7 @@ private extension EnterCalcIOSView {
 
     func updateDisplayShimmerParallax() {
 #if canImport(UIKit)
-        guard UIDevice.current.userInterfaceIdiom == .phone else {
+        guard supportsDisplayShimmerMotionParallax() else {
             displayShimmerParallaxOffset = .zero
             return
         }
@@ -1175,7 +1175,8 @@ private extension EnterCalcIOSView {
             return
         }
 
-        var targetOffset: CGSize = displayShimmerParallaxOffset
+        let allowsTranslation = supportsDisplayShimmerTranslation()
+        var targetOffset: CGSize = allowsTranslation ? displayShimmerParallaxOffset : .zero
         var targetAngle: Double = displayShimmerAngleDegrees
 
         switch UIDevice.current.orientation {
@@ -1186,10 +1187,10 @@ private extension EnterCalcIOSView {
             targetOffset = .zero
             targetAngle = 152
         case .landscapeLeft:
-            targetOffset = CGSize(width: -1.0, height: 0)
+            targetOffset = allowsTranslation ? CGSize(width: -1.0, height: 0) : .zero
             targetAngle = -62
         case .landscapeRight:
-            targetOffset = CGSize(width: 1.0, height: 0)
+            targetOffset = allowsTranslation ? CGSize(width: 1.0, height: 0) : .zero
             targetAngle = 22
         default:
             break
@@ -1258,7 +1259,7 @@ private extension EnterCalcIOSView {
 
     func startDisplayShimmerParallaxMotion() {
 #if canImport(UIKit) && canImport(CoreMotion)
-        guard UIDevice.current.userInterfaceIdiom == .phone else {
+        guard supportsDisplayShimmerMotionParallax() else {
             displayShimmerParallaxOffset = .zero
             stopDisplayShimmerFallbackAnimation()
             return
@@ -1290,13 +1291,15 @@ private extension EnterCalcIOSView {
             }
             guard let motion else { return }
 
-            let maxOffset: CGFloat = 5.2
+            let isPadDevice = UIDevice.current.userInterfaceIdiom == .pad
+            let allowsTranslation = supportsDisplayShimmerTranslation()
+            let maxOffset: CGFloat = isPadDevice ? 5.6 : 5.2
             let horizontalGravity = displayShimmerHorizontalGravityComponent(
                 gravityX: motion.gravity.x,
                 gravityY: motion.gravity.y
             )
             let rawX = max(-maxOffset, min(maxOffset, CGFloat(horizontalGravity) * maxOffset))
-            let targetOffset = CGSize(width: rawX, height: 0)
+            let targetOffset = allowsTranslation ? CGSize(width: rawX, height: 0) : .zero
             let targetAngle = displayShimmerBaseAngle() + horizontalGravity * 30
 
             DispatchQueue.main.async {
@@ -1304,15 +1307,19 @@ private extension EnterCalcIOSView {
 
                 // Heavier smoothing plus capped per-update steps prevents abrupt pops on fast motion.
                 let smoothing: CGFloat = 0.92
-                let maxOffsetStep: CGFloat = 0.28
-                let nextOffsetX = displayShimmerParallaxOffset.width * smoothing + targetOffset.width * (1 - smoothing)
-                let nextOffsetY = displayShimmerParallaxOffset.height * smoothing + targetOffset.height * (1 - smoothing)
-                let deltaX = max(-maxOffsetStep, min(maxOffsetStep, nextOffsetX - displayShimmerParallaxOffset.width))
-                let deltaY = max(-maxOffsetStep, min(maxOffsetStep, nextOffsetY - displayShimmerParallaxOffset.height))
-                displayShimmerParallaxOffset = CGSize(
-                    width: displayShimmerParallaxOffset.width + deltaX,
-                    height: displayShimmerParallaxOffset.height + deltaY
-                )
+                let maxOffsetStep: CGFloat = isPadDevice ? 0.252 : 0.28
+                if allowsTranslation {
+                    let nextOffsetX = displayShimmerParallaxOffset.width * smoothing + targetOffset.width * (1 - smoothing)
+                    let nextOffsetY = displayShimmerParallaxOffset.height * smoothing + targetOffset.height * (1 - smoothing)
+                    let deltaX = max(-maxOffsetStep, min(maxOffsetStep, nextOffsetX - displayShimmerParallaxOffset.width))
+                    let deltaY = max(-maxOffsetStep, min(maxOffsetStep, nextOffsetY - displayShimmerParallaxOffset.height))
+                    displayShimmerParallaxOffset = CGSize(
+                        width: displayShimmerParallaxOffset.width + deltaX,
+                        height: displayShimmerParallaxOffset.height + deltaY
+                    )
+                } else {
+                    displayShimmerParallaxOffset = .zero
+                }
 
                 if !displayShimmerIntroActive {
                     let angleSmoothing: Double = 0.94
@@ -1336,6 +1343,19 @@ private extension EnterCalcIOSView {
 #endif
         stopDisplayShimmerFallbackAnimation()
     }
+
+    func supportsDisplayShimmerMotionParallax() -> Bool {
+#if canImport(UIKit)
+        let idiom = UIDevice.current.userInterfaceIdiom
+        return idiom == .phone || idiom == .pad
+#else
+        return false
+#endif
+    }
+
+        func supportsDisplayShimmerTranslation() -> Bool {
+            false
+        }
 
     @ViewBuilder
     func layoutBody(metrics: IOSLayoutMetrics) -> some View {
@@ -2119,7 +2139,7 @@ private extension EnterCalcIOSView {
                             .offset(x: parallaxX * 1.5, y: parallaxY * 0.55)
                 }
                 .compositingGroup()
-                        .mask { shimmerHardMask.padding(1.2) }
+                .mask { shimmerHardMask }
                 .clipShape(shimmerHardMask, style: FillStyle(eoFill: false, antialiased: false))
                 .allowsHitTesting(false)
 
@@ -2307,7 +2327,7 @@ private extension EnterCalcIOSView {
                 }
             }
             .frame(maxWidth: .infinity, minHeight: expandedResultAreaHeight, maxHeight: expandedResultAreaHeight, alignment: .top)
-            .mask { displayShape.padding(0.6) }
+            .mask { displayShape }
             .clipShape(displayShape, style: FillStyle(eoFill: false, antialiased: false))
             .clipped()
             .overlay(alignment: .bottomLeading) {
@@ -2643,8 +2663,8 @@ private extension EnterCalcIOSView {
 
     func keypadResizeHandle(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, height: CGFloat) -> some View {
         let isActive = isResizingKeypadHeight
-        let handleColor = palette.buttonOperation
-        let lineColor = palette.buttonOperation
+        let handleColor = palette.textSecondary.opacity(colorScheme == .dark ? 0.31 : 0.225)
+        let lineColor = handleColor
         let handleBackground = palette.surface
         let verticalCenterOffset = -metrics.sectionSpacing / 2
         let dragGesture = DragGesture(minimumDistance: 0, coordinateSpace: .global)
@@ -4509,7 +4529,7 @@ private struct IOSCompactActionButton: View {
         } label: {
             Image(systemName: button.symbol)
                 .font(EnterCalcFont.appFont(size: min(max(height * 0.55, 12), 20)))
-                .foregroundStyle(Color.white)
+                .foregroundStyle(palette.textPrimary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
                 .scaleEffect(pressPopScale)

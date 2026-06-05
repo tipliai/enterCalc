@@ -495,7 +495,7 @@ struct CalculatorWindowView: View {
                 VStack(alignment: .trailing, spacing: displaySpacing) {
                     Text(viewModel.expressionDisplay)
                         .font(EnterCalcFont.appFont(size: basicFontSize))
-                        .foregroundStyle(fadedForeground)
+                        .foregroundStyle(colorScheme == .dark ? fadedForeground : Color.black)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .multilineTextAlignment(.trailing)
                         .lineLimit(nil)
@@ -516,10 +516,10 @@ struct CalculatorWindowView: View {
                         EditableDisplayResultText(
                             text: viewModel.display,
                             fontSize: resultFontSize,
-                            foregroundColor: primaryForeground,
+                            foregroundColor: colorScheme == .dark ? primaryForeground : Color.black,
                             minScaleFactor: 0.15,
                             caretBoundaryIndex: viewModel.displayEditCaretBoundaryIndex,
-                            caretColor: primaryForeground,
+                            caretColor: colorScheme == .dark ? primaryForeground : Color.black,
                             onTapBoundary: { boundaryIndex in
                                 viewModel.setDisplayEditCursor(displayBoundaryIndex: boundaryIndex)
                             }
@@ -529,7 +529,7 @@ struct CalculatorWindowView: View {
                     } else {
                         Text(viewModel.display)
                             .font(EnterCalcFont.appFont(size: resultFontSize))
-                            .foregroundStyle(primaryForeground)
+                            .foregroundStyle(colorScheme == .dark ? primaryForeground : Color.black)
                             .frame(maxWidth: .infinity, minHeight: resultLineHeight, maxHeight: resultLineHeight, alignment: .trailing)
                             .lineLimit(1)
                             .allowsTightening(true)
@@ -547,23 +547,59 @@ struct CalculatorWindowView: View {
             .padding(.horizontal, 8)
             .padding(.bottom, 3)
         }
-        .background(displayHover ? panelColor : surfaceColor)
+        .background {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(displayHover ? panelColor : surfaceColor)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                stops: colorScheme == .dark
+                                    ? [
+                                        .init(color: Color.white.opacity(0.10), location: 0.0),
+                                        .init(color: Color.white.opacity(0.16), location: 0.5),
+                                        .init(color: Color.white.opacity(0.10), location: 1.0)
+                                    ]
+                                    : [
+                                        .init(color: Color.white.opacity(0.26), location: 0.0),
+                                        .init(color: Color.white.opacity(0.56), location: 0.5),
+                                        .init(color: Color.white.opacity(0.26), location: 1.0)
+                                    ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                }
+                .overlay {
+                    if colorScheme != .dark {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    stops: [
+                                        .init(color: Color.white.opacity(0.0), location: 0.20),
+                                        .init(color: Color.white.opacity(0.08), location: 0.31),
+                                        .init(color: Color.white.opacity(0.42), location: 0.33),
+                                        .init(color: Color.white.opacity(0.18), location: 0.338),
+                                        .init(color: Color.white.opacity(0.06), location: 0.42),
+                                        .init(color: Color.white.opacity(0.0), location: 0.56)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(Color.white.opacity(0.38), lineWidth: 0.8)
+                    } else {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(Color.white.opacity(0.12), lineWidth: 0.6)
+                    }
+                }
+        }
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        stops: [
-                            .init(color: Color.white.opacity(colorScheme == .dark ? 0.22 : 0.46), location: 0.0),
-                            .init(color: Color.white.opacity(colorScheme == .dark ? 0.22 : 0.46), location: 0.06),
-                            .init(color: Color.white.opacity(0), location: 0.16),
-                            .init(color: Color.white.opacity(colorScheme == .dark ? 0.10 : 0.18), location: 1.0)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .allowsHitTesting(false)
+                .stroke(palette.buttonBorder, lineWidth: colorScheme == .dark ? 0 : 1)
         )
         .contextMenu {
             Button {
@@ -800,8 +836,8 @@ struct CalculatorWindowView: View {
     }
 
     private func keypadResizeHandle(defaultKeypadHeight: CGFloat, height: CGFloat) -> some View {
-        let lineColor = palette.buttonOperation
-        let handleColor = palette.buttonOperation
+        let handleColor = palette.textSecondary.opacity(colorScheme == .dark ? 0.31 : 0.225)
+        let lineColor = handleColor
         let dragGesture = DragGesture(minimumDistance: 0, coordinateSpace: .global)
             .onChanged { value in
                 if !isResizingKeypadHeight {
@@ -1659,7 +1695,7 @@ private struct CompactActionButton: View {
                 Button(action: action) {
                     Image(systemName: symbol)
                         .font(EnterCalcFont.appFont(size: min(max(height * 0.52, 11), 17)))
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(palette.textPrimary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .contentShape(Rectangle())
                 }
