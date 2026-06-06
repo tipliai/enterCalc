@@ -1,5 +1,7 @@
 import Foundation
 
+// Reads/writes CalculatorScreenSettings to UserDefaults and runs one-time
+// migrations for renamed legacy keys (classic-percent -> alternative keypad).
 public enum CalculatorScreenSettingsPersistence {
     private static let defaultThemeRawValue = "system"
     private static let defaultKeypadHeightMultiplier: Double = 1.0

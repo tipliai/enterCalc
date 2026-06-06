@@ -8,6 +8,10 @@ import CoreHaptics
 import CoreMotion
 #endif
 
+// Centralizes iOS haptic feedback. Prepared generators are reused per gesture
+// so the Taptic Engine warms up. On devices without haptics, regular keys fall
+// back to a click sound; the Enter key is skipped here since its sound is played
+// separately by the caller.
 @MainActor
 private enum IOSActionHaptics {
     static let keyPressImpact = UIImpactFeedbackGenerator(style: .light)
@@ -61,6 +65,8 @@ extension Notification.Name {
     static let enterCalcIOSToggleRoundingPanel = Notification.Name("EnterCalc.iOS.ToggleRoundingPanel")
 }
 
+// Snapshot of a hardware-keyboard press, decoupled from UIKit so the SwiftUI
+// layer can route it without importing UIPress everywhere.
 struct IOSHardwareKeyEvent {
     let characters: String?
     let charactersIgnoringModifiers: String?
@@ -77,6 +83,8 @@ private func debugKeyCharacters(_ text: String?) -> String {
     return "\"\(text)\"[\(scalarList)]"
 }
 
+// Bridges an invisible UIKit first-responder view into SwiftUI so external
+// keyboard presses can be captured (SwiftUI alone can't see raw key events).
 struct IOSHardwareKeyCaptureView: UIViewRepresentable {
     let isEnabled: Bool
     let onKeyPress: (IOSHardwareKeyEvent) -> Bool
@@ -97,6 +105,8 @@ struct IOSHardwareKeyCaptureView: UIViewRepresentable {
     }
 }
 
+// The backing view that becomes first responder to receive key presses. It
+// forwards each press to onKeyPress and lets UIKit handle anything unhandled.
 final class IOSHardwareKeyCaptureUIView: UIView {
     var onKeyPress: ((IOSHardwareKeyEvent) -> Bool)?
     var isCaptureEnabled: Bool = true {
@@ -169,6 +179,8 @@ final class IOSHardwareKeyCaptureUIView: UIView {
     }
 }
 
+// App entry point. Registers the bundled fonts and wires the menu/keyboard
+// commands to the focused calculator action context.
 @main
 struct EnterCalcIOSApp: App {
     @FocusedValue(\.calculatorActions) private var actionContext
@@ -254,6 +266,8 @@ struct EnterCalcIOSApp: App {
     }
 }
 
+// Root view hosting the calculator. Owns the per-screen store, persisted
+// settings, and the transient animation/overlay state for the iOS UI.
 struct EnterCalcIOSView: View {
     @StateObject private var screenStore = CalculatorScreenStore(
         homeSettings: CalculatorScreenSettings(
@@ -3114,6 +3128,8 @@ private extension EnterCalcIOSView {
 
 }
 
+// Modal settings sheet bound to the persisted preferences. Edits are held as
+// drafts and committed on dismiss to avoid churn while the user is choosing.
 private struct IOSSettingsSheet: View {
     let titleKey: String
     let appearanceLabelKey: String
@@ -3302,6 +3318,9 @@ private struct IOSSettingsSheet: View {
     }
 }
 
+// Slide-up panel for choosing rounding precision. The slider maps onto an
+// exponential curve so low digit counts (the common cases) get more travel,
+// with discrete snap points and a leading "off" position.
 private struct IOSRoundingPanel: View {
     let palette: Palette
     let metrics: IOSLayoutMetrics
@@ -3520,6 +3539,8 @@ private struct IOSRoundingPanel: View {
         return centerX - markerWidth * 0.5
     }
 
+    // Maps a step index to a 0...1 track position on the exponential curve so the
+    // tick marks and thumb stay aligned with the snap points.
     private static func sliderPosition(for stepIndex: Int) -> Double {
         let boundedStepIndex = min(max(stepIndex, 0), Int(exponentialDomainMax))
         let value = Double(boundedStepIndex)
@@ -3545,6 +3566,8 @@ private struct IOSRoundingPanel: View {
     }
 }
 
+// Slide-up panel listing past calculations. Supports drag-to-resize, an empty
+// state that adapts to orientation, and per-row context menu copy actions.
 private struct IOSHistoryPanel: View {
     let entries: [HistoryEntry]
     let palette: Palette
@@ -3835,6 +3858,7 @@ private struct IOSHistoryPanel: View {
     }
 }
 
+// One entry in a long-press context menu.
 private struct IOSContextMenuAction {
     let title: String
     let systemImage: String?
@@ -3842,6 +3866,7 @@ private struct IOSContextMenuAction {
     let handler: () -> Void
 }
 
+// A group of related actions, rendered as a divided section in the menu.
 private struct IOSContextMenuSection {
     let actions: [IOSContextMenuAction]
 }
@@ -3851,6 +3876,8 @@ private enum IOSContextMenuPreviewStyle {
     case hidden
 }
 
+// SwiftUI wrapper that attaches a UIKit context menu to arbitrary content,
+// since UIKit's interaction gives finer control over the preview than SwiftUI's.
 private struct IOSContextMenuContainer<Content: View>: View {
     let sections: [IOSContextMenuSection]
     let previewStyle: IOSContextMenuPreviewStyle
@@ -3876,6 +3903,8 @@ private struct IOSContextMenuContainer<Content: View>: View {
 }
 
 #if canImport(UIKit)
+// Bridges the SwiftUI content into a UIKit host so a UIContextMenuInteraction
+// can be installed with the requested sections and preview style.
 private struct IOSContextMenuRepresentable<Content: View>: UIViewControllerRepresentable {
     let sections: [IOSContextMenuSection]
     let previewStyle: IOSContextMenuPreviewStyle
@@ -4044,6 +4073,7 @@ private final class IOSContextMenuHostingViewController: UIViewController, UICon
 }
 #endif
 
+// A selectable UI language: its locale code and the name shown in the picker.
 private struct LanguageOption {
     let code: String
     let displayName: String
@@ -4069,6 +4099,8 @@ private extension View {
     }
 }
 
+// User-selectable theme. `blue` is a dark-based custom palette, so it reports a
+// dark color scheme to the system while supplying its own colors.
 private enum AppTheme: String, CaseIterable {
     case system
     case light
@@ -4118,11 +4150,13 @@ private enum AppTheme: String, CaseIterable {
     }
 }
 
+// Which slide-up overlay is currently shown, if any.
 private enum IOSOverlayPane {
     case history
     case rounding
 }
 
+// Coarse layout buckets that drive metric selection below.
 private enum IOSLayoutMode {
     case phonePortrait
     case phoneLandscape
@@ -4134,6 +4168,8 @@ private enum IOSDeviceFamily {
     case pad
 }
 
+// Precomputed sizing values for one layout mode. Centralizing the magic numbers
+// here keeps the view body declarative and avoids recomputing them per frame.
 private struct IOSLayoutMetrics {
     static let minimumPadWindowSize = CGSize(width: 340, height: 440)
     static let defaultPadWindowSize = minimumPadWindowSize
@@ -4576,6 +4612,9 @@ private extension View {
     }
 }
 
+// Data model for one keypad button: its label, role, the action it performs on
+// the view model, and how many grid columns it spans. Static factories keep the
+// keypad layout definitions terse.
 private struct IOSCalcButton {
     enum Kind {
         case digit, operation, function, equals
@@ -4634,12 +4673,15 @@ private struct IOSCalcButton {
     }
 }
 
+// Model for a button in the secondary action row (copy, undo, history, etc.).
 private struct IOSActionRowButton {
     let symbol: String
     let accessibilityLabelKey: String
     let action: (CalculatorScreenSession) -> Void
 }
 
+// Compact icon button for the action row. Plays a brief scale "pop" on press
+// unless Reduce Motion is enabled.
 private struct IOSCompactActionButton: View {
     let button: IOSActionRowButton
     let accessibilityLabel: String
@@ -4721,6 +4763,9 @@ private struct IOSCompactActionButton: View {
     }
 }
 
+// Renders a single keypad key from its IOSCalcButton model, including custom
+// glyph layouts (e.g. the sign and reciprocal symbols) and operator reveal
+// animation.
 private struct IOSKeypadButton: View {
     let button: IOSCalcButton
     let palette: Palette
@@ -5066,6 +5111,8 @@ private struct IOSKeypadButton: View {
     }
 }
 
+// Shared button style giving a subtle scale-down and color overlay while
+// pressed, so every tappable control reacts consistently.
 private struct IOSPressedButtonStyle: ButtonStyle {
     let cornerRadius: CGFloat
     let overlayColor: Color

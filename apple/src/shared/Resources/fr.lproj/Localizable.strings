@@ -14,9 +14,7 @@
 "settings.language" = "Langue";
 "settings.language.label" = "Choisir la langue";
 "settings.language.defaultOption" = "Par défaut (%@)";
-"settings.numberFormat" = "Format numérique";
 "settings.userInterface" = "Interface utilisateur";
-"settings.calculation" = "Calcul";
 "settings.numberFormat.style" = "Style des nombres";
 "settings.numberFormat.scientific" = "Utiliser la notation scientifique";
 "settings.percent.classicBehavior" = "Utiliser le clavier alternatif";
@@ -47,7 +45,6 @@
 "backspace" = "Retour arrière";
 "clear" = "Effacer";
 "clear.all.command" = "Tout effacer (AC)";
-"clear.commandBackspace" = "Effacer (Cmd+Retour arrière)";
 "screen.new" = "Nouvel écran";
 "screen.close" = "Fermer l’écran";
 "screen.pageStatus" = "Écran %1$@ sur %2$@";

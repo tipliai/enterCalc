@@ -17,8 +17,6 @@ public struct Palette {
     public let buttonHighlight: Color
     public let buttonBorder: Color
     public let buttonHoverOverlay: Color
-    public let operatorColumnTop: Color
-    public let operatorColumnBottom: Color
     public let memoryControlActive: Color
     public let memoryControlDisabled: Color
     public let headerHover: Color
@@ -29,7 +27,7 @@ public struct Palette {
     public static let operatorColumnTitles: [String] = ["÷", "×", "−", "+", "="]
 
     /// Returns a solid color for a right-column button at `index` out of `total`,
-    /// interpolated between `operatorColumnTop` and `operatorColumnBottom`.
+    /// interpolated along a fixed blue gradient (#9cc5fc → #005aff) shared by all themes.
     public func operatorColumnColor(at index: Int) -> Color {
         let total = Palette.operatorColumnTitles.count
         let t = total > 1 ? CGFloat(index) / CGFloat(total - 1) : 0
@@ -83,8 +81,6 @@ public struct Palette {
             buttonHighlight: isBlueLike ? Color(red: 0.812, green: 0.894, blue: 1.0) : (isDarkLike ? buttonHighlight : Color(red: 0.52, green: 0.70, blue: 0.95)),
             buttonBorder: isDarkLike ? Color.white.opacity(isBlueLike ? 0.26 : 0.24) : Color.black.opacity(0.24),
             buttonHoverOverlay: isDarkLike ? Color.white.opacity(isBlueLike ? 0.18 : 0.16) : Color.black.opacity(0.14),
-            operatorColumnTop: operatorColumnTop,
-            operatorColumnBottom: operatorColumnBottom,
             memoryControlActive: memoryControlActive,
             memoryControlDisabled: memoryControlActive.opacity(isDarkLike ? 0.86 : 0.72),
             headerHover: isDarkLike ? Color.white.opacity(isBlueLike ? 0.22 : 0.2) : Color.black.opacity(0.16),
@@ -112,8 +108,6 @@ public struct Palette {
         buttonHighlight: Color(red: 0.6118, green: 0.7725, blue: 0.9882), // #9cc5fc
         buttonBorder: Color.white.opacity(0.05),
         buttonHoverOverlay: Color.black.opacity(0.12),
-        operatorColumnTop: Color(red: 0.6118, green: 0.7725, blue: 0.9882),    // #9cc5fc
-        operatorColumnBottom: Color(red: 0, green: 0.3529, blue: 1.0),         // #005aff
         memoryControlActive: Color(red: 0.6118, green: 0.7725, blue: 0.9882), // #9cc5fc
         memoryControlDisabled: Color(red: 0.6118, green: 0.7725, blue: 0.9882), // #9cc5fc
         headerHover: Color.white.opacity(0.08),
@@ -137,8 +131,6 @@ public struct Palette {
         buttonHighlight: Color(red: 0.6118, green: 0.7725, blue: 0.9882), // #9cc5fc
         buttonBorder: Color.black.opacity(0.05),
         buttonHoverOverlay: Color.black.opacity(0.06),
-        operatorColumnTop: Color(red: 0.6118, green: 0.7725, blue: 0.9882),    // #9cc5fc
-        operatorColumnBottom: Color(red: 0, green: 0.3529, blue: 1.0),         // #005aff
         memoryControlActive: Color(red: 0.6118, green: 0.7725, blue: 0.9882), // #9cc5fc
         memoryControlDisabled: Color(red: 0.6118, green: 0.7725, blue: 0.9882), // #9cc5fc
         headerHover: Color.black.opacity(0.08),
@@ -162,8 +154,6 @@ public struct Palette {
         buttonHighlight: Color(red: 0.803, green: 0.878, blue: 1.0),
         buttonBorder: Color.white.opacity(0.06),
         buttonHoverOverlay: Color.black.opacity(0.08),
-        operatorColumnTop: Color(red: 0.678, green: 0.804, blue: 1.0),
-        operatorColumnBottom: Color(red: 0.290, green: 0.455, blue: 1.0),
         memoryControlActive: Color(red: 0.803, green: 0.878, blue: 1.0),
         memoryControlDisabled: Color(red: 0.803, green: 0.878, blue: 1.0),
         headerHover: Color.white.opacity(0.12),
