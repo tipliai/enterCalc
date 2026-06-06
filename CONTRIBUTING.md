@@ -24,4 +24,3 @@ If you want to propose a code change:
 ## Security
 
 Do not include secrets, signing assets, provisioning profiles, or private credentials in issues or pull requests.
-## Open Source Fonts
