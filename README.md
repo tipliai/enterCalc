@@ -2,7 +2,7 @@
 
 **EnterCalc: Your Calculation Crunching Companion**
 
-You enter the numbers, EnterCalc handles the math. EnterCalc is a modern native calculator for iOS and macOS, focused on simplicity, intuitive quality-of-life improvements, and easy multitasking. Android support is planned for a future release.
+You enter calculations, EnterCalc returns results. EnterCalc is a native calculator for iOS and macOS, focused on simplicity, intuitive quality-of-life improvements, and easy multitasking.
 
 ## Support
 
@@ -12,14 +12,26 @@ You enter the numbers, EnterCalc handles the math. EnterCalc is a modern native 
 
 ## Features
 
-- Free and open source
-- Native apps for macOS and iOS
-- Simple calculator design and functionality
-- Open multiple calculator panels with ease
-- Advanced copy, paste, and undo support
-- Multiple languages and display format options
+- Free & open-source under the MIT License
+- Open multiple calculator panels with independent calculations and settings
+- Calculation history with quick reuse of previous results
+- Advanced copy, paste, undo, and redo support
+- One-click copying for fast workflows
+- Preserve calculation context when copying and pasting
+- Digit-level editing for quick corrections
+- Hardware keyboard and shortcut support
+- Landscape mode support
+- Optional scientific notation
+- Configurable rounding behavior
+- Currency symbol handling
+- Multiple number formatting styles
+- Multiple language and localization options
+- Support for alternative keyboard layouts
+- Light and Dark Mode support with multiple themes
+- Optional tactile and audio feedback on supported devices
+- Accessibility-focused design
 - Lightweight and distraction-free
-- Designed to operate entirely on-device
+- Privacy-focused, operates entirely on your device with no tracking or analytics
 
 ## Version 1.0.0 Scope
 
