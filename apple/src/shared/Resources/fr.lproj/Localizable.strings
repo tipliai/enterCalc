@@ -43,6 +43,8 @@
 "paste" = "Coller";
 "undo" = "Annuler";
 "redo" = "Rétablir";
+"toggleSign" = "Changer le signe";
+"backspace" = "Retour arrière";
 "clear" = "Effacer";
 "clear.all.command" = "Tout effacer (AC)";
 "clear.commandBackspace" = "Effacer (Cmd+Retour arrière)";

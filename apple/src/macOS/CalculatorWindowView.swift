@@ -3,6 +3,36 @@ import SwiftUI
 import AppKit
 import EnterCalcCore
 
+private func macPreferredTextScale(for style: NSFont.TextStyle, baseline: CGFloat) -> CGFloat {
+    let preferredSize = NSFont.preferredFont(forTextStyle: style).pointSize
+    guard preferredSize.isFinite, baseline > 0 else { return 1.0 }
+    return max(1.0, preferredSize / baseline)
+}
+
+private func macAccessibilityTextScaleFromSystemSettings() -> CGFloat {
+    guard let universalAccessDefaults = UserDefaults(suiteName: "com.apple.universalaccess"),
+          let fontSizeCategory = universalAccessDefaults.dictionary(forKey: "FontSizeCategory"),
+          let rawGlobalCategory = fontSizeCategory["global"] as? String else {
+        return 1.0
+    }
+
+    switch rawGlobalCategory.uppercased() {
+    case "XS": return 0.85
+    case "S": return 0.92
+    case "M": return 1.0
+    case "L": return 1.08
+    case "XL": return 1.18
+    case "XXL": return 1.30
+    case "XXXL": return 1.42
+    case "AX1": return 1.55
+    case "AX2": return 1.72
+    case "AX3": return 1.90
+    case "AX4": return 2.10
+    case "AX5": return 2.35
+    default: return 1.0
+    }
+}
+
 @MainActor
 private enum MacButtonSoundFeedback {
     static func playIfNeeded(disabled: Bool, isEnterKey: Bool = false) {
@@ -41,8 +71,10 @@ struct CalculatorWindowView: View {
 
     @ObservedObject var viewModel: CalculatorViewModel
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.openWindow) private var openWindow
     @Environment(\.scenePhase) private var scenePhase
+    @ScaledMetric(relativeTo: .largeTitle) private var displayDynamicTypeScale: CGFloat = 1.0
     @State private var showHistory: Bool = false
     @State private var userToggledHistory: Bool = false
     @State private var flashCopy: Bool = false
@@ -93,7 +125,7 @@ struct CalculatorWindowView: View {
         value.location.y - value.startLocation.y
     }
 
-    private var palette: Palette { currentTheme.palette(using: colorScheme) }
+    private var palette: Palette { currentTheme.palette(using: colorScheme, increasedContrast: colorSchemeContrast == .increased) }
 
     private var currentTheme: AppTheme {
         AppTheme(rawValue: windowSettings.themeRawValue) ?? .system
@@ -101,6 +133,13 @@ struct CalculatorWindowView: View {
 
     private var currentNumberFormatStyle: NumberFormatStyle {
         NumberFormatStyle(rawValue: windowSettings.numberFormatStyleRawValue) ?? NumberFormatStyle.detected()
+    }
+
+    private var effectiveHistoryTextScale: CGFloat {
+        max(
+            macPreferredTextScale(for: .body, baseline: 13),
+            macAccessibilityTextScaleFromSystemSettings()
+        )
     }
 
     private var currentLocalizationBundle: Bundle? {
@@ -182,7 +221,8 @@ struct CalculatorWindowView: View {
                         onSelect: { entry in viewModel.reuse(entry) },
                         onClear: { viewModel.clearHistory() },
                         onCopyOperation: { entry in copyHistoryEntryOperationToPasteboard(entry) },
-                        palette: palette
+                        palette: palette,
+                        textScale: effectiveHistoryTextScale
                     )
                     .frame(width: historyPanelWidth)
                 }
@@ -467,15 +507,31 @@ struct CalculatorWindowView: View {
     }
 
     private var display: some View {
-        let basicFontSize: CGFloat = 12
-        let resultFontSize: CGFloat = 48
-        let resultLineHeight: CGFloat = 54
+        let baseBasicFontSize: CGFloat = 12
+        let baseResultFontSize: CGFloat = 48
         let displaySpacing: CGFloat = 4
-        let basicRowHeight: CGFloat = 16
+        let baseBasicRowHeight: CGFloat = 16
         let basicBaseOpacity: Double = 0.15
 
         return GeometryReader { displayGeometry in
             let contentHeight = max(1, displayGeometry.size.height - 8 - 3)
+            let effectiveDisplayScale = max(
+                displayDynamicTypeScale,
+                macPreferredTextScale(for: .largeTitle, baseline: 26),
+                macAccessibilityTextScaleFromSystemSettings()
+            )
+            let resultFontSize = boundedDynamicTypeSize(
+                baseResultFontSize,
+                scale: effectiveDisplayScale,
+                maximum: max(baseResultFontSize, contentHeight * 0.78)
+            )
+            let basicFontSize = boundedDynamicTypeSize(
+                baseBasicFontSize,
+                scale: effectiveDisplayScale,
+                maximum: max(baseBasicFontSize, resultFontSize * 0.34)
+            )
+            let resultLineHeight = resultFontSize * 1.12
+            let basicRowHeight = max(baseBasicRowHeight, basicFontSize * 1.32)
             let measuredOperationHeight = max(operationTextMeasuredHeight, basicFontSize * 1.3)
             let operationOffsetY = operationContentOffsetY(
                 operationHeight: measuredOperationHeight,
@@ -752,6 +808,10 @@ struct CalculatorWindowView: View {
         return baseOpacity * visibility
     }
 
+    private func boundedDynamicTypeSize(_ baseSize: CGFloat, scale: CGFloat, maximum: CGFloat) -> CGFloat {
+        min(max(baseSize, baseSize * scale), maximum)
+    }
+
     private var keypadArea: some View {
         keypadGrid
     }
@@ -774,6 +834,7 @@ struct CalculatorWindowView: View {
                             let button = compactButtons[index]
                             CompactActionButton(
                                 symbol: button.symbol,
+                                accessibilityLabel: button.accessibilityLabel,
                                 isBare: button.isBare,
                                 height: compactActionHeight,
                                 disabled: button.action == nil,
@@ -906,7 +967,7 @@ struct CalculatorWindowView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     Text(macLocalized("history.empty", bundle: currentLocalizationBundle))
-                        .font(EnterCalcFont.subheadline)
+                        .font(EnterCalcFont.appFont(size: 15 * effectiveHistoryTextScale))
                         .foregroundStyle(fadedForeground)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -920,6 +981,7 @@ struct CalculatorWindowView: View {
                                 primaryForeground: primaryForeground,
                                 fadedForeground: fadedForeground,
                                 tileBackground: memoryOverlayRowHoverColor,
+                                textScale: effectiveHistoryTextScale,
                                 onSelect: {
                                     viewModel.reuse(entry)
                                     closeHistoryOverlay()
@@ -1122,8 +1184,11 @@ struct CalculatorWindowView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(memoryOverlayBackgroundColor)
             .clipShape(
-                RoundedRectangle(
-                    cornerRadius: 10,
+                UnevenRoundedRectangle(
+                    topLeadingRadius: 0,
+                    bottomLeadingRadius: 10,
+                    bottomTrailingRadius: 10,
+                    topTrailingRadius: 0,
                     style: .continuous
                 )
             )
@@ -1538,6 +1603,7 @@ struct CalculatorWindowView: View {
 
     private struct CompactActionItem {
         let symbol: String
+        let accessibilityLabel: String
         let isBare: Bool
         let action: (() -> Void)?
     }
@@ -1633,11 +1699,11 @@ struct CalculatorWindowView: View {
     private func compactActionRowButtons() -> [CompactActionItem] {
         guard !windowSettings.usesAlternativeKeypad else { return [] }
         return [
-            CompactActionItem(symbol: "arrow.uturn.backward", isBare: false, action: { viewModel.undo() }),
-            CompactActionItem(symbol: "arrow.uturn.forward", isBare: false, action: { viewModel.redo() }),
-            CompactActionItem(symbol: "plusminus", isBare: false, action: { viewModel.toggleSign() }),
-            CompactActionItem(symbol: "slider.horizontal.below.rectangle", isBare: false, action: { toggleRoundingOverlay() }),
-            CompactActionItem(symbol: "delete.left", isBare: false, action: { viewModel.backspace() })
+            CompactActionItem(symbol: "arrow.uturn.backward", accessibilityLabel: macLocalized("undo", bundle: currentLocalizationBundle), isBare: false, action: { viewModel.undo() }),
+            CompactActionItem(symbol: "arrow.uturn.forward", accessibilityLabel: macLocalized("redo", bundle: currentLocalizationBundle), isBare: false, action: { viewModel.redo() }),
+            CompactActionItem(symbol: "plusminus", accessibilityLabel: macLocalized("toggleSign", bundle: currentLocalizationBundle), isBare: false, action: { viewModel.toggleSign() }),
+            CompactActionItem(symbol: "slider.horizontal.below.rectangle", accessibilityLabel: macLocalized("rounding.toggle", bundle: currentLocalizationBundle), isBare: false, action: { toggleRoundingOverlay() }),
+            CompactActionItem(symbol: "delete.left", accessibilityLabel: macLocalized("backspace", bundle: currentLocalizationBundle), isBare: false, action: { viewModel.backspace() })
         ]
     }
 
@@ -1678,11 +1744,13 @@ private struct MemoryControlsBoundsKey: PreferenceKey {
 
 private struct CompactActionButton: View {
     let symbol: String
+    let accessibilityLabel: String
     let isBare: Bool
     let height: CGFloat
     let disabled: Bool
     let palette: Palette
     let action: () -> Void
+    @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
     @State private var hovering: Bool = false
 
     private var cornerRadius: CGFloat { min(max(height * 0.28, 5), 10) }
@@ -1694,12 +1762,13 @@ private struct CompactActionButton: View {
             } else {
                 Button(action: action) {
                     Image(systemName: symbol)
-                        .font(EnterCalcFont.appFont(size: min(max(height * 0.52, 11), 17)))
+                        .font(EnterCalcFont.appFont(size: boundedIconFontSize))
                         .foregroundStyle(palette.textPrimary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(Text(accessibilityLabel))
                 .background(background)
                 .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
                 .overlay(
@@ -1715,6 +1784,17 @@ private struct CompactActionButton: View {
             }
         }
         .frame(height: height)
+    }
+
+    private var boundedIconFontSize: CGFloat {
+        let effectiveControlScale = max(
+            controlDynamicTypeScale,
+            macPreferredTextScale(for: .title2, baseline: 22),
+            macAccessibilityTextScaleFromSystemSettings()
+        )
+        let baseSize = min(max(height * 0.52, 11), 17)
+        let maxSize = max(baseSize, height * 0.82)
+        return min(max(baseSize, baseSize * effectiveControlScale), maxSize)
     }
 
     @ViewBuilder
@@ -1747,6 +1827,7 @@ private struct CompactActionButton: View {
         let palette: Palette
         var operatorRevealProgress: Double = 0.0
         var operatorAnimFadeOpacity: Double = 1.0
+        @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
 
         @State private var hovering: Bool = false
         @State private var shimmerProgress: CGFloat = 0
@@ -1937,7 +2018,18 @@ private struct CompactActionButton: View {
         }
 
         private var primaryFontSize: CGFloat {
-            min(max(height * 0.38, 14), 28)
+            let effectiveControlScale = max(
+                controlDynamicTypeScale,
+                macPreferredTextScale(for: .title2, baseline: 22),
+                macAccessibilityTextScaleFromSystemSettings()
+            )
+            let baseSize = min(max(height * 0.38, 14), 28)
+            let maxSize = max(baseSize, height * 0.82)
+            return min(max(baseSize, baseSize * effectiveControlScale), maxSize)
+        }
+
+        private var boundedIconSquareSize: CGFloat {
+            min(max(primaryFontSize * 1.35, 22), height * 0.9)
         }
 
         private var enterKeyTextFontSize: CGFloat {
@@ -1952,8 +2044,8 @@ private struct CompactActionButton: View {
         @ViewBuilder
         private var labelView: some View {
             if title == "1/x" {
-                let iconWidth = min(max(height * 0.68, 22), 34)
-                let iconHeight = min(max(height * 0.68, 22), 34)
+                let iconWidth = boundedIconSquareSize
+                let iconHeight = boundedIconSquareSize
                 let iconFrameWidth = iconWidth
                 let iconFrameHeight = iconHeight
                 let iconScaleX: CGFloat = 0.94
@@ -1970,8 +2062,8 @@ private struct CompactActionButton: View {
                     .scaleEffect(x: iconScaleX, y: iconScaleY)
                     .offset(x: iconOffsetX, y: iconOffsetY)
             } else if title == "x²" {
-                let iconWidth = min(max(height * 0.68, 22), 34)
-                let iconHeight = min(max(height * 0.68, 22), 34)
+                let iconWidth = boundedIconSquareSize
+                let iconHeight = boundedIconSquareSize
                 let iconFrameWidth = iconWidth
                 let iconFrameHeight = iconHeight
                 let iconScaleX: CGFloat = 0.9
@@ -1988,8 +2080,8 @@ private struct CompactActionButton: View {
                     .scaleEffect(x: iconScaleX, y: iconScaleY)
                     .offset(x: iconOffsetX, y: iconOffsetY)
             } else if title == "+/−" {
-                let secondaryFontSize = min(max(height * 0.28, 10), 20)
-                let slashFontSize = min(max(height * 0.36, 14), 26)
+                let secondaryFontSize = min(max(primaryFontSize * 0.74, 10), height * 0.62)
+                let slashFontSize = min(max(primaryFontSize * 0.95, 14), height * 0.78)
 
                 HStack(spacing: 0) {
                     Text("+")
@@ -2004,8 +2096,8 @@ private struct CompactActionButton: View {
                 }
                 .offset(x: 0, y: -0.2)
             } else if title == "√x" {
-                let iconWidth = min(max(height * 0.68, 22), 34)
-                let iconHeight = min(max(height * 0.68, 22), 34)
+                let iconWidth = boundedIconSquareSize
+                let iconHeight = boundedIconSquareSize
                 let iconFrameWidth = iconWidth
                 let iconFrameHeight = iconHeight
                 let iconScaleX: CGFloat = 0.92
@@ -2042,6 +2134,7 @@ private struct HistoryPanel: View {
     let onClear: () -> Void
     let onCopyOperation: (HistoryEntry) -> Void
     let palette: Palette
+    let textScale: CGFloat
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.macLocalizationBundle) private var localizationBundle
     @State private var hoverState: Bool = false
@@ -2051,7 +2144,7 @@ private struct HistoryPanel: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(macLocalized("history.title", bundle: localizationBundle))
-                    .font(EnterCalcFont.headline)
+                    .font(EnterCalcFont.appFont(size: 17 * textScale))
                     .foregroundStyle(primaryForeground)
                 Spacer()
                 if !entries.isEmpty {
@@ -2086,7 +2179,7 @@ private struct HistoryPanel: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     Text(emptyHistoryMessage)
-                        .font(EnterCalcFont.subheadline)
+                        .font(EnterCalcFont.appFont(size: 15 * textScale))
                         .foregroundStyle(fadedForeground)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: didClearHistoryInPanel ? .top : .center)
@@ -2101,6 +2194,7 @@ private struct HistoryPanel: View {
                                 primaryForeground: primaryForeground,
                                 fadedForeground: fadedForeground,
                                 tileBackground: historyTileBackground,
+                                textScale: textScale,
                                 onSelect: { onSelect(entry) },
                                 onCopyOperation: {
                                     onCopyOperation(entry)
@@ -2140,19 +2234,23 @@ private struct HistoryEntryRow: View {
     let primaryForeground: Color
     let fadedForeground: Color
     let tileBackground: Color
+    let textScale: CGFloat
     let onSelect: () -> Void
     let onCopyOperation: () -> Void
     @Environment(\.macLocalizationBundle) private var localizationBundle
     @State private var isHovering: Bool = false
 
     var body: some View {
+        let expressionFontSize = 12 * textScale
+        let resultFontSize = 16 * textScale
+
         VStack(alignment: .trailing, spacing: 3) {
             Text("\(entry.displayExpression)\(entry.displayExpression.contains("≈") ? "" : " =")")
-                .font(EnterCalcFont.appFont(size: 12))
+                .font(EnterCalcFont.appFont(size: expressionFontSize))
                 .foregroundStyle(fadedForeground)
                 .frame(maxWidth: .infinity, alignment: .trailing)
             Text(entry.displayResult)
-                .font(EnterCalcFont.appFont(size: 16))
+                .font(EnterCalcFont.appFont(size: resultFontSize))
                 .foregroundStyle(primaryForeground)
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
@@ -2279,10 +2377,17 @@ private struct SettingsSheet: View {
     let onClose: () -> Void
     @Environment(\.macLocalizationBundle) private var localizationBundle
 
-    private let settingsTitleSize: CGFloat = NSFont.systemFontSize + 1
-    private let settingsSectionSize: CGFloat = NSFont.systemFontSize
-    private let settingsBodySize: CGFloat = NSFont.systemFontSize
-    private let settingsSecondarySize: CGFloat = NSFont.smallSystemFontSize
+    private var settingsTextScale: CGFloat {
+        max(
+            macPreferredTextScale(for: .body, baseline: 13),
+            macAccessibilityTextScaleFromSystemSettings()
+        )
+    }
+
+    private var settingsTitleSize: CGFloat { (NSFont.systemFontSize + 1) * settingsTextScale }
+    private var settingsSectionSize: CGFloat { NSFont.systemFontSize * settingsTextScale }
+    private var settingsBodySize: CGFloat { NSFont.systemFontSize * settingsTextScale }
+    private var settingsSecondarySize: CGFloat { NSFont.smallSystemFontSize * settingsTextScale }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -2312,7 +2417,7 @@ private struct SettingsSheet: View {
                                 Text(theme.label(using: localizationBundle)).tag(theme)
                             }
                         }
-                        .pickerStyle(.radioGroup)
+                        .pickerStyle(.menu)
                         .font(.system(size: settingsBodySize))
                         .id(selectedLanguage) // force refresh of localized labels on change
                     }
@@ -2638,17 +2743,24 @@ private enum AppTheme: String, CaseIterable {
         }
     }
 
-    func palette(using systemColorScheme: ColorScheme) -> Palette {
+    func palette(using systemColorScheme: ColorScheme, increasedContrast: Bool = false) -> Palette {
+        let basePalette: Palette
         switch self {
         case .light:
-            return .light
+            basePalette = .light
         case .dark:
-            return .dark
+            basePalette = .dark
         case .blue:
-            return .blue
+            basePalette = .blue
         case .system:
-            return Palette.forScheme(systemColorScheme)
+            basePalette = Palette.forScheme(systemColorScheme)
         }
+
+        let isDarkLike = self == .dark || self == .blue || (self == .system && systemColorScheme == .dark)
+        let isBlueLike = self == .blue
+        return increasedContrast
+            ? basePalette.adjustedForIncreasedContrast(isDarkLike: isDarkLike, isBlueLike: isBlueLike)
+            : basePalette
     }
 }
 

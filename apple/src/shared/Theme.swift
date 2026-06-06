@@ -44,8 +44,53 @@ public struct Palette {
         return operatorColumnColor(at: index)
     }
 
-    public static func forScheme(_ scheme: ColorScheme) -> Palette {
-        scheme == .dark ? .dark : .light
+    public static func forScheme(_ scheme: ColorScheme, increasedContrast: Bool = false) -> Palette {
+        let base = scheme == .dark ? Palette.dark : Palette.light
+        return increasedContrast
+            ? base.adjustedForIncreasedContrast(isDarkLike: scheme == .dark, isBlueLike: false)
+            : base
+    }
+
+    public func adjustedForIncreasedContrast(isDarkLike: Bool, isBlueLike: Bool = false) -> Palette {
+        let highContrastPrimary = isDarkLike ? Color.white : Color.black
+        let highContrastSecondary = highContrastPrimary.opacity(isDarkLike ? 0.92 : 0.84)
+        let highContrastSurface = isBlueLike
+            ? Color(red: 0.282, green: 0.353, blue: 0.874)
+            : (isDarkLike ? Color(red: 0.090, green: 0.090, blue: 0.090) : Color(red: 0.968, green: 0.968, blue: 0.968))
+        let highContrastPanel = isBlueLike
+            ? Color(red: 0.226, green: 0.298, blue: 0.828)
+            : (isDarkLike ? Color(red: 0.136, green: 0.136, blue: 0.136) : Color(red: 0.992, green: 0.992, blue: 0.992))
+        let highContrastButtonNumber = isBlueLike
+            ? Color(red: 0.184, green: 0.255, blue: 0.790)
+            : (isDarkLike ? Color(red: 0.180, green: 0.180, blue: 0.180) : Color.white)
+        let highContrastButtonSurface = isBlueLike
+            ? Color(red: 0.184, green: 0.255, blue: 0.790)
+            : (isDarkLike ? Color(red: 0.130, green: 0.130, blue: 0.130) : Color(red: 0.925, green: 0.925, blue: 0.925))
+
+        return Palette(
+            surface: highContrastSurface,
+            panel: highContrastPanel,
+            textPrimary: highContrastPrimary,
+            textSecondary: highContrastSecondary,
+            accent: isBlueLike ? Color.white : (isDarkLike ? accent : Color(red: 0.0, green: 0.305, blue: 0.62)),
+            accentText: accentText,
+            accentGradientStart: accentGradientStart,
+            accentGradientMid: accentGradientMid,
+            accentGradientEnd: accentGradientEnd,
+            buttonNumber: highContrastButtonNumber,
+            buttonOperation: highContrastButtonSurface,
+            buttonFunction: highContrastButtonSurface,
+            buttonHighlight: isBlueLike ? Color(red: 0.812, green: 0.894, blue: 1.0) : (isDarkLike ? buttonHighlight : Color(red: 0.52, green: 0.70, blue: 0.95)),
+            buttonBorder: isDarkLike ? Color.white.opacity(isBlueLike ? 0.26 : 0.24) : Color.black.opacity(0.24),
+            buttonHoverOverlay: isDarkLike ? Color.white.opacity(isBlueLike ? 0.18 : 0.16) : Color.black.opacity(0.14),
+            operatorColumnTop: operatorColumnTop,
+            operatorColumnBottom: operatorColumnBottom,
+            memoryControlActive: memoryControlActive,
+            memoryControlDisabled: memoryControlActive.opacity(isDarkLike ? 0.86 : 0.72),
+            headerHover: isDarkLike ? Color.white.opacity(isBlueLike ? 0.22 : 0.2) : Color.black.opacity(0.16),
+            historyBackground: highContrastSurface,
+            historyTileBackground: isDarkLike ? Color.white.opacity(isBlueLike ? 0.15 : 0.13) : Color.black.opacity(0.11)
+        )
     }
 
     private static let darkTextPrimary = Color(red: 0.9176, green: 0.9176, blue: 0.9176) // #eaeaea

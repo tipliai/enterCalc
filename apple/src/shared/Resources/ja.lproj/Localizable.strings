@@ -43,6 +43,8 @@
 "paste" = "貼り付け";
 "undo" = "取り消す";
 "redo" = "やり直す";
+"toggleSign" = "符号を切り替える";
+"backspace" = "バックスペース";
 "clear" = "クリア";
 "clear.all.command" = "すべてクリア (AC)";
 "clear.commandBackspace" = "クリア (Cmd+Delete)";

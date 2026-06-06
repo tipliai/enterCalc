@@ -1,4 +1,5 @@
 "SETTINGS_DISABLE_HAPTICS_TITLE" = "Désactiver le retour haptique / sonore";
+"SETTINGS_REDUCE_MOTION_TITLE" = "Réduire les animations";
 "SETTINGS_ABOUT_SECTION_TITLE" = "À propos";
 "SETTINGS_ABOUT_VERSION_TITLE" = "Version";
 "SETTINGS_ABOUT_LEGAL_NOTICE" = "EnterCalc est publié comme logiciel open source sous licence MIT et fourni gratuitement.";
