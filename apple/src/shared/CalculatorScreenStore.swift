@@ -1,6 +1,9 @@
 import Combine
 import Foundation
 
+// Persisted, user-facing preferences for a single calculator screen. Stored as
+// raw values (strings/bools) so they map cleanly to UserDefaults and SwiftUI
+// @AppStorage.
 public struct CalculatorScreenSettings: Equatable {
     public var themeRawValue: String
     public var languageCode: String
@@ -39,6 +42,8 @@ public struct CalculatorScreenSettings: Equatable {
     }
 }
 
+// One live calculator "screen": pairs a view model with its settings and
+// re-publishes the view model's changes so SwiftUI observes a single object.
 public final class CalculatorScreenSession: ObservableObject, Identifiable {
     public let id: UUID
     public let isHomeScreen: Bool
@@ -98,6 +103,8 @@ public final class CalculatorScreenSession: ObservableObject, Identifiable {
     }
 }
 
+// Owns the ordered list of screens (iPad multi-page support) and the active
+// index. macOS uses one view model per window instead and does not use this.
 public final class CalculatorScreenStore: ObservableObject {
     public static let maxScreenCount: Int = 5
 

@@ -38,6 +38,8 @@ public struct MemoryEntry: Identifiable, Equatable {
     }
 }
 
+// The four standard arithmetic operators. Raw values are the display glyphs
+// (note: subtract uses the minus sign U+2212, not a hyphen).
 public enum BinaryOperator: String {
     case add = "+"
     case subtract = "−"
@@ -46,15 +48,8 @@ public enum BinaryOperator: String {
 
     var symbol: String { rawValue }
 
-    func apply(_ lhs: Double, _ rhs: Double) -> Double {
-        switch self {
-        case .add: return lhs + rhs
-        case .subtract: return lhs - rhs
-        case .multiply: return lhs * rhs
-        case .divide: return rhs == 0 ? Double.infinity : lhs / rhs
-        }
-    }
-
+    // Calculations run in Decimal to match calculator-style rounding and avoid
+    // binary floating-point residue.
     func apply(_ lhs: Decimal, _ rhs: Decimal) -> Decimal {
         switch self {
         case .add: return lhs + rhs
@@ -67,6 +62,9 @@ public enum BinaryOperator: String {
 
 /// Observable calculator brain that mirrors Microsoft Calculator behavior.
 public final class CalculatorViewModel: ObservableObject {
+    // Hard caps that bound input length, history/memory growth, undo depth, and
+    // paste replay work so untrusted or pathological input can't blow up memory
+    // or hang the UI.
     enum Limits {
         static let maxInputDigits = 16
         static let maxStoredHistoryEntries = 64
@@ -108,6 +106,8 @@ public final class CalculatorViewModel: ObservableObject {
         case evaluate
     }
 
+    // Immutable copy of all calculator state. Pushed onto the undo/redo stacks
+    // so any user action can be reverted by restoring a snapshot wholesale.
     private struct CalculatorSnapshot: Equatable {
         let display: String
         let expressionDisplay: String
@@ -138,6 +138,9 @@ public final class CalculatorViewModel: ObservableObject {
         let displayEditCursorIndex: Int?
     }
 
+    // Published state: what the UI renders. `display` is the large result line,
+    // `expressionDisplay` the operation line above it; the rest drive overlays
+    // (history, memory, rounding) and error styling.
     @Published public private(set) var display: String = "0"
     @Published public private(set) var expressionDisplay: String = ""
     @Published public private(set) var expression: String = ""
@@ -153,6 +156,9 @@ public final class CalculatorViewModel: ObservableObject {
     @Published public private(set) var displayEditCursorIndex: Int?
     private var currentErrorKey: String? = nil
 
+    // Internal state machine. `accumulator` holds the running left-hand value,
+    // `pendingOperator` the operator awaiting a right operand, and the `last*`
+    // fields remember the previous operation so repeated `=` can replay it.
     private var currentInput: String = "0"
     private var accumulator: Decimal?
     private var pendingOperator: BinaryOperator?
@@ -369,6 +375,8 @@ public final class CalculatorViewModel: ObservableObject {
     private var openParenthesisCount: Int = 0
     private var isExpressionMode = false
 
+    // Inserts a parenthesis, choosing open vs close based on the current
+    // expression so a single button can toggle between them naturally.
     public func inputParentheses() {
         let symbol: Character = shouldInsertClosingParenthesisInExpressionMode() ? ")" : "("
         inputParenthesis(symbol)
@@ -420,6 +428,8 @@ public final class CalculatorViewModel: ObservableObject {
         completeUndoableChange(from: snapshot)
     }
 
+    // Appends a digit to the current operand. Handles the reset-on-next-digit
+    // flag (after evaluation or an operator) and direct display cursor editing.
     public func inputDigit(_ digit: String) {
         guard digit.count == 1, "0123456789".contains(digit) else { return }
         let snapshot = beginUndoableChange()
@@ -464,6 +474,8 @@ public final class CalculatorViewModel: ObservableObject {
         completeUndoableChange(from: snapshot)
     }
 
+    // Inserts the locale decimal separator, guarding against a second separator
+    // in the same operand.
     public func inputDecimal() {
         let snapshot = beginUndoableChange()
         let isEditingDisplay = activeDisplayEditCursorIndex != nil
@@ -493,6 +505,8 @@ public final class CalculatorViewModel: ObservableObject {
         completeUndoableChange(from: snapshot)
     }
 
+    // Flips the sign of the current operand. "0" stays unsigned so we never show
+    // a stray "-0".
     public func toggleSign() {
         guard !isErrorState else { return }
         let snapshot = beginUndoableChange()
@@ -509,6 +523,9 @@ public final class CalculatorViewModel: ObservableObject {
         completeUndoableChange(from: snapshot)
     }
 
+    // Applies a percent. Standalone it scales the operand by 1/100; with a
+    // pending operation it is interpreted relative to the left operand (e.g.
+    // 200 + 10% = 220), matching standard calculator behavior.
     public func applyPercent() {
         guard !isErrorState else { return }
         let snapshot = beginUndoableChange()
@@ -578,6 +595,8 @@ public final class CalculatorViewModel: ObservableObject {
         completeUndoableChange(from: snapshot)
     }
 
+    // Full reset to the initial state (AC). Rounding and currency context are
+    // cleared too, since they belong to the prior calculation.
     public func clearAll() {
         let snapshot = beginUndoableChange()
         resetAllStateForClearAll()
@@ -611,6 +630,8 @@ public final class CalculatorViewModel: ObservableObject {
         displayEditCursorIndex = nil
     }
 
+    // Deletes the last input. Behavior is contextual: it removes whole tokens in
+    // expression mode, recovers from an error, or trims a digit otherwise.
     public func backspace() {
         if currentErrorKey == "error.invalidInput" {
             undo()
@@ -683,6 +704,9 @@ public final class CalculatorViewModel: ObservableObject {
         completeUndoableChange(from: snapshot)
     }
 
+    // Records a pending binary operator. If one is already pending it evaluates
+    // first (chained operations), and in expression mode it appends the operator
+    // token instead.
     public func setOperator(_ op: BinaryOperator) {
         guard !isErrorState else { return }
         let snapshot = beginUndoableChange()
@@ -805,6 +829,9 @@ public final class CalculatorViewModel: ObservableObject {
         completeUndoableChange(from: snapshot)
     }
 
+    // Computes the result (=). Expression mode evaluates the full token stream
+    // (auto-closing open parentheses) with operator precedence; otherwise it
+    // finishes the pending binary operation. Repeated equals does not replay.
     public func evaluate() {
         guard !isErrorState else { return }
         let snapshot = beginUndoableChange()
@@ -972,6 +999,8 @@ public final class CalculatorViewModel: ObservableObject {
         }
     }
 
+    // Computes 1/x. Guards against divide-by-zero and display underflow, and
+    // wraps the operand token as "1/(...)" so the expression stays readable.
     public func reciprocal() {
         let snapshot = beginUndoableChange()
         finishDirectDisplayEditingIfNeeded()
@@ -1006,6 +1035,8 @@ public final class CalculatorViewModel: ObservableObject {
         completeUndoableChange(from: snapshot)
     }
 
+    // Computes x squared. The sign is preserved (negative inputs yield a negative
+    // token) to match the historical display behavior, with range guards.
     public func square() {
         guard !isErrorState else { return }
         let snapshot = beginUndoableChange()
@@ -1046,6 +1077,8 @@ public final class CalculatorViewModel: ObservableObject {
         completeUndoableChange(from: snapshot)
     }
 
+    // Computes the square root. Negative inputs are an invalid-input error; the
+    // operand token is wrapped as "√(...)".
     public func squareRoot() {
         let snapshot = beginUndoableChange()
         finishDirectDisplayEditingIfNeeded()
@@ -1831,6 +1864,9 @@ public final class CalculatorViewModel: ObservableObject {
         return token
     }
 
+    // Evaluates a tokenized expression using the shunting-yard algorithm: two
+    // stacks (values and operators) honor precedence and parentheses in a single
+    // pass. Returns a typed error for divide-by-zero, overflow, etc.
     private func evaluateExpressionTokens(_ tokens: [String]) -> Result<Decimal, ExpressionEvaluationError> {
         var values: [Decimal] = []
         var operators: [String] = []
@@ -1917,6 +1953,9 @@ public final class CalculatorViewModel: ObservableObject {
         return .success(result)
     }
 
+    // Applies the single pending binary operator to accumulator/current operand.
+    // With addToHistory it finalizes the calculation (records history, clears
+    // pending); without it the result becomes the new accumulator for chaining.
     private func performPendingOperation(addToHistory: Bool, refreshDisplay: Bool = true) {
         guard let pending = pendingOperator else { return }
         let lhs = accumulator ?? currentValue

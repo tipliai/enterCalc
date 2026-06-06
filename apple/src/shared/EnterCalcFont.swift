@@ -8,8 +8,12 @@ import UIKit
 import AppKit
 #endif
 
+// Bundled Inter typeface wrapper. Fonts are registered with CoreText once on
+// first use; each accessor falls back to the rounded system font (via a cascade
+// list) so glyphs missing from Inter still render.
 public enum EnterCalcFont {
-    private static let interRegularName = "Inter-Regular"
+    // Only the weights actually rendered are bundled and registered: SemiBold
+    // for primary text and Thin for accent glyphs.
     private static let interSemiBoldName = "Inter-SemiBold"
     private static let interThinName = "Inter-Thin"
     private static let fontResourceExtension = "ttf"
@@ -17,21 +21,7 @@ public enum EnterCalcFont {
     private static let registrationLock = NSLock()
     private static var didAttemptRegistration = false
 
-    public static var headline: Font { appFont(size: 17) }
     public static var subheadline: Font { appFont(size: 15) }
-    public static var title: Font { appFont(size: 28) }
-    public static var title2: Font { appFont(size: 22) }
-    public static func normalAppFont(size: CGFloat) -> Font {
-        registerIfNeeded()
-
-        #if canImport(UIKit)
-        return Font(platformRegularFont(size: size))
-        #elseif canImport(AppKit)
-        return Font(platformRegularFont(size: size))
-        #else
-        return .system(size: size, weight: .regular, design: .rounded)
-        #endif
-    }
 
     public static func thinAppFont(size: CGFloat) -> Font {
         registerIfNeeded()
@@ -52,7 +42,7 @@ public enum EnterCalcFont {
         guard !didAttemptRegistration else { return }
         didAttemptRegistration = true
 
-        for fontResourceName in [interRegularName, interSemiBoldName, interThinName] {
+        for fontResourceName in [interSemiBoldName, interThinName] {
             guard let fontURL = bundle.url(
                 forResource: fontResourceName,
                 withExtension: fontResourceExtension,
@@ -78,20 +68,6 @@ public enum EnterCalcFont {
     }
 
     #if canImport(UIKit)
-    public static func platformRegularFont(size: CGFloat) -> UIFont {
-        registerIfNeeded()
-
-        guard let baseFont = UIFont(name: interRegularName, size: size) else {
-            return roundedSystemFont(size: size, weight: .regular)
-        }
-
-        let descriptor = baseFont.fontDescriptor.addingAttributes([
-            .cascadeList: [roundedSystemFont(size: size, weight: .regular).fontDescriptor]
-        ])
-
-        return UIFont(descriptor: descriptor, size: size)
-    }
-
     public static func platformFont(size: CGFloat) -> UIFont {
         registerIfNeeded()
 
@@ -126,20 +102,6 @@ public enum EnterCalcFont {
         return UIFont(descriptor: descriptor, size: size)
     }
     #elseif canImport(AppKit)
-    public static func platformRegularFont(size: CGFloat) -> NSFont {
-        registerIfNeeded()
-
-        guard let baseFont = NSFont(name: interRegularName, size: size) else {
-            return roundedSystemFont(size: size, weight: .regular)
-        }
-
-        let descriptor = baseFont.fontDescriptor.addingAttributes([
-            .cascadeList: [roundedSystemFont(size: size, weight: .regular).fontDescriptor]
-        ])
-
-        return NSFont(descriptor: descriptor, size: size) ?? baseFont
-    }
-
     public static func platformFont(size: CGFloat) -> NSFont {
         registerIfNeeded()
 

@@ -14,9 +14,7 @@
 "settings.language" = "语言";
 "settings.language.label" = "选择语言";
 "settings.language.defaultOption" = "默认（%@）";
-"settings.numberFormat" = "数字格式";
 "settings.userInterface" = "用户界面";
-"settings.calculation" = "计算";
 "settings.numberFormat.style" = "数字样式";
 "settings.numberFormat.scientific" = "使用科学计数法";
 "settings.percent.classicBehavior" = "使用备用键盘布局";
@@ -47,7 +45,6 @@
 "backspace" = "退格";
 "clear" = "清除";
 "clear.all.command" = "全部清除（AC）";
-"clear.commandBackspace" = "清除（Cmd+Delete）";
 "screen.new" = "新建页面";
 "screen.close" = "关闭页面";
 "screen.pageStatus" = "第 %1$@ 个屏幕，共 %2$@ 个";

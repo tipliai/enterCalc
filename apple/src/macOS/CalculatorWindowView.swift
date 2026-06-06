@@ -3,12 +3,16 @@ import SwiftUI
 import AppKit
 import EnterCalcCore
 
+// Scales a baseline point size by the user's Dynamic Type preference for the
+// given text style, never shrinking below the baseline (returns >= 1.0).
 private func macPreferredTextScale(for style: NSFont.TextStyle, baseline: CGFloat) -> CGFloat {
     let preferredSize = NSFont.preferredFont(forTextStyle: style).pointSize
     guard preferredSize.isFinite, baseline > 0 else { return 1.0 }
     return max(1.0, preferredSize / baseline)
 }
 
+// Plays the button click sound, but only for genuine mouse clicks. Keyboard and
+// programmatic activations are filtered out so typing stays silent.
 @MainActor
 private enum MacButtonSoundFeedback {
     static func playIfNeeded(disabled: Bool, isEnterKey: Bool = false) {
@@ -38,7 +42,11 @@ private extension NSEvent.EventType {
     }
 }
 
+// Main macOS calculator window. Hosts the display, keypad, and the history /
+// rounding / settings overlays, and owns per-window settings and sizing. Each
+// window gets its own view model, so windows are independent.
 struct CalculatorWindowView: View {
+    // Only one overlay pane is visible at a time; nil means none.
     private enum OverlayPane {
         case history
         case rounding
@@ -135,6 +143,8 @@ struct CalculatorWindowView: View {
         return "\"\(text)\"[\(scalarList)]"
     }
 
+    // Bridges this window's calculator actions to the menu bar (Copy, Paste,
+    // Undo, etc.) via FocusedValues so the active window drives the menus.
     private var actionContext: CalculatorActionContext {
         CalculatorActionContext(
             copy: { copyCurrentResultToPasteboard() },
@@ -1397,6 +1407,8 @@ struct CalculatorWindowView: View {
         }
     }
 
+    // Routes a hardware-keyboard event to a calculator action. Returns true when
+    // handled so the event is consumed. Active overlays get first refusal.
     @discardableResult
     private func handleKey(_ event: NSEvent) -> Bool {
         let chars = event.charactersIgnoringModifiers ?? ""
@@ -1601,10 +1613,13 @@ struct CalculatorWindowView: View {
         let action: (() -> Void)?
     }
 
+    // Selects the active keypad layout based on the user's preference.
     private func keypadButtons() -> [ButtonItem] {
         windowSettings.usesAlternativeKeypad ? legacyKeypadButtons() : basicKeypadButtons()
     }
 
+    // Full keypad including scientific functions (1/x, x squared, square root).
+    // In error state only digits and clear/parenthesis keys stay enabled.
     private func legacyKeypadButtons() -> [ButtonItem] {
         let errorMode = viewModel.isErrorState
         func isEnabled(title: String, kind: CalculatorButton.Kind) -> Bool {
@@ -1649,6 +1664,7 @@ struct CalculatorWindowView: View {
         ]
     }
 
+    // Simplified keypad (the alternative layout) without the scientific row.
     private func basicKeypadButtons() -> [ButtonItem] {
         let errorMode = viewModel.isErrorState
         func isEnabled(title: String, kind: CalculatorButton.Kind) -> Bool {
@@ -2121,6 +2137,8 @@ private struct CompactActionButton: View {
 
 // MARK: - History UI
 
+// Scrollable list of past calculations shown in the history overlay. Tapping a
+// row reuses that entry; the trash button clears all history.
 private struct HistoryPanel: View {
     let entries: [HistoryEntry]
     let onSelect: (HistoryEntry) -> Void
@@ -2222,6 +2240,8 @@ private struct HistoryPanel: View {
     private var hoverBackground: Color { palette.headerHover }
 }
 
+// A single history row: the operation on top, the result below. Right-click
+// offers "Copy Operation".
 private struct HistoryEntryRow: View {
     let entry: HistoryEntry
     let primaryForeground: Color
@@ -2267,6 +2287,8 @@ private struct HistoryEntryRow: View {
 
 // MARK: - Settings Sheet and helpers
 
+// Builds the localized strings shown in the macOS About window (title, version,
+// and the credit/attribution text).
 enum MacAboutContent {
     static func aboutWindowTitle(bundle: Bundle?) -> String {
         String(format: macLocalized("mac.about.windowTitle", bundle: bundle), appName)
@@ -2317,6 +2339,7 @@ enum MacAboutContent {
 
 }
 
+// Content of the separate About window opened from the app menu.
 struct MacAboutView: View {
     @Environment(\.macLocalizationBundle) private var localizationBundle
 
@@ -2357,6 +2380,8 @@ struct MacAboutView: View {
     }
 }
 
+// Settings overlay form. Edits are bound back to the owning window's settings;
+// the parent persists them and re-applies theme/language live.
 private struct SettingsSheet: View {
     @Binding var selectedTheme: AppTheme
     @Binding var selectedLanguage: String
@@ -2463,6 +2488,8 @@ private struct SettingsSheet: View {
     }
 }
 
+// Custom slider that selects result rounding precision (significant digits) or
+// turns rounding off at the far end.
 private struct MacRoundingPanel: View {
     let palette: Palette
     let overlayBackgroundColor: Color
@@ -2687,6 +2714,8 @@ private struct MacRoundingPanel: View {
         return centerX - markerWidth * 0.5
     }
 
+    // Maps a rounding step index to a 0...1 track position on an exponential
+    // curve, so low-precision steps (the common cases) get more travel.
     private static func sliderPosition(for stepIndex: Int) -> Double {
         let boundedStepIndex = min(max(stepIndex, 0), Int(exponentialDomainMax))
         let value = Double(boundedStepIndex)
@@ -2700,11 +2729,14 @@ private struct MacRoundingPanel: View {
     }
 }
 
+// A selectable UI language: its locale code and the name shown in the picker.
 private struct LanguageOption {
     let code: String
     let displayName: String
 }
 
+// User-selectable theme. `blue` is a dark-based custom palette, so it reports a
+// dark color scheme to the system while supplying its own colors.
 private enum AppTheme: String, CaseIterable {
     case system
     case light
@@ -3049,6 +3081,8 @@ private extension CalculatorWindowView {
     }
 }
 
+// Tiny representable view used purely to obtain the hosting NSWindow, which
+// SwiftUI doesn't otherwise expose, for sizing and appearance updates.
 private struct CalculatorWindowResolver: NSViewRepresentable {
     let onResolve: (NSWindow?) -> Void
 

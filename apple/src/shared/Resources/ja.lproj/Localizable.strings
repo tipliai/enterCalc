@@ -14,9 +14,7 @@
 "settings.language" = "言語";
 "settings.language.label" = "言語を選択";
 "settings.language.defaultOption" = "デフォルト（%@）";
-"settings.numberFormat" = "数値形式";
 "settings.userInterface" = "ユーザーインターフェース";
-"settings.calculation" = "計算";
 "settings.numberFormat.style" = "数値スタイル";
 "settings.numberFormat.scientific" = "科学表記を使用";
 "settings.percent.classicBehavior" = "代替キーパッドを使用";
@@ -47,7 +45,6 @@
 "backspace" = "バックスペース";
 "clear" = "クリア";
 "clear.all.command" = "すべてクリア (AC)";
-"clear.commandBackspace" = "クリア (Cmd+Delete)";
 "screen.new" = "新しい画面";
 "screen.close" = "画面を閉じる";
 "screen.pageStatus" = "画面 %1$@ / %2$@";
