@@ -43,6 +43,8 @@
 "paste" = "粘贴";
 "undo" = "撤销";
 "redo" = "重做";
+"toggleSign" = "切换正负号";
+"backspace" = "退格";
 "clear" = "清除";
 "clear.all.command" = "全部清除（AC）";
 "clear.commandBackspace" = "清除（Cmd+Delete）";

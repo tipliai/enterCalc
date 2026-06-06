@@ -43,6 +43,8 @@
 "paste" = "Paste";
 "undo" = "Undo";
 "redo" = "Redo";
+"toggleSign" = "Toggle Sign";
+"backspace" = "Backspace";
 "clear" = "Clear";
 "clear.all.command" = "All Clear (AC)";
 "clear.commandBackspace" = "Clear (Cmd+Backspace)";

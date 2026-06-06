@@ -269,8 +269,11 @@ struct EnterCalcIOSView: View {
         )
     )
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotionEnabled
+    @ScaledMetric(relativeTo: .largeTitle) private var displayDynamicTypeScale: CGFloat = 1.0
     @State private var activeOverlay: IOSOverlayPane? = nil
     @State private var showSettingsSheet: Bool = false
     @State private var counterRotatesForUpsideDownPortrait: Bool = false
@@ -308,6 +311,7 @@ struct EnterCalcIOSView: View {
     @AppStorage("settings.equals.enterKeySymbol") private var preferredUsesEnterKeySymbol: Bool = true
     @AppStorage("settings.rounding.disableSwipeDown") private var preferredDisablesSwipeDownToRound: Bool = false
     @AppStorage("settings.keypadHeightMultiplier") private var preferredKeypadHeightMultiplier: Double = 1.0
+    @AppStorage("settings.reduceMotion.enabled") private var preferredReduceMotionEnabled: Bool = false
 
     private var activeScreen: CalculatorScreenSession {
         screenStore.activeScreen
@@ -349,7 +353,7 @@ struct EnterCalcIOSView: View {
     }
 
     private var palette: Palette {
-        activeTheme.palette(using: colorScheme)
+        activeTheme.palette(using: colorScheme, increasedContrast: colorSchemeContrast == .increased)
     }
 
     private var actionContext: CalculatorActionContext {
@@ -377,6 +381,10 @@ struct EnterCalcIOSView: View {
 
     private var usesAlternativeKeypad: Bool {
         activeScreen.settings.usesAlternativeKeypad
+    }
+
+    private var reduceMotionEnabled: Bool {
+        systemReduceMotionEnabled || preferredReduceMotionEnabled
     }
 
     /// Determines if page switching gestures should be disabled.
@@ -451,11 +459,11 @@ struct EnterCalcIOSView: View {
     private var actionRowButtons: [IOSActionRowButton] {
         guard !usesAlternativeKeypad else { return [] }
         return [
-            IOSActionRowButton(symbol: "arrow.uturn.backward", action: { $0.viewModel.undo() }),
-            IOSActionRowButton(symbol: "arrow.uturn.forward", action: { $0.viewModel.redo() }),
-            IOSActionRowButton(symbol: "plusminus", action: { $0.viewModel.toggleSign() }),
-            IOSActionRowButton(symbol: "slider.horizontal.below.rectangle", action: { _ in toggleOverlay(.rounding) }),
-            IOSActionRowButton(symbol: "delete.left", action: { $0.viewModel.backspace() })
+            IOSActionRowButton(symbol: "arrow.uturn.backward", accessibilityLabelKey: "undo", action: { $0.viewModel.undo() }),
+            IOSActionRowButton(symbol: "arrow.uturn.forward", accessibilityLabelKey: "redo", action: { $0.viewModel.redo() }),
+            IOSActionRowButton(symbol: "plusminus", accessibilityLabelKey: "toggleSign", action: { $0.viewModel.toggleSign() }),
+            IOSActionRowButton(symbol: "slider.horizontal.below.rectangle", accessibilityLabelKey: "rounding.toggle", action: { _ in toggleOverlay(.rounding) }),
+            IOSActionRowButton(symbol: "delete.left", accessibilityLabelKey: "backspace", action: { $0.viewModel.backspace() })
         ]
     }
 
@@ -510,6 +518,12 @@ struct EnterCalcIOSView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .preferredColorScheme(activeTheme.preferredColorScheme)
             .focusedSceneValue(\.calculatorActions, actionContext)
+            .transaction { transaction in
+                if reduceMotionEnabled {
+                    transaction.animation = nil
+                    transaction.disablesAnimations = true
+                }
+            }
             .onAppear {
                 syncSystemSettingsMetadata()
                 normalizePreferredLanguageIfNeeded()
@@ -567,6 +581,22 @@ struct EnterCalcIOSView: View {
                     stopDisplayShimmerParallaxMotion()
                 } else {
                     startDisplayShimmerParallaxMotion()
+                }
+            }
+            .onValueChange(of: preferredReduceMotionEnabled) { _ in
+                if reduceMotionEnabled {
+                    stopDisplayShimmerParallaxMotion()
+                } else {
+                    startDisplayShimmerParallaxMotion()
+                    startOperatorIntroAnimation()
+                }
+            }
+            .onValueChange(of: systemReduceMotionEnabled) { _ in
+                if reduceMotionEnabled {
+                    stopDisplayShimmerParallaxMotion()
+                } else {
+                    startDisplayShimmerParallaxMotion()
+                    startOperatorIntroAnimation()
                 }
             }
             .onValueChange(of: activeOverlay == .history && !metrics.usesOverlayHistory) { shouldClearHiddenHistoryOverlay in
@@ -863,6 +893,13 @@ private extension EnterCalcIOSView {
     }
 
     func startOperatorIntroAnimation() {
+        guard !reduceMotionEnabled else {
+            operatorRevealProgress = 4.0
+            operatorAnimFadeOpacity = 0.0
+            displayShimmerIntroActive = false
+            return
+        }
+
         let revealDuration: Double = 0.46
         let fadeDelay: Double = 0.48
         let fadeDuration: Double = 0.22
@@ -882,6 +919,12 @@ private extension EnterCalcIOSView {
     }
 
     func startShimmerIntroAnimation() {
+        guard !reduceMotionEnabled else {
+            displayShimmerIntroActive = false
+            displayShimmerAngleDegrees = displayShimmerBaseAngle()
+            return
+        }
+
         displayShimmerIntroActive = true
         displayShimmerAngleDegrees = 0
         withAnimation(.easeOut(duration: 1.0)) {
@@ -919,7 +962,7 @@ private extension EnterCalcIOSView {
 
     func navigateToScreen(at index: Int) {
         guard screenStore.screens.indices.contains(index) else { return }
-        withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.88, blendDuration: 0.2)) {
+        animateIfAllowed(.interactiveSpring(response: 0.28, dampingFraction: 0.88, blendDuration: 0.2)) {
             activeOverlay = nil
             isResizingHistoryOverlay = false
             liveHistoryOverlayHeight = nil
@@ -931,7 +974,7 @@ private extension EnterCalcIOSView {
 
     func createScreenAfterActive() {
         guard screenStore.canCreateScreen else { return }
-        withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.88, blendDuration: 0.2)) {
+        animateIfAllowed(.interactiveSpring(response: 0.28, dampingFraction: 0.88, blendDuration: 0.2)) {
             activeOverlay = nil
             isResizingHistoryOverlay = false
             liveHistoryOverlayHeight = nil
@@ -944,7 +987,7 @@ private extension EnterCalcIOSView {
     func closeActiveScreen() {
         guard screenStore.canCloseActiveScreen else { return }
         let closingScreenID = activeScreen.id
-        withAnimation(.interactiveSpring(response: 0.28, dampingFraction: 0.88, blendDuration: 0.2)) {
+        animateIfAllowed(.interactiveSpring(response: 0.28, dampingFraction: 0.88, blendDuration: 0.2)) {
             activeOverlay = nil
             isResizingHistoryOverlay = false
             liveHistoryOverlayHeight = nil
@@ -1020,6 +1063,9 @@ private extension EnterCalcIOSView {
                             } else {
                                 activeScreen.viewModel.removeResultRounding()
                             }
+                        },
+                        onTickSelectionChanged: {
+                            triggerActionFeedback()
                         },
                         onDisableAndDismiss: {
                             activeScreen.viewModel.removeResultRounding()
@@ -1169,6 +1215,7 @@ private extension EnterCalcIOSView {
 #if canImport(UIKit)
         guard supportsDisplayShimmerMotionParallax() else {
             displayShimmerParallaxOffset = .zero
+            displayShimmerAngleDegrees = displayShimmerBaseAngle()
             return
         }
         if displayMotionManager.isDeviceMotionActive {
@@ -1196,7 +1243,7 @@ private extension EnterCalcIOSView {
             break
         }
 
-        withAnimation(.easeOut(duration: 0.65)) {
+        animateIfAllowed(.easeOut(duration: 0.65)) {
             displayShimmerParallaxOffset = targetOffset
             displayShimmerAngleDegrees = targetAngle
         }
@@ -1240,6 +1287,11 @@ private extension EnterCalcIOSView {
     }
 
     func startDisplayShimmerFallbackAnimation() {
+        guard !reduceMotionEnabled else {
+            displayFallbackParallaxAnimating = false
+            displayShimmerParallaxOffset = .zero
+            return
+        }
         guard !displayFallbackParallaxAnimating else { return }
         displayFallbackParallaxAnimating = true
         displayShimmerAngleDegrees = displayShimmerBaseAngle()
@@ -1252,12 +1304,18 @@ private extension EnterCalcIOSView {
     func stopDisplayShimmerFallbackAnimation() {
         guard displayFallbackParallaxAnimating else { return }
         displayFallbackParallaxAnimating = false
-        withAnimation(.easeOut(duration: 0.12)) {
+        animateIfAllowed(.easeOut(duration: 0.12)) {
             displayShimmerParallaxOffset = .zero
         }
     }
 
     func startDisplayShimmerParallaxMotion() {
+        guard !reduceMotionEnabled else {
+            displayShimmerParallaxOffset = .zero
+            displayShimmerAngleDegrees = displayShimmerBaseAngle()
+            stopDisplayShimmerFallbackAnimation()
+            return
+        }
 #if canImport(UIKit) && canImport(CoreMotion)
         guard supportsDisplayShimmerMotionParallax() else {
             displayShimmerParallaxOffset = .zero
@@ -1345,6 +1403,7 @@ private extension EnterCalcIOSView {
     }
 
     func supportsDisplayShimmerMotionParallax() -> Bool {
+        guard !reduceMotionEnabled else { return false }
 #if canImport(UIKit)
         let idiom = UIDevice.current.userInterfaceIdiom
         return idiom == .phone || idiom == .pad
@@ -2023,12 +2082,22 @@ private extension EnterCalcIOSView {
                 .init(color: .clear, location: 0.14),
                 .init(color: shimmerTailColor, location: 1.0)
             ]
-        let expressionFontSize = metrics.mode == .phonePortrait
+        let baseExpressionFontSize = metrics.mode == .phonePortrait
             ? metrics.expressionFontSize
             : metrics.expressionFontSize(for: metrics.displayHeight)
         let isLandscapeMode = metrics.mode == .phoneLandscape || metrics.mode == .padWide
         let verticalPaddingTotal = isLandscapeMode ? (metrics.displayVerticalPadding * 2) : metrics.displayVerticalPadding
-        let resultFontSize = metrics.displayFontSize(for: metrics.displayHeight)
+        let baseResultFontSize = metrics.displayFontSize(for: metrics.displayHeight)
+        let resultFontSize = boundedDynamicTypeSize(
+            baseResultFontSize,
+            scale: displayDynamicTypeScale,
+            maximum: max(baseResultFontSize, metrics.displayHeight * 0.82)
+        )
+        let expressionFontSize = boundedDynamicTypeSize(
+            baseExpressionFontSize,
+            scale: displayDynamicTypeScale,
+            maximum: max(baseExpressionFontSize, resultFontSize * 0.62)
+        )
         let resultLineHeight = resultFontSize * 1.12
         let measuredOperationHeight = max(
             operationTextHeightByScreen[screen.id] ?? (expressionFontSize * 1.3),
@@ -2337,7 +2406,7 @@ private extension EnterCalcIOSView {
                         opacity: basicOpacity
                     )
                     .opacity(isBasicSpaceInUse ? 0 : 1)
-                    .animation(.easeInOut(duration: 0.5), value: isBasicSpaceInUse)
+                    .animation(reduceMotionEnabled ? nil : .easeInOut(duration: 0.5), value: isBasicSpaceInUse)
                     .allowsHitTesting(false)
                 }
             }
@@ -2347,7 +2416,7 @@ private extension EnterCalcIOSView {
                         .padding(.top, -15)
                         .frame(maxWidth: .infinity, alignment: .center)
                         .opacity(showCopyToast ? 1 : 0)
-                        .animation(showCopyToast ? .easeOut(duration: 0.18) : .easeOut(duration: 0.5), value: showCopyToast)
+                        .animation(reduceMotionEnabled ? nil : (showCopyToast ? .easeOut(duration: 0.18) : .easeOut(duration: 0.5)), value: showCopyToast)
                 }
             }
             .contentShape(displayShape)
@@ -2397,6 +2466,12 @@ private extension EnterCalcIOSView {
         viewModel.copyToPasteboard()
         triggerActionFeedback(emphasized: true)
         showCopiedToast()
+
+        guard !reduceMotionEnabled else {
+            flashCopy = false
+            copyStreakActive = false
+            return
+        }
 
         copyStreakTravel = 1.35
         copyStreakActive = true
@@ -2457,13 +2532,13 @@ private extension EnterCalcIOSView {
         copyToastDismissWorkItem?.cancel()
 
         if !showCopyToast {
-            withAnimation(.easeOut(duration: 0.18)) {
+            animateIfAllowed(.easeOut(duration: 0.18)) {
                 showCopyToast = true
             }
         }
 
         let dismissWorkItem = DispatchWorkItem {
-            withAnimation(.easeOut(duration: 0.5)) {
+            animateIfAllowed(.easeOut(duration: 0.5)) {
                 showCopyToast = false
             }
             copyToastDismissWorkItem = nil
@@ -2604,8 +2679,10 @@ private extension EnterCalcIOSView {
                     ForEach(Array(actionRowButtons.enumerated()), id: \.offset) { _, button in
                         IOSCompactActionButton(
                             button: button,
+                            accessibilityLabel: localized(button.accessibilityLabelKey),
                             palette: palette,
                             height: compactActionHeight,
+                            reduceMotionEnabled: reduceMotionEnabled,
                             pressFeedback: triggerActionFeedback,
                             action: {
                                 button.action(screen)
@@ -2642,6 +2719,7 @@ private extension EnterCalcIOSView {
                                             resetLandscapeDisplayScroll(for: screen)
                                         }
                                     },
+                                    reduceMotionEnabled: reduceMotionEnabled,
                                     operatorRevealProgress: operatorRevealProgress,
                                     operatorAnimFadeOpacity: operatorAnimFadeOpacity
                                 )
@@ -2759,7 +2837,7 @@ private extension EnterCalcIOSView {
             activeScreen.viewModel.commitResultRoundingInteraction()
         }
 
-        withAnimation(.easeInOut(duration: 0.2)) {
+        animateIfAllowed(.easeInOut(duration: 0.2)) {
             activeOverlay = nil
         }
         resetHistoryOverlayResizeState()
@@ -2777,12 +2855,27 @@ private extension EnterCalcIOSView {
             activeScreen.viewModel.beginResultRounding()
         }
 
-        withAnimation(.easeInOut(duration: 0.2)) {
+        animateIfAllowed(.easeInOut(duration: 0.2)) {
             activeOverlay = activeOverlay == overlay ? nil : overlay
         }
         if activeOverlay != .history {
             resetHistoryOverlayResizeState()
         }
+    }
+
+    func animateIfAllowed(_ animation: Animation, _ updates: @escaping () -> Void) {
+        if reduceMotionEnabled {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction, updates)
+            return
+        }
+
+        withAnimation(animation, updates)
+    }
+
+    func boundedDynamicTypeSize(_ baseSize: CGFloat, scale: CGFloat, maximum: CGFloat) -> CGFloat {
+        min(max(baseSize, baseSize * scale), maximum)
     }
 
     func handleHistoryOverlayHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
@@ -3041,7 +3134,9 @@ private struct IOSSettingsSheet: View {
     @State private var draftUsesEnterKeySymbol: Bool
     @State private var draftDisablesSwipeDownToRound: Bool
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.dismiss) private var dismiss
+    @ScaledMetric(relativeTo: .body) private var settingsDynamicTypeScale: CGFloat = 1.0
 
     init(
         titleKey: String,
@@ -3077,7 +3172,7 @@ private struct IOSSettingsSheet: View {
     }
 
     private var palette: Palette {
-        Palette.forScheme(colorScheme)
+        Palette.forScheme(colorScheme, increasedContrast: colorSchemeContrast == .increased)
     }
 
     private var themeSelection: Binding<AppTheme> {
@@ -3129,6 +3224,10 @@ private struct IOSSettingsSheet: View {
         return "Version unavailable"
     }
 
+    private var settingsAboutTextSize: CGFloat {
+        min(max(15, 15 * settingsDynamicTypeScale), 30)
+    }
+
     var body: some View {
         ZStack {
             palette.surface
@@ -3172,9 +3271,9 @@ private struct IOSSettingsSheet: View {
 
                     Section(localized("settings.credits")) {
                         Text(creditAttributedString())
-                            .font(.system(size: 15))
+                            .font(EnterCalcFont.appFont(size: settingsAboutTextSize))
                         Text(String(format: localized("settings.credits.version"), versionString))
-                            .font(.system(size: 15))
+                            .font(EnterCalcFont.appFont(size: settingsAboutTextSize))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -3213,6 +3312,7 @@ private struct IOSRoundingPanel: View {
     /// Whether the device is rotated upside-down; used to conditionally hide borders and adjust safe-area handling
     let isUpsideDownPortrait: Bool
     let onSelectionChanged: (Int?) -> Void
+    let onTickSelectionChanged: () -> Void
     let onDisableAndDismiss: () -> Void
     let onDismiss: () -> Void
     @State private var sliderValue: Double
@@ -3238,6 +3338,7 @@ private struct IOSRoundingPanel: View {
         bottomSafeAreaInset: CGFloat = 0,
         isUpsideDownPortrait: Bool = false,
         onSelectionChanged: @escaping (Int?) -> Void,
+        onTickSelectionChanged: @escaping () -> Void = {},
         onDisableAndDismiss: @escaping () -> Void,
         onDismiss: @escaping () -> Void
     ) {
@@ -3249,6 +3350,7 @@ private struct IOSRoundingPanel: View {
         self.bottomSafeAreaInset = bottomSafeAreaInset
         self.isUpsideDownPortrait = isUpsideDownPortrait
         self.onSelectionChanged = onSelectionChanged
+        self.onTickSelectionChanged = onTickSelectionChanged
         self.onDisableAndDismiss = onDisableAndDismiss
         self.onDismiss = onDismiss
         let initialPosition = IOSRoundingPanel.sliderPosition(
@@ -3266,11 +3368,13 @@ private struct IOSRoundingPanel: View {
                     value: Binding(
                         get: { sliderValue },
                         set: { newValue in
+                            let previousStepIndex = stepIndex(for: sliderValue)
                             let clamped = min(max(newValue, 0), 1)
                             let snappedStepIndex = stepIndex(for: clamped)
                             let snappedPosition = sliderPosition(for: snappedStepIndex)
-                            guard snappedPosition != sliderValue else { return }
+                            guard snappedStepIndex != previousStepIndex else { return }
                             sliderValue = snappedPosition
+                            onTickSelectionChanged()
                             onSelectionChanged(digits(for: snappedStepIndex))
                         }
                     ),
@@ -3457,6 +3561,7 @@ private struct IOSHistoryPanel: View {
     let onCopyEntry: (HistoryEntry) -> Void
     let onCopyOperationEntry: (HistoryEntry) -> Void
     @Environment(\.colorScheme) private var colorScheme
+    @ScaledMetric(relativeTo: .body) private var historyDynamicTypeScale: CGFloat = 1.0
     @State private var didClearHistoryInOverlay: Bool = false
     @State private var hadEntriesWhilePresented: Bool = false
 
@@ -3515,6 +3620,14 @@ private struct IOSHistoryPanel: View {
         usesSurfaceBackground ? palette.surface : palette.historyBackground
     }
 
+    private var boundedHistoryTextScale: CGFloat {
+        min(max(historyDynamicTypeScale, 1.0), 2.25)
+    }
+
+    private func scaledHistoryFontSize(_ base: CGFloat, maxMultiplier: CGFloat = 2.1) -> CGFloat {
+        min(max(base, base * boundedHistoryTextScale), base * maxMultiplier)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: metrics.panelSpacing) {
             if let onResizeChanged {
@@ -3527,7 +3640,7 @@ private struct IOSHistoryPanel: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     Text(emptyHistoryMessage)
-                        .font(EnterCalcFont.appFont(size: metrics.panelSecondaryFontSize + 2))
+                        .font(EnterCalcFont.appFont(size: scaledHistoryFontSize(metrics.panelSecondaryFontSize + 2, maxMultiplier: 2.0)))
                         .foregroundColor(palette.textSecondary)
                         .multilineTextAlignment(alignsEmptyStateToTop ? .leading : .center)
                         .padding(.top, alignsEmptyStateToTop ? metrics.panelVerticalPadding : 0)
@@ -3559,11 +3672,11 @@ private struct IOSHistoryPanel: View {
                                 } label: {
                                     VStack(alignment: .trailing, spacing: 4) {
                                         Text("\(entry.displayExpression)\(entry.displayExpression.contains("≈") ? "" : " =")")
-                                            .font(EnterCalcFont.appFont(size: metrics.panelSecondaryFontSize))
+                                            .font(EnterCalcFont.appFont(size: scaledHistoryFontSize(metrics.panelSecondaryFontSize)))
                                             .foregroundColor(palette.textSecondary)
                                             .frame(maxWidth: .infinity, alignment: .trailing)
                                         Text(entry.displayResult)
-                                            .font(EnterCalcFont.appFont(size: metrics.panelPrimaryFontSize))
+                                            .font(EnterCalcFont.appFont(size: scaledHistoryFontSize(metrics.panelPrimaryFontSize)))
                                             .foregroundColor(palette.textPrimary)
                                             .frame(maxWidth: .infinity, alignment: .trailing)
                                     }
@@ -3984,17 +4097,24 @@ private enum AppTheme: String, CaseIterable {
         }
     }
 
-    func palette(using systemColorScheme: ColorScheme) -> Palette {
+    func palette(using systemColorScheme: ColorScheme, increasedContrast: Bool = false) -> Palette {
+        let basePalette: Palette
         switch self {
         case .light:
-            return .light
+            basePalette = .light
         case .dark:
-            return .dark
+            basePalette = .dark
         case .blue:
-            return .blue
+            basePalette = .blue
         case .system:
-            return Palette.forScheme(systemColorScheme)
+            basePalette = Palette.forScheme(systemColorScheme)
         }
+
+        let isDarkLike = self == .dark || self == .blue || (self == .system && systemColorScheme == .dark)
+        let isBlueLike = self == .blue
+        return increasedContrast
+            ? basePalette.adjustedForIncreasedContrast(isDarkLike: isDarkLike, isBlueLike: isBlueLike)
+            : basePalette
     }
 }
 
@@ -4329,12 +4449,23 @@ private struct IOSLayoutMetrics {
 private extension EnterCalcIOSView {
     func syncSystemSettingsMetadata() {
         let defaults = UserDefaults.standard
-        defaults.register(defaults: ["settings.haptics.disabled": false])
+        defaults.register(defaults: [
+            "settings.haptics.disabled": false,
+            "settings.reduceMotion.enabled": false
+        ])
 
         if defaults.object(forKey: "settings.haptics.disabled") == nil,
            let legacyUsesActionHaptics = defaults.object(forKey: "settings.haptics.actions") as? Bool {
             defaults.set(!legacyUsesActionHaptics, forKey: "settings.haptics.disabled")
             defaults.removeObject(forKey: "settings.haptics.actions")
+        }
+
+        if defaults.object(forKey: "settings.reduceMotion.enabled") == nil {
+    #if canImport(UIKit)
+            defaults.set(UIAccessibility.isReduceMotionEnabled, forKey: "settings.reduceMotion.enabled")
+    #else
+            defaults.set(false, forKey: "settings.reduceMotion.enabled")
+    #endif
         }
 
         defaults.set(systemSettingsVersionString(), forKey: "settings.about.version")
@@ -4505,15 +4636,19 @@ private struct IOSCalcButton {
 
 private struct IOSActionRowButton {
     let symbol: String
+    let accessibilityLabelKey: String
     let action: (CalculatorScreenSession) -> Void
 }
 
 private struct IOSCompactActionButton: View {
     let button: IOSActionRowButton
+    let accessibilityLabel: String
     let palette: Palette
     let height: CGFloat
+    let reduceMotionEnabled: Bool
     let pressFeedback: () -> Void
     let action: () -> Void
+    @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
     @State private var pressPopScale: CGFloat = 1.0
     @State private var pointerIsDown: Bool = false
     @State private var pressPopGeneration: Int = 0
@@ -4528,18 +4663,20 @@ private struct IOSCompactActionButton: View {
             action()
         } label: {
             Image(systemName: button.symbol)
-                .font(EnterCalcFont.appFont(size: min(max(height * 0.55, 12), 20)))
+                .font(EnterCalcFont.appFont(size: boundedIconFontSize))
                 .foregroundStyle(palette.textPrimary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
-                .scaleEffect(pressPopScale)
+                .scaleEffect(reduceMotionEnabled ? 1.0 : pressPopScale)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(Text(accessibilityLabel))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
         .simultaneousGesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in
+                    guard !reduceMotionEnabled else { return }
                     guard !pointerIsDown else { return }
                     pointerIsDown = true
                     triggerPressPopAnimation()
@@ -4556,7 +4693,18 @@ private struct IOSCompactActionButton: View {
         .frame(height: height)
     }
 
+    private var boundedIconFontSize: CGFloat {
+        let baseSize = min(max(height * 0.55, 12), 20)
+        let maxSize = max(baseSize, height * 0.82)
+        return min(max(baseSize, baseSize * controlDynamicTypeScale), maxSize)
+    }
+
     private func triggerPressPopAnimation() {
+        guard !reduceMotionEnabled else {
+            pressPopScale = 1.0
+            return
+        }
+
         pressPopGeneration += 1
         let currentGeneration = pressPopGeneration
 
@@ -4580,6 +4728,8 @@ private struct IOSKeypadButton: View {
     let buttonHeight: CGFloat
     let pressFeedback: (IOSCalcButton.Kind) -> Void
     let action: () -> Void
+    let reduceMotionEnabled: Bool
+    @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
     var operatorRevealProgress: Double = 0.0
     var operatorAnimFadeOpacity: Double = 1.0
     @State private var isPressed: Bool = false
@@ -4655,11 +4805,11 @@ private struct IOSKeypadButton: View {
             .foregroundStyle(button.foregroundColor(palette: palette))
             .frame(maxWidth: .infinity, minHeight: buttonHeight, maxHeight: buttonHeight)
             .background(buttonBackground)
-            .scaleEffect(pressPopScale)
+            .scaleEffect(reduceMotionEnabled ? 1.0 : pressPopScale)
             .overlay(
                 RoundedRectangle(cornerRadius: scaledCornerRadius, style: .continuous)
                     .fill(palette.buttonHoverOverlay)
-                    .opacity(isPressed ? 1 : 0)
+                    .opacity(isPressed && !reduceMotionEnabled ? 1 : 0)
                     .allowsHitTesting(false)
             )
             .overlay {
@@ -4694,7 +4844,7 @@ private struct IOSKeypadButton: View {
                 }
             }
             .zIndex(pressPopScale > 1.001 ? 1 : 0)
-            .animation(.easeOut(duration: 0.08), value: isPressed)
+            .animation(reduceMotionEnabled ? nil : .easeOut(duration: 0.08), value: isPressed)
     }
 
     private func pressGesture(in size: CGSize) -> some Gesture {
@@ -4750,6 +4900,10 @@ private struct IOSKeypadButton: View {
     private func handleTap() {
         pressFeedback(button.kind)
         action()
+        guard !reduceMotionEnabled else {
+            shimmerVisible = false
+            return
+        }
         guard isEqualsButton else { return }
         shimmerProgress = 0
         shimmerVisible = true
@@ -4762,6 +4916,11 @@ private struct IOSKeypadButton: View {
     }
 
     private func triggerPressPopAnimation() {
+        guard !reduceMotionEnabled else {
+            pressPopScale = 1.0
+            return
+        }
+
         pressPopGeneration += 1
         let currentGeneration = pressPopGeneration
 
@@ -4803,8 +4962,8 @@ private struct IOSKeypadButton: View {
     private var labelView: some View {
         switch button.title {
         case "1/x":
-            let iconWidth = min(max(buttonHeight * 0.68, 24), 38)
-            let iconHeight = min(max(buttonHeight * 0.68, 24), 38)
+            let iconWidth = boundedIconSquareSize
+            let iconHeight = boundedIconSquareSize
             let iconFrameWidth = iconWidth
             let iconFrameHeight = iconHeight
             let iconScaleX: CGFloat = 0.94
@@ -4821,8 +4980,8 @@ private struct IOSKeypadButton: View {
                 .scaleEffect(x: iconScaleX, y: iconScaleY)
                 .offset(x: iconOffsetX, y: iconOffsetY)
         case "x²":
-            let iconWidth = min(max(buttonHeight * 0.68, 24), 38)
-            let iconHeight = min(max(buttonHeight * 0.68, 24), 38)
+            let iconWidth = boundedIconSquareSize
+            let iconHeight = boundedIconSquareSize
             let iconFrameWidth = iconWidth
             let iconFrameHeight = iconHeight
             let iconScaleX: CGFloat = 0.9
@@ -4839,8 +4998,8 @@ private struct IOSKeypadButton: View {
                 .scaleEffect(x: iconScaleX, y: iconScaleY)
                 .offset(x: iconOffsetX, y: iconOffsetY)
         case "²√x":
-            let iconWidth = min(max(buttonHeight * 0.68, 24), 38)
-            let iconHeight = min(max(buttonHeight * 0.68, 24), 38)
+            let iconWidth = boundedIconSquareSize
+            let iconHeight = boundedIconSquareSize
             let iconFrameWidth = iconWidth
             let iconFrameHeight = iconHeight
             let iconScaleX: CGFloat = 0.92
@@ -4878,7 +5037,13 @@ private struct IOSKeypadButton: View {
     }
 
     private var symbolBaseSize: CGFloat {
-        min(metrics.buttonFontSize, buttonHeight * 0.52)
+        let baseSize = min(metrics.buttonFontSize, buttonHeight * 0.52)
+        let maxSize = max(baseSize, buttonHeight * 0.82)
+        return min(max(baseSize, baseSize * controlDynamicTypeScale), maxSize)
+    }
+
+    private var boundedIconSquareSize: CGFloat {
+        min(max(symbolBaseSize * 1.35, 24), buttonHeight * 0.9)
     }
 
     private var slashSize: CGFloat {

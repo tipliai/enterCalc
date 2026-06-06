@@ -24,3 +24,4 @@ EnterCalc: A simple yet powerful macOS and iOS calculator.
 ## Engineering Docs
 
 - Keyboard actions and context matrix: [Keyboard Actions Matrix](./keyboard)
+- Accessibility Features: [Accessibility](./accessibility)

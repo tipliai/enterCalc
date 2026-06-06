@@ -43,6 +43,8 @@
 "paste" = "Pegar";
 "undo" = "Deshacer";
 "redo" = "Rehacer";
+"toggleSign" = "Cambiar signo";
+"backspace" = "Retroceso";
 "clear" = "Borrar";
 "clear.all.command" = "Borrar todo (AC)";
 "clear.commandBackspace" = "Borrar (Cmd+Retroceso)";

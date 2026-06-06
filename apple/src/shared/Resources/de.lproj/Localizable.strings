@@ -43,6 +43,8 @@
 "paste" = "Einfügen";
 "undo" = "Rückgängig";
 "redo" = "Wiederholen";
+"toggleSign" = "Vorzeichen wechseln";
+"backspace" = "Rücktaste";
 "clear" = "Löschen";
 "clear.all.command" = "Alles löschen (AC)";
 "clear.commandBackspace" = "Löschen (Cmd+Rücktaste)";

@@ -16,6 +16,16 @@
 		</dict>
 		<dict>
 			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+			<key>Title</key>
+			<string>SETTINGS_REDUCE_MOTION_TITLE</string>
+			<key>Key</key>
+			<string>settings.reduceMotion.enabled</string>
+			<key>DefaultValue</key>
+			<false/>
+		</dict>
+		<dict>
+			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 			<key>Title</key>
 			<string>SETTINGS_ABOUT_SECTION_TITLE</string>
