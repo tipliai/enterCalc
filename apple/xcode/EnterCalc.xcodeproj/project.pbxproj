@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 100;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -69,35 +69,27 @@
 /* Begin PBXFrameworksBuildPhase section */
 		07A7D5B8D2E26CD42CCC2032 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				A9AE37CED30C5C943F2DFB9D /* EnterCalcCore in Frameworks */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		2929F41FAB3BFEE5ADE967F5 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				A32A5B96C0BE4CDA60A31169 /* EnterCalcCore in Frameworks */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		AA789A3835C6BAAEF7475A7F /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				51BDDF31AD7C4601782E0FA9 /* EnterCalcCore in Frameworks */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		FC3A0FA33180891977AE6501 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				9D9787D645B382039CAFFF03 /* EnterCalcCore in Frameworks */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
@@ -243,8 +235,6 @@
 			);
 			buildRules = (
 			);
-			dependencies = (
-			);
 			name = "EnterCalc-macOS";
 			packageProductDependencies = (
 				D3235B7702F871A906C4F2B6 /* EnterCalcCore */,
@@ -262,8 +252,6 @@
 				FC3A0FA33180891977AE6501 /* Frameworks */,
 			);
 			buildRules = (
-			);
-			dependencies = (
 			);
 			name = "EnterCalc-iOS";
 			packageProductDependencies = (
@@ -332,7 +320,7 @@
 			packageReferences = (
 				E3862896AD37BDE4D176D0D1 /* XCLocalSwiftPackageReference ".." */,
 			);
-			preferredProjectObjectVersion = 77;
+			preferredProjectObjectVersion = 100;
 			productRefGroup = 9AA5EB5EA035E37AF8FE23BC /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -348,60 +336,48 @@
 /* Begin PBXResourcesBuildPhase section */
 		631F32EC58E85E6CFD3BE531 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				F8D88845082D9A2DF9FF47EA /* LICENSE in Resources */,
 				23F9AF3D7A27C257ADDCF262 /* EnterCalc.icon in Resources */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		F34DA76ED20D694BCA859A44 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				C423B2D9907634F5A6CC1F6A /* LICENSE in Resources */,
 				BC5D6A0E18912CC4B70F1AF2 /* Settings.bundle in Resources */,
 				F1972E266D6660D9DE97B6A2 /* EnterCalc.icon in Resources */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		56D14F2ED3F6581C6CACDD82 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				1ED893C8781849B2F034A90B /* EnterCalcIOSApp.swift in Sources */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		6B336B00F127C75EB29ADDD9 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				FD50C9803C0CF7A629D459C8 /* CalculatorWindowView.swift in Sources */,
 				3297115E09D9D955F1069163 /* KeyCaptureView.swift in Sources */,
 				B8F9B687E7972D0F224675B5 /* MacLocalization.swift in Sources */,
 				45377293F3B5022ECA4B3A80 /* EnterCalcMacApp.swift in Sources */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		79B6660A2E75F9551340B89C /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				9FC66B20E0C2D74BFD20D77D /* CalculatorViewModelTests.swift in Sources */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		7E59E34B67406D15CF44925D /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				CA734AB7431B5773A7ECB9B8 /* CalculatorViewModelTests.swift in Sources */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
@@ -419,7 +395,7 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		0C3BFD6CED077714C1D2BFC7 /* Release */ = {
+		0C3BFD6CED077714C1D2BFC7 /* Release configuration for PBXNativeTarget "EnterCalc-macOS" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = EnterCalc;
@@ -442,7 +418,7 @@
 			};
 			name = Release;
 		};
-		24EE41CDF090239B0EBAD782 /* QA */ = {
+		24EE41CDF090239B0EBAD782 /* QA configuration for PBXProject "EnterCalc" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -505,7 +481,7 @@
 			};
 			name = QA;
 		};
-		2915EB4A86571867722E9DB9 /* QA */ = {
+		2915EB4A86571867722E9DB9 /* QA configuration for PBXNativeTarget "EnterCalc-iOS" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = EnterCalc;
@@ -531,7 +507,7 @@
 			};
 			name = QA;
 		};
-		490F06384A917F69BE9494AE /* Debug */ = {
+		490F06384A917F69BE9494AE /* Debug configuration for PBXProject "EnterCalc" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -601,7 +577,7 @@
 			};
 			name = Debug;
 		};
-		5872A16587CA7E9262670F96 /* Release */ = {
+		5872A16587CA7E9262670F96 /* Release configuration for PBXNativeTarget "EnterCalc-macOSTests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -622,7 +598,7 @@
 			};
 			name = Release;
 		};
-		8884AB24C31D1F05224D02F2 /* Release */ = {
+		8884AB24C31D1F05224D02F2 /* Release configuration for PBXNativeTarget "EnterCalc-iOSTests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -637,12 +613,15 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.tipliai.entercalc.tests.ios;
 				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/EnterCalc.app/EnterCalc";
 			};
 			name = Release;
 		};
-		96322C98AD3C9C911E66C57B /* Debug */ = {
+		96322C98AD3C9C911E66C57B /* Debug configuration for PBXNativeTarget "EnterCalc-macOSTests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -663,7 +642,7 @@
 			};
 			name = Debug;
 		};
-		9658282B02BA891634D1008B /* Release */ = {
+		9658282B02BA891634D1008B /* Release configuration for PBXNativeTarget "EnterCalc-iOS" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = EnterCalc;
@@ -689,7 +668,7 @@
 			};
 			name = Release;
 		};
-		9874D8DBB9993227E0086E28 /* QA */ = {
+		9874D8DBB9993227E0086E28 /* QA configuration for PBXNativeTarget "EnterCalc-iOSTests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -704,12 +683,15 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.tipliai.entercalc.tests.ios;
 				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/EnterCalc.app/EnterCalc";
 			};
 			name = QA;
 		};
-		AFECB2C3DEFD81F7035B389E /* QA */ = {
+		AFECB2C3DEFD81F7035B389E /* QA configuration for PBXNativeTarget "EnterCalc-macOS" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = EnterCalc;
@@ -732,7 +714,7 @@
 			};
 			name = QA;
 		};
-		D0A15B48F4A6CE7AE01B99DD /* Debug */ = {
+		D0A15B48F4A6CE7AE01B99DD /* Debug configuration for PBXNativeTarget "EnterCalc-iOSTests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -747,12 +729,15 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.tipliai.entercalc.tests.ios;
 				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/EnterCalc.app/EnterCalc";
 			};
 			name = Debug;
 		};
-		DD06F48F076D363D357FB18E /* QA */ = {
+		DD06F48F076D363D357FB18E /* QA configuration for PBXNativeTarget "EnterCalc-macOSTests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -773,7 +758,7 @@
 			};
 			name = QA;
 		};
-		E1B0C4803E5A641B281D6926 /* Debug */ = {
+		E1B0C4803E5A641B281D6926 /* Debug configuration for PBXNativeTarget "EnterCalc-iOS" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = EnterCalc;
@@ -799,7 +784,7 @@
 			};
 			name = Debug;
 		};
-		EFBF9DE313E66EAFF51A3781 /* Debug */ = {
+		EFBF9DE313E66EAFF51A3781 /* Debug configuration for PBXNativeTarget "EnterCalc-macOS" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = EnterCalc;
@@ -821,7 +806,7 @@
 			};
 			name = Debug;
 		};
-		F70CF9AF13226F220CFA701C /* Release */ = {
+		F70CF9AF13226F220CFA701C /* Release configuration for PBXProject "EnterCalc" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -890,51 +875,46 @@
 		5DA81D9020F9743886638B20 /* Build configuration list for PBXProject "EnterCalc" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				490F06384A917F69BE9494AE /* Debug */,
-				24EE41CDF090239B0EBAD782 /* QA */,
-				F70CF9AF13226F220CFA701C /* Release */,
+				490F06384A917F69BE9494AE /* Debug configuration for PBXProject "EnterCalc" */,
+				24EE41CDF090239B0EBAD782 /* QA configuration for PBXProject "EnterCalc" */,
+				F70CF9AF13226F220CFA701C /* Release configuration for PBXProject "EnterCalc" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
 		86224F2372571DA6FABDBF81 /* Build configuration list for PBXNativeTarget "EnterCalc-iOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				E1B0C4803E5A641B281D6926 /* Debug */,
-				2915EB4A86571867722E9DB9 /* QA */,
-				9658282B02BA891634D1008B /* Release */,
+				E1B0C4803E5A641B281D6926 /* Debug configuration for PBXNativeTarget "EnterCalc-iOS" */,
+				2915EB4A86571867722E9DB9 /* QA configuration for PBXNativeTarget "EnterCalc-iOS" */,
+				9658282B02BA891634D1008B /* Release configuration for PBXNativeTarget "EnterCalc-iOS" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
 		A91374020B17F9003AF7BE7E /* Build configuration list for PBXNativeTarget "EnterCalc-macOSTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				96322C98AD3C9C911E66C57B /* Debug */,
-				DD06F48F076D363D357FB18E /* QA */,
-				5872A16587CA7E9262670F96 /* Release */,
+				96322C98AD3C9C911E66C57B /* Debug configuration for PBXNativeTarget "EnterCalc-macOSTests" */,
+				DD06F48F076D363D357FB18E /* QA configuration for PBXNativeTarget "EnterCalc-macOSTests" */,
+				5872A16587CA7E9262670F96 /* Release configuration for PBXNativeTarget "EnterCalc-macOSTests" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
 		C1AD65241760C82268D9A529 /* Build configuration list for PBXNativeTarget "EnterCalc-macOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				EFBF9DE313E66EAFF51A3781 /* Debug */,
-				AFECB2C3DEFD81F7035B389E /* QA */,
-				0C3BFD6CED077714C1D2BFC7 /* Release */,
+				EFBF9DE313E66EAFF51A3781 /* Debug configuration for PBXNativeTarget "EnterCalc-macOS" */,
+				AFECB2C3DEFD81F7035B389E /* QA configuration for PBXNativeTarget "EnterCalc-macOS" */,
+				0C3BFD6CED077714C1D2BFC7 /* Release configuration for PBXNativeTarget "EnterCalc-macOS" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
 		E4981F199712D311D708DCCF /* Build configuration list for PBXNativeTarget "EnterCalc-iOSTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				D0A15B48F4A6CE7AE01B99DD /* Debug */,
-				9874D8DBB9993227E0086E28 /* QA */,
-				8884AB24C31D1F05224D02F2 /* Release */,
+				D0A15B48F4A6CE7AE01B99DD /* Debug configuration for PBXNativeTarget "EnterCalc-iOSTests" */,
+				9874D8DBB9993227E0086E28 /* QA configuration for PBXNativeTarget "EnterCalc-iOSTests" */,
+				8884AB24C31D1F05224D02F2 /* Release configuration for PBXNativeTarget "EnterCalc-iOSTests" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
