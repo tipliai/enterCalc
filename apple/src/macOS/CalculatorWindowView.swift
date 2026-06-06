@@ -9,30 +9,6 @@ private func macPreferredTextScale(for style: NSFont.TextStyle, baseline: CGFloa
     return max(1.0, preferredSize / baseline)
 }
 
-private func macAccessibilityTextScaleFromSystemSettings() -> CGFloat {
-    guard let universalAccessDefaults = UserDefaults(suiteName: "com.apple.universalaccess"),
-          let fontSizeCategory = universalAccessDefaults.dictionary(forKey: "FontSizeCategory"),
-          let rawGlobalCategory = fontSizeCategory["global"] as? String else {
-        return 1.0
-    }
-
-    switch rawGlobalCategory.uppercased() {
-    case "XS": return 0.85
-    case "S": return 0.92
-    case "M": return 1.0
-    case "L": return 1.08
-    case "XL": return 1.18
-    case "XXL": return 1.30
-    case "XXXL": return 1.42
-    case "AX1": return 1.55
-    case "AX2": return 1.72
-    case "AX3": return 1.90
-    case "AX4": return 2.10
-    case "AX5": return 2.35
-    default: return 1.0
-    }
-}
-
 @MainActor
 private enum MacButtonSoundFeedback {
     static func playIfNeeded(disabled: Bool, isEnterKey: Bool = false) {
@@ -72,6 +48,7 @@ struct CalculatorWindowView: View {
     @ObservedObject var viewModel: CalculatorViewModel
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @Environment(\.accessibilityReduceMotion) private var reduceMotionEnabled
     @Environment(\.openWindow) private var openWindow
     @Environment(\.scenePhase) private var scenePhase
     @ScaledMetric(relativeTo: .largeTitle) private var displayDynamicTypeScale: CGFloat = 1.0
@@ -136,10 +113,7 @@ struct CalculatorWindowView: View {
     }
 
     private var effectiveHistoryTextScale: CGFloat {
-        max(
-            macPreferredTextScale(for: .body, baseline: 13),
-            macAccessibilityTextScaleFromSystemSettings()
-        )
+        macPreferredTextScale(for: .body, baseline: 13)
     }
 
     private var currentLocalizationBundle: Bundle? {
@@ -382,7 +356,7 @@ struct CalculatorWindowView: View {
                                 }
                             }
                             .allowsHitTesting(activeOverlay != nil)
-                            .animation(.easeInOut, value: activeOverlay)
+                            .animation(reduceMotionEnabled ? nil : .easeInOut, value: activeOverlay)
                             .padding(.horizontal, -8)
                             .padding(.top, -8)
                             .padding(.bottom, -8)
@@ -517,8 +491,7 @@ struct CalculatorWindowView: View {
             let contentHeight = max(1, displayGeometry.size.height - 8 - 3)
             let effectiveDisplayScale = max(
                 displayDynamicTypeScale,
-                macPreferredTextScale(for: .largeTitle, baseline: 26),
-                macAccessibilityTextScaleFromSystemSettings()
+                macPreferredTextScale(for: .largeTitle, baseline: 26)
             )
             let resultFontSize = boundedDynamicTypeSize(
                 baseResultFontSize,
@@ -700,12 +673,20 @@ struct CalculatorWindowView: View {
         viewModel.clearDisplayEditCursor()
         viewModel.copyToPasteboard()
         showCopiedToast()
-        withAnimation(.easeOut(duration: 0.1)) {
+        if reduceMotionEnabled {
             flashCopy = true
+        } else {
+            withAnimation(.easeOut(duration: 0.1)) {
+                flashCopy = true
+            }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-            withAnimation(.easeOut(duration: 0.1)) {
+            if reduceMotionEnabled {
                 flashCopy = false
+            } else {
+                withAnimation(.easeOut(duration: 0.1)) {
+                    flashCopy = false
+                }
             }
         }
     }
@@ -733,14 +714,22 @@ struct CalculatorWindowView: View {
         copyToastDismissWorkItem?.cancel()
 
         if !showCopyToast {
-            withAnimation(.easeOut(duration: 0.18)) {
+            if reduceMotionEnabled {
                 showCopyToast = true
+            } else {
+                withAnimation(.easeOut(duration: 0.18)) {
+                    showCopyToast = true
+                }
             }
         }
 
         let dismissWorkItem = DispatchWorkItem {
-            withAnimation(.easeOut(duration: 0.5)) {
+            if reduceMotionEnabled {
                 showCopyToast = false
+            } else {
+                withAnimation(.easeOut(duration: 0.5)) {
+                    showCopyToast = false
+                }
             }
             copyToastDismissWorkItem = nil
         }
@@ -772,7 +761,7 @@ struct CalculatorWindowView: View {
             .frame(height: 16, alignment: .leading)
             .lineLimit(1)
             .clipped()
-            .animation(.easeInOut(duration: 0.18), value: opacity)
+            .animation(reduceMotionEnabled ? nil : .easeInOut(duration: 0.18), value: opacity)
             .anchorPreference(
                 key: MemoryControlsBoundsKey.self,
                 value: .bounds,
@@ -855,7 +844,7 @@ struct CalculatorWindowView: View {
                         HStack(spacing: spacing) {
                             ForEach(row.indices, id: \.self) { buttonIndex in
                                 let button = row[buttonIndex]
-                                CalculatorButton(title: button.title, kind: button.kind, height: cellHeight, disablesButtonSound: windowSettings.disablesButtonSound, action: button.action, enabled: button.enabled, palette: palette, operatorRevealProgress: operatorRevealProgress, operatorAnimFadeOpacity: operatorAnimFadeOpacity)
+                                CalculatorButton(title: button.title, kind: button.kind, height: cellHeight, disablesButtonSound: windowSettings.disablesButtonSound, action: button.action, enabled: button.enabled, palette: palette, operatorRevealProgress: operatorRevealProgress, operatorAnimFadeOpacity: operatorAnimFadeOpacity, reduceMotionEnabled: reduceMotionEnabled)
                                     .frame(width: cellWidth * CGFloat(button.columnSpan) + spacing * CGFloat(button.columnSpan - 1))
                             }
                         }
@@ -1226,8 +1215,12 @@ struct CalculatorWindowView: View {
             viewModel.commitResultRoundingInteraction()
         }
 
-        withAnimation(.easeInOut) {
+        if reduceMotionEnabled {
             activeOverlay = overlay
+        } else {
+            withAnimation(.easeInOut) {
+                activeOverlay = overlay
+            }
         }
         if overlay != .history {
             isResizingHistoryOverlay = false
@@ -1789,8 +1782,7 @@ private struct CompactActionButton: View {
     private var boundedIconFontSize: CGFloat {
         let effectiveControlScale = max(
             controlDynamicTypeScale,
-            macPreferredTextScale(for: .title2, baseline: 22),
-            macAccessibilityTextScaleFromSystemSettings()
+            macPreferredTextScale(for: .title2, baseline: 22)
         )
         let baseSize = min(max(height * 0.52, 11), 17)
         let maxSize = max(baseSize, height * 0.82)
@@ -1827,6 +1819,7 @@ private struct CompactActionButton: View {
         let palette: Palette
         var operatorRevealProgress: Double = 0.0
         var operatorAnimFadeOpacity: Double = 1.0
+        var reduceMotionEnabled: Bool = false
         @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
 
         @State private var hovering: Bool = false
@@ -1919,7 +1912,7 @@ private struct CompactActionButton: View {
         private func handleTap() {
             MacButtonSoundFeedback.playIfNeeded(disabled: disablesButtonSound, isEnterKey: kind == .accent)
             action()
-            guard kind == .accent else { return }
+            guard kind == .accent, !reduceMotionEnabled else { return }
             shimmerProgress = 0
             shimmerVisible = true
             withAnimation(.linear(duration: 0.17)) {
@@ -1931,6 +1924,7 @@ private struct CompactActionButton: View {
         }
 
         private func triggerPressPopAnimation() {
+            guard !reduceMotionEnabled else { return }
             pressPopGeneration += 1
             let currentGeneration = pressPopGeneration
 
@@ -2020,8 +2014,7 @@ private struct CompactActionButton: View {
         private var primaryFontSize: CGFloat {
             let effectiveControlScale = max(
                 controlDynamicTypeScale,
-                macPreferredTextScale(for: .title2, baseline: 22),
-                macAccessibilityTextScaleFromSystemSettings()
+                macPreferredTextScale(for: .title2, baseline: 22)
             )
             let baseSize = min(max(height * 0.38, 14), 28)
             let maxSize = max(baseSize, height * 0.82)
@@ -2378,10 +2371,7 @@ private struct SettingsSheet: View {
     @Environment(\.macLocalizationBundle) private var localizationBundle
 
     private var settingsTextScale: CGFloat {
-        max(
-            macPreferredTextScale(for: .body, baseline: 13),
-            macAccessibilityTextScaleFromSystemSettings()
-        )
+        macPreferredTextScale(for: .body, baseline: 13)
     }
 
     private var settingsTitleSize: CGFloat { (NSFont.systemFontSize + 1) * settingsTextScale }
@@ -2858,6 +2848,11 @@ private extension CalculatorWindowView {
         let fadeDuration: Double = 0.22
         operatorRevealProgress = 0.0
         operatorAnimFadeOpacity = 1.0
+        guard !reduceMotionEnabled else {
+            operatorRevealProgress = 4.0
+            operatorAnimFadeOpacity = 0.0
+            return
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             withAnimation(.linear(duration: revealDuration)) {
                 operatorRevealProgress = 4.0

@@ -5,7 +5,7 @@ permalink: /accessibility/
 
 # Accessibility Features
 
-This page is a quick guide to accessibility features available in EnterCalc
+This page is a quick guide to accessibility features available in EnterCalc.
 
 ### Labels and control clarity
 
@@ -13,7 +13,7 @@ This page is a quick guide to accessibility features available in EnterCalc
 
 ### Reduced Motion support
 
-- EnterCalc respects OS Reduced Motion behavior.
+- EnterCalc respects OS Reduced Motion behavior on iOS and macOS.
 - Non-essential motion is reduced, including shimmer/parallax-style effects and transition-heavy animation paths.
 
 ### Increased Contrast support
@@ -43,7 +43,7 @@ This page is a quick guide to accessibility features available in EnterCalc
 
 ### macOS
 
-- Supports OS Increase Contrast and larger text behavior.
+- Supports OS Reduced Motion, Increase Contrast, and larger text behavior.
 - Compact action labels and history/settings text scaling are enabled.
 
 ## Coming Soon (v1.10)
