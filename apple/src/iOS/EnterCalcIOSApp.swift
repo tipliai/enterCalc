@@ -9,8 +9,9 @@ import CoreMotion
 #endif
 
 // Centralizes iOS haptic feedback. Prepared generators are reused per gesture
-// so the Taptic Engine warms up; devices without haptics fall back to a click
-// sound so key presses still feel responsive.
+// so the Taptic Engine warms up. On devices without haptics, regular keys fall
+// back to a click sound; the Enter key is skipped here since its sound is played
+// separately by the caller.
 @MainActor
 private enum IOSActionHaptics {
     static let keyPressImpact = UIImpactFeedbackGenerator(style: .light)

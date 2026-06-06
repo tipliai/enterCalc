@@ -1035,8 +1035,9 @@ public final class CalculatorViewModel: ObservableObject {
         completeUndoableChange(from: snapshot)
     }
 
-    // Computes x squared. The sign is preserved (negative inputs yield a negative
-    // token) to match the historical display behavior, with range guards.
+    // Computes x squared. A negative operand keeps its sign in the result
+    // (-2 squared shows as -4) to mirror exponent precedence where the unary
+    // minus binds looser than the power (-2 squared == -(2 squared)). Range guarded.
     public func square() {
         guard !isErrorState else { return }
         let snapshot = beginUndoableChange()
