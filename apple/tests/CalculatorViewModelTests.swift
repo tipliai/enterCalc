@@ -1950,8 +1950,7 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.expressionDisplay, "=round(0, 0)")
     }
 
-    // MARK: – Issue 85 regression: rounding precision must not drift during further input
-
+    // MARK: Regression: rounding precision must not drift during further input
     /// Before the fix, when the user typed a RHS operand with more decimal digits than the
     /// LHS, `updateDisplay` passed `currentInput` (the RHS) as the `sourceValue` for
     /// `spreadsheetRoundScale`, causing the displayed scale to change on every keystroke.
