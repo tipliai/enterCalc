@@ -555,6 +555,61 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.history.first?.result, "18")
     }
 
+    func testEvaluateAfterTrailingOperatorKeepsStandaloneUnaryAndPercentResult() {
+        typealias UnaryFixture = (
+            name: String,
+            input: String,
+            apply: (CalculatorViewModel) -> Void,
+            expectedDisplayExpression: String,
+            expectedHistoryExpression: String,
+            expectedResult: String
+        )
+        let fixtures: [UnaryFixture] = [
+            ("square root", "9", { $0.squareRoot() }, "√(9)", "√(9)", "3"),
+            ("square", "9", { $0.square() }, "9²", "sqr(9)", "81"),
+            ("reciprocal", "4", { $0.reciprocal() }, "1/(4)", "1/(4)", "0.25"),
+            ("percent", "50", { $0.applyPercent() }, "50%", "50%", "0.5")
+        ]
+        let trailingOperators: [(BinaryOperator, String)] = [
+            (.add, "+"), (.subtract, "−"), (.multiply, "×"), (.divide, "÷")
+        ]
+
+        for fixture in fixtures {
+            for (op, opSymbol) in trailingOperators {
+                let viewModel = CalculatorViewModel()
+                enter(fixture.input, into: viewModel)
+                fixture.apply(viewModel)
+                viewModel.setOperator(op)
+                viewModel.evaluate()
+
+                let label = "\(fixture.name) trailing \(opSymbol)"
+                XCTAssertEqual(viewModel.display, fixture.expectedResult, "Unexpected result for \(label)")
+                XCTAssertEqual(viewModel.expressionDisplay, "\(fixture.expectedDisplayExpression) =", "Unexpected expression for \(label)")
+                XCTAssertEqual(viewModel.history.count, 1, "Unexpected history count for \(label)")
+                XCTAssertEqual(viewModel.history.first?.expression, fixture.expectedHistoryExpression, "Unexpected history expression for \(label)")
+                XCTAssertEqual(viewModel.history.first?.result, fixture.expectedResult, "Unexpected history result for \(label)")
+            }
+        }
+    }
+
+    func testEvaluateTrailingOperatorInChainUsesComputedAccumulatorAndStoresHistory() {
+        let viewModel = CalculatorViewModel()
+
+        enter("1", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("2", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("3", into: viewModel)
+        viewModel.setOperator(.add)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "6")
+        XCTAssertEqual(viewModel.expressionDisplay, "1 + 2 + 3 =")
+        XCTAssertEqual(viewModel.history.count, 1)
+        XCTAssertEqual(viewModel.history.first?.expression, "1 + 2 + 3")
+        XCTAssertEqual(viewModel.history.first?.result, "6")
+    }
+
     func testMixedPrecedenceSimpleChainUsesNestedPostEqualsDisplayAndPrecedenceOnEvaluate() {
         let viewModel = CalculatorViewModel()
 
@@ -2506,20 +2561,28 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.display, "0")
     }
 
-    func testMultiplyOverflowSetsErrorState() {
+    func testEvaluateAfterTrailingMultiplyOperatorDoesNotDuplicateOperandIntoOverflow() {
         let viewModel = CalculatorViewModel()
 
-        // Get to ≈7.9e28 via five squarings of 8 (stays within Decimal range),
-        // then multiply that value by itself — the product ≈6.3e57 overflows.
+        // Get to ≈7.9e28 via five squarings of 8 (still in-range), then press
+        // multiply and evaluate without a right operand. This must finalize the
+        // existing value rather than duplicating the operand into an overflow.
         enter("8", into: viewModel)
-        for _ in 0..<5 { viewModel.square() }   // display: ≈7.9e28, no error yet
+        for _ in 0..<5 { viewModel.square() }
+        let expectedDisplay = viewModel.display
         XCTAssertFalse(viewModel.isErrorState, "Pre-condition: value should be valid before multiply")
 
         viewModel.setOperator(.multiply)
-        viewModel.evaluate()                      // repeats: ≈7.9e28 × ≈7.9e28 → overflow
+        viewModel.evaluate()
 
-        XCTAssertTrue(viewModel.isErrorState)
-        XCTAssertEqual(viewModel.display, "Out of range")
+        XCTAssertFalse(viewModel.isErrorState)
+        XCTAssertEqual(viewModel.display, expectedDisplay)
+        XCTAssertEqual(viewModel.history.count, 1)
+        // The stored history entry must not include the trailing operator and
+        // must record the pre-multiply value, not a doubled/overflowed result.
+        XCTAssertEqual(viewModel.history.first?.result, expectedDisplay)
+        XCTAssertFalse(viewModel.history.first?.expression.hasSuffix("×") ?? true,
+                       "History expression must not end with trailing operator")
     }
 
     func testOverflowKeepsOperationRowEmptyAndOperationCopyUnavailable() {
