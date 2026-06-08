@@ -570,19 +570,25 @@ final class CalculatorViewModelTests: XCTestCase {
             ("reciprocal", "4", { $0.reciprocal() }, "1/(4)", "1/(4)", "0.25"),
             ("percent", "50", { $0.applyPercent() }, "50%", "50%", "0.5")
         ]
+        let trailingOperators: [(BinaryOperator, String)] = [
+            (.add, "+"), (.subtract, "−"), (.multiply, "×"), (.divide, "÷")
+        ]
 
         for fixture in fixtures {
-            let viewModel = CalculatorViewModel()
-            enter(fixture.input, into: viewModel)
-            fixture.apply(viewModel)
-            viewModel.setOperator(.add)
-            viewModel.evaluate()
+            for (op, opSymbol) in trailingOperators {
+                let viewModel = CalculatorViewModel()
+                enter(fixture.input, into: viewModel)
+                fixture.apply(viewModel)
+                viewModel.setOperator(op)
+                viewModel.evaluate()
 
-            XCTAssertEqual(viewModel.display, fixture.expectedResult, "Unexpected result for \(fixture.name)")
-            XCTAssertEqual(viewModel.expressionDisplay, "\(fixture.expectedDisplayExpression) =", "Unexpected expression for \(fixture.name)")
-            XCTAssertEqual(viewModel.history.count, 1, "Unexpected history count for \(fixture.name)")
-            XCTAssertEqual(viewModel.history.first?.expression, fixture.expectedHistoryExpression, "Unexpected history expression for \(fixture.name)")
-            XCTAssertEqual(viewModel.history.first?.result, fixture.expectedResult, "Unexpected history result for \(fixture.name)")
+                let label = "\(fixture.name) trailing \(opSymbol)"
+                XCTAssertEqual(viewModel.display, fixture.expectedResult, "Unexpected result for \(label)")
+                XCTAssertEqual(viewModel.expressionDisplay, "\(fixture.expectedDisplayExpression) =", "Unexpected expression for \(label)")
+                XCTAssertEqual(viewModel.history.count, 1, "Unexpected history count for \(label)")
+                XCTAssertEqual(viewModel.history.first?.expression, fixture.expectedHistoryExpression, "Unexpected history expression for \(label)")
+                XCTAssertEqual(viewModel.history.first?.result, fixture.expectedResult, "Unexpected history result for \(label)")
+            }
         }
     }
 
@@ -2572,6 +2578,11 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isErrorState)
         XCTAssertEqual(viewModel.display, expectedDisplay)
         XCTAssertEqual(viewModel.history.count, 1)
+        // The stored history entry must not include the trailing operator and
+        // must record the pre-multiply value, not a doubled/overflowed result.
+        XCTAssertEqual(viewModel.history.first?.result, expectedDisplay)
+        XCTAssertFalse(viewModel.history.first?.expression.hasSuffix("×") ?? true,
+                       "History expression must not end with trailing operator")
     }
 
     func testOverflowKeepsOperationRowEmptyAndOperationCopyUnavailable() {
