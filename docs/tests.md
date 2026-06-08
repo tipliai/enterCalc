@@ -4,8 +4,8 @@ This document tracks the shared-module checks currently discovered by `swift tes
 Each row maps directly to a discovered test method in `apple/tests/CalculatorViewModelTests.swift`.
 
 Current verification status on macOS:
-- `swift test list` discovers `173` `CalculatorViewModelTests` methods.
-- This matrix documents the same `173` methods with no missing or extra entries.
+- `swift test list` discovers `177` `CalculatorViewModelTests` methods.
+- This matrix documents the same `177` methods with no missing or extra entries.
 - The current macOS run includes the AppKit-only clipboard tests guarded by `canImport(AppKit)`.
 
 ## UI Settings Expectations
@@ -197,3 +197,7 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Backspace | Start `9 × ( 3 + 1`, then backspace repeatedly | Backspace fully unwinds the parenthesized expression back to `0` while keeping state balanced | `testBackspaceCanFullyUnwindParenthesizedExpression` |
 | Clipboard | Enter `5 + 3`, clear the entry, then paste `7` | Pasted value becomes the pending operand and expression updates to `5 + 7` | `testPasteAfterPendingClearShowsPastedValue` |
 | Parentheses | Build `2 + ( 3 + 4 ) × ( 5 + 1`, clear the inner entry, enter `6`, then close | Clearing inside nested parentheses keeps parenthesis depth balanced and expression becomes `2 + ( 3 + 4 ) × 6` | `testClearParenthesizedExpressionKeepsBalancedParenthesisDepth` |
+| Rounding (regression #85) | Paste `10.123456`, enable rounding at precision `4`, set operator `+`, then type `0.0999999999` digit-by-digit | Operation display scale stays anchored to the LHS (`=round(10.123456 + 0.0999999999, 2) ≈`); scale does not drift to a value derived from the typed RHS | `testRoundingOperationScaleRemainsAnchoredToLHSWhileTypingRHSOperand` |
+| Rounding (regression #85) | Same setup as above | While the RHS is being typed, the result display shows the full unrounded typed value (`0.0999999999`) rather than a prematurely rounded approximation | `testRoundingDisplayIsNotPrematurelyAppliedWhileTypingRHSOperand` |
+| Rounding (regression #85) | Paste `10.123456`, enable rounding at precision `4`, `+ 0.0999999999`, then evaluate | After equals, display is `10.223456` and expression display uses a scale computed from the actual result value (`=round(10.2234559999, 6) ≈`) | `testRoundingFinalResultAfterPendingOperationUsesResultBasedScale` |
+| Rounding (regression #85) | Paste `10.123456`, enable rounding at precision `4`, type `+ 0.0999999999`, then evaluate | `resultRoundingPrecision` remains `4` before the operator, while typing the RHS, and after evaluate; it never changes on its own | `testResultRoundingPrecisionPropertyRemainsFixedDuringFurtherInput` |

@@ -1950,6 +1950,92 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.expressionDisplay, "=round(0, 0)")
     }
 
+    // MARK: – Issue 85 regression: rounding precision must not drift during further input
+
+    /// Before the fix, when the user typed a RHS operand with more decimal digits than the
+    /// LHS, `updateDisplay` passed `currentInput` (the RHS) as the `sourceValue` for
+    /// `spreadsheetRoundScale`, causing the displayed scale to change on every keystroke.
+    /// After the fix the scale is anchored to the accumulated LHS while typing.
+    func testRoundingOperationScaleRemainsAnchoredToLHSWhileTypingRHSOperand() {
+        let viewModel = CalculatorViewModel()
+
+        // Enter LHS and enable rounding at precision 4.
+        // For "10.123456" (8 sig-digits) and precision 4:
+        //   effectiveLevels = min(4, 7) = 4, retainedDigits = 4, magnitude = 1
+        //   spreadsheetRoundScale = 4 − 1 − 1 = 2
+        pasteString("10.123456", into: viewModel)
+        viewModel.beginResultRounding()
+        viewModel.setResultRoundingPrecision(4)
+        XCTAssertEqual(viewModel.expressionDisplay, "=round(10.123456, 2) ≈")
+
+        viewModel.setOperator(.add)
+
+        // Type the RHS operand digit-by-digit (using enter rather than pasteString so
+        // pasting a plain value does not reset the rounding state).  The old code
+        // would recompute the scale from "0.0999999999" (9 sig-digits, magnitude ≈ −2,
+        // scale ≈ 6) and show "=round(…, 6) ≈".  With the fix the scale stays at 2
+        // (anchored to the accumulated LHS value "10.123456").
+        enter("0.0999999999", into: viewModel)
+        XCTAssertEqual(viewModel.expressionDisplay, "=round(10.123456 + 0.0999999999, 2) ≈")
+    }
+
+    /// Before the fix, the display rounded the RHS operand while it was being typed
+    /// (e.g. "0.0999999999" collapsed to "0.1"), making in-progress input invisible.
+    /// After the fix the raw typed value is preserved in the display during a pending op.
+    func testRoundingDisplayIsNotPrematurelyAppliedWhileTypingRHSOperand() {
+        let viewModel = CalculatorViewModel()
+
+        pasteString("10.123456", into: viewModel)
+        viewModel.beginResultRounding()
+        viewModel.setResultRoundingPrecision(4)
+        viewModel.setOperator(.add)
+
+        // Type a 10-significant-digit RHS digit-by-digit.  Without the fix the
+        // display would show the rounded value "0.1" while the user is still
+        // entering digits.  With the fix the full typed value is preserved.
+        enter("0.0999999999", into: viewModel)
+        XCTAssertEqual(viewModel.display, "0.0999999999")
+    }
+
+    /// Verify that precision=4 is still applied correctly after equals: the expression
+    /// display reflects the scale computed from the actual result value, and the numeric
+    /// display shows the correctly-rounded result.
+    func testRoundingFinalResultAfterPendingOperationUsesResultBasedScale() {
+        let viewModel = CalculatorViewModel()
+
+        pasteString("10.123456", into: viewModel)
+        viewModel.beginResultRounding()
+        viewModel.setResultRoundingPrecision(4)
+        viewModel.setOperator(.add)
+        enter("0.0999999999", into: viewModel)
+        viewModel.evaluate()
+
+        // Result = 10.2234559999 (12 significant digits).
+        // effectiveLevels = min(4, 11) = 4, retainedDigits = 8, magnitude = 1
+        // spreadsheetRoundScale = 8 − 1 − 1 = 6
+        // NSDecimalRound(10.2234559999, 6) = 10.223456
+        XCTAssertEqual(viewModel.display, "10.223456")
+        XCTAssertEqual(viewModel.expressionDisplay, "=round(10.2234559999, 6) ≈")
+    }
+
+    /// Ensure no precision change occurs on the internal `resultRoundingPrecision` property
+    /// when more digits are typed after enabling rounding.
+    func testResultRoundingPrecisionPropertyRemainsFixedDuringFurtherInput() {
+        let viewModel = CalculatorViewModel()
+
+        pasteString("10.123456", into: viewModel)
+        viewModel.beginResultRounding()
+        viewModel.setResultRoundingPrecision(4)
+        XCTAssertEqual(viewModel.resultRoundingPrecision, 4)
+
+        viewModel.setOperator(.add)
+        enter("0.0999999999", into: viewModel)
+        XCTAssertEqual(viewModel.resultRoundingPrecision, 4)
+
+        viewModel.evaluate()
+        XCTAssertEqual(viewModel.resultRoundingPrecision, 4)
+    }
+
     func testCopyOperationThenPasteReplaysTheOperation() {
         let sourceViewModel = CalculatorViewModel()
         enter("12", into: sourceViewModel)
