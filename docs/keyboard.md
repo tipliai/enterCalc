@@ -1,3 +1,8 @@
+---
+title: Keyboard Actions
+permalink: /keyboard/
+---
+
 # EnterCalc Keyboard Actions and Context Matrix
 
 This document defines keyboard behavior currently implemented in EnterCalc for iOS and macOS.

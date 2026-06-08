@@ -9,13 +9,13 @@ A simple calculator with powerful features.
 
 Open source, privacy-first, and designed for speed. EnterCalc is a native calculator for iPhone, iPad, and Mac with history, multitasking, keyboard shortcuts, advanced copy and paste, and zero tracking.
 
-## Photos
+## Photos (MacOS, iPhone, iPad)
 
 ![Mac Screenshot](./images/macos_1.png)
 ![Mac Screenshot](./images/macos_2.png)
 ![Mac Screenshot](./images/macos_3.png)
-![iPhone Screenshot](./images/iphone.png)
-![iPad Screenshot](./images/ipad.png)
+![iPhone Screenshot](./images/iphone.gif)
+![iPad Screenshot](./images/ipad.gif)
 
 ## Features
 

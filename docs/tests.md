@@ -1,3 +1,8 @@
+---
+title: Unit Tests
+permalink: /tests/
+---
+
 # EnterCalc Unit Test Matrix
 
 This document tracks the shared-module checks currently discovered by `swift test list` for the Swift package in `apple/`.
