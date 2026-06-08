@@ -2586,13 +2586,28 @@ public final class CalculatorViewModel: ObservableObject {
             return
         }
 
-        let roundedDisplay = roundedDisplayString(fromStoredNumber: currentInput, precision: resultRoundingPrecision)
-        display = roundedDisplay
+        // When the user is actively typing the right-hand operand of a pending binary
+        // operation, do not prematurely apply rounding to the display (bug: "0.0999999999"
+        // was collapsed to "0.1"). Also anchor the operation-display scale to the
+        // accumulated LHS value so it does not drift as more digits are typed (bug:
+        // scale changed from 4 to 8 with further input).
+        let isTypingRHS = !isExpressionMode && pendingOperator != nil && !shouldResetInputOnNextDigit
+        if isTypingRHS {
+            display = plainDisplay
+        } else {
+            display = roundedDisplayString(fromStoredNumber: currentInput, precision: resultRoundingPrecision)
+        }
         let baseExpression = baseExpressionForRounding(from: header)
-        let relationSymbol = roundingRelationSymbol(fromStoredNumber: currentInput, precision: resultRoundingPrecision)
+        let roundingSourceValue: String
+        if isTypingRHS, let acc = accumulator {
+            roundingSourceValue = decimalNumberString(from: acc)
+        } else {
+            roundingSourceValue = currentInput
+        }
+        let relationSymbol = roundingRelationSymbol(fromStoredNumber: roundingSourceValue, precision: resultRoundingPrecision)
         expressionDisplay = roundedOperationDisplayString(
             baseExpression: baseExpression,
-            sourceValue: currentInput,
+            sourceValue: roundingSourceValue,
             precision: resultRoundingPrecision,
             relationSymbol: relationSymbol
         )
