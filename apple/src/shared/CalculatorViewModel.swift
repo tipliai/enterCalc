@@ -903,7 +903,11 @@ public final class CalculatorViewModel: ObservableObject {
         }
 
         if pendingOperator != nil {
-            if shouldFinalizeCurrencyPendingPercentAsStandaloneResult {
+            if shouldResetInputOnNextDigit {
+                // No right-hand operand was entered after the operator; finalize
+                // the existing accumulated value without duplicating the operand.
+                evaluateTrailingPendingOperatorAsStandaloneResult()
+            } else if shouldFinalizeCurrencyPendingPercentAsStandaloneResult {
                 finalizeCurrencyPendingPercentAsStandaloneResult()
                 updateDisplay()
             } else if evaluatePendingExpressionWithDisplayedPrecedence() {
@@ -927,6 +931,46 @@ public final class CalculatorViewModel: ObservableObject {
             updateDisplay()
         }
         completeUndoableChange(from: snapshot)
+    }
+
+    // Finalizes a pending operation where no right-hand operand was entered (the
+    // user pressed = immediately after an operator). The trailing operator is
+    // dropped and the accumulated left-hand value is used as the result, so the
+    // history entry reflects only the complete portion of the expression.
+    private func evaluateTrailingPendingOperatorAsStandaloneResult() {
+        guard let pending = pendingOperator else { return }
+
+        let result = accumulator ?? currentValue
+        let resultText = format(result)
+        let pendingExpression = expression.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let baseExpression: String
+        if !pendingExpression.isEmpty, pendingExpression.hasSuffix(pending.symbol) {
+            let trimmed = pendingExpression
+                .dropLast(pending.symbol.count)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            baseExpression = trimmed.isEmpty ? (accumulatorToken ?? currentToken) : trimmed
+        } else if !pendingExpression.isEmpty {
+            baseExpression = pendingExpression
+        } else {
+            baseExpression = accumulatorToken ?? currentToken
+        }
+
+        let displayExpression = completedOperationDisplayExpression(baseExpression)
+        appendHistory(expression: baseExpression, result: resultText, displayExpressionOverride: displayExpression)
+        lastResultSummary = displayExpression + " ="
+        currentInput = resultText
+        currentToken = displayString(for: resultText, useActiveCurrency: false)
+        accumulator = result
+        accumulatorToken = displayString(for: resultText, useActiveCurrency: false)
+        pendingOperator = nil
+        lastOperator = nil
+        lastOperand = nil
+        lastOperandToken = nil
+        expression = ""
+        shouldResetInputOnNextDigit = true
+        justEvaluated = true
+        updateDisplay()
     }
 
     private func evaluatePendingExpressionWithDisplayedPrecedence() -> Bool {
@@ -2586,13 +2630,28 @@ public final class CalculatorViewModel: ObservableObject {
             return
         }
 
-        let roundedDisplay = roundedDisplayString(fromStoredNumber: currentInput, precision: resultRoundingPrecision)
-        display = roundedDisplay
+        // When the user is actively typing the right-hand operand of a pending binary
+        // operation, do not prematurely apply rounding to the display (bug: "0.0999999999"
+        // was collapsed to "0.1"). Also anchor the operation-display scale to the
+        // accumulated LHS value so it does not drift as more digits are typed (bug:
+        // scale changed from 4 to 8 with further input).
+        let isTypingRHS = !isExpressionMode && pendingOperator != nil && !shouldResetInputOnNextDigit
+        if isTypingRHS {
+            display = plainDisplay
+        } else {
+            display = roundedDisplayString(fromStoredNumber: currentInput, precision: resultRoundingPrecision)
+        }
         let baseExpression = baseExpressionForRounding(from: header)
-        let relationSymbol = roundingRelationSymbol(fromStoredNumber: currentInput, precision: resultRoundingPrecision)
+        let roundingSourceValue: String
+        if isTypingRHS, let acc = accumulator {
+            roundingSourceValue = decimalNumberString(from: acc)
+        } else {
+            roundingSourceValue = currentInput
+        }
+        let relationSymbol = roundingRelationSymbol(fromStoredNumber: roundingSourceValue, precision: resultRoundingPrecision)
         expressionDisplay = roundedOperationDisplayString(
             baseExpression: baseExpression,
-            sourceValue: currentInput,
+            sourceValue: roundingSourceValue,
             precision: resultRoundingPrecision,
             relationSymbol: relationSymbol
         )

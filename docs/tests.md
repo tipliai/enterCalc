@@ -4,8 +4,8 @@ This document tracks the shared-module checks currently discovered by `swift tes
 Each row maps directly to a discovered test method in `apple/tests/CalculatorViewModelTests.swift`.
 
 Current verification status on macOS:
-- `swift test list` discovers `173` `CalculatorViewModelTests` methods.
-- This matrix documents the same `173` methods with no missing or extra entries.
+- `swift test list` discovers `179` `CalculatorViewModelTests` methods.
+- This matrix documents the same `179` methods with no missing or extra entries.
 - The current macOS run includes the AppKit-only clipboard tests guarded by `canImport(AppKit)`.
 
 ## UI Settings Expectations
@@ -59,6 +59,8 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Arithmetic | Enter `5 + 2 = = =` | Repeated equals is idempotent after evaluation: display remains `7`, expression remains `5 + 2 =`, and history stays at a single evaluation entry | `testRepeatedEqualsAfterEvaluateDoesNotReplayLastOperation` |
 | Arithmetic | Enter `2 × 2 × 2` and evaluate | Operation line keeps the full chain before and after evaluate (`2 × 2 × 2 =`) and history stores the full expression instead of collapsing to `4 × 2` | `testChainedMultiplicationKeepsFullExpressionDisplayOnEvaluate` |
 | Arithmetic | Enter `6 +`, then press `+` again without entering a right operand | Pressing the same operator twice is a no-op; expression remains `6 +`, then normal chaining continues to `6 + 6 + 6 =` after evaluate | `testPressingSameOperatorTwiceWithoutRightOperandIsNoOp` |
+| Arithmetic | Enter `9`, apply `√`, then press `+ =` (and repeat for `x²`, `1/x`, and `%`) | Trailing-operator evaluate finalizes the standalone unary/percent result without duplicating the operand; history stores the standalone expression (for example `√(9)`) | `testEvaluateAfterTrailingOperatorKeepsStandaloneUnaryAndPercentResult` |
+| Arithmetic | Enter `1 + 2 + 3 +` then evaluate | Trailing-operator evaluate uses the computed accumulator, producing `6` with history entry `1 + 2 + 3` | `testEvaluateTrailingOperatorInChainUsesComputedAccumulatorAndStoresHistory` |
 | Arithmetic | Enter `2 + 2 × 2` and evaluate | Result follows precedence (`6`) and post-equals operation line is rendered in nested form (`2 + (2 × 2) =`) | `testMixedPrecedenceSimpleChainUsesNestedPostEqualsDisplayAndPrecedenceOnEvaluate` |
 | Arithmetic | Enter `5 + 6 × 5 +` without evaluating | Result display keeps the current right operand (`5`) and operation line shows the full chain (`5 + 6 × 5 +`) without pre-equals total collapse | `testMixedChainDoesNotComputeDisplayUntilEvaluate` |
 | Arithmetic | Enter `5 + 6 × 5 + ( 5 + 665 ) − 5 =` | Mixed precedence plus parenthesized segments render in nested post-equals form and evaluate to `700` | `testMixedPrecedenceWithParenthesizedSegmentUsesNestedPostEqualsDisplay` |
@@ -162,7 +164,7 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Out of range | Enter `8`, then square repeatedly past Decimal limits | Error state is set; display becomes `Out of range`; expression clears | `testRepeatedSquaringOverflowSetsErrorState` |
 | Out of range | Trigger overflow in each supported UI language | The displayed error matches the localized `error.outOfRange` string in every bundle | `testOverflowLocalizedInAllSupportedLanguages` |
 | Out of range | Trigger overflow, then clear all | Error state clears and display resets to `0` | `testOverflowClearsCorrectly` |
-| Out of range | Square `8` five times, then multiply by itself | Multiplication overflow sets `Out of range` | `testMultiplyOverflowSetsErrorState` |
+| Out of range | Square `8` five times, then press `×` followed by `=` without typing a right operand | Trailing multiply is treated as an incomplete operation; evaluate keeps the existing value and does not overflow | `testEvaluateAfterTrailingMultiplyOperatorDoesNotDuplicateOperandIntoOverflow` |
 | Out of range | Trigger overflow, then inspect copy state | Expression row stays empty and operation copy is unavailable | `testOverflowKeepsOperationRowEmptyAndOperationCopyUnavailable` |
 | Out of range | Evaluate `999999999999999 × 999999999999999 =`, then evaluate again | Repeated equals does not replay multiplication; result and expression stay unchanged and avoid a second overflow pass | `testRepeatedEqualsAfterLargeProductDoesNotOverflowAgain` |
 | Out of range | Overflow while resolving a pending operator change | Error state clears the operator preview row | `testOverflowDuringPendingOperatorResolutionDoesNotLeaveOperatorPreview` |
@@ -197,3 +199,7 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Backspace | Start `9 × ( 3 + 1`, then backspace repeatedly | Backspace fully unwinds the parenthesized expression back to `0` while keeping state balanced | `testBackspaceCanFullyUnwindParenthesizedExpression` |
 | Clipboard | Enter `5 + 3`, clear the entry, then paste `7` | Pasted value becomes the pending operand and expression updates to `5 + 7` | `testPasteAfterPendingClearShowsPastedValue` |
 | Parentheses | Build `2 + ( 3 + 4 ) × ( 5 + 1`, clear the inner entry, enter `6`, then close | Clearing inside nested parentheses keeps parenthesis depth balanced and expression becomes `2 + ( 3 + 4 ) × 6` | `testClearParenthesizedExpressionKeepsBalancedParenthesisDepth` |
+| Rounding | Paste `10.123456`, enable rounding at precision `4`, set operator `+`, then type `0.0999999999` digit-by-digit | Operation display scale stays anchored to the LHS (`=round(10.123456 + 0.0999999999, 2) ≈`); scale does not drift to a value derived from the typed RHS | `testRoundingOperationScaleRemainsAnchoredToLHSWhileTypingRHSOperand` |
+| Rounding | Same setup as above | While the RHS is being typed, the result display shows the full unrounded typed value (`0.0999999999`) rather than a prematurely rounded approximation | `testRoundingDisplayIsNotPrematurelyAppliedWhileTypingRHSOperand` |
+| Rounding | Paste `10.123456`, enable rounding at precision `4`, `+ 0.0999999999`, then evaluate | After equals, display is `10.223456` and expression display uses a scale computed from the actual result value (`=round(10.2234559999, 6) ≈`) | `testRoundingFinalResultAfterPendingOperationUsesResultBasedScale` |
+| Rounding | Paste `10.123456`, enable rounding at precision `4`, type `+ 0.0999999999`, then evaluate | `resultRoundingPrecision` remains `4` before the operator, while typing the RHS, and after evaluate; it never changes on its own | `testResultRoundingPrecisionPropertyRemainsFixedDuringFurtherInput` |

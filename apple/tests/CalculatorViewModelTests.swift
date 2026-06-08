@@ -555,6 +555,61 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.history.first?.result, "18")
     }
 
+    func testEvaluateAfterTrailingOperatorKeepsStandaloneUnaryAndPercentResult() {
+        typealias UnaryFixture = (
+            name: String,
+            input: String,
+            apply: (CalculatorViewModel) -> Void,
+            expectedDisplayExpression: String,
+            expectedHistoryExpression: String,
+            expectedResult: String
+        )
+        let fixtures: [UnaryFixture] = [
+            ("square root", "9", { $0.squareRoot() }, "√(9)", "√(9)", "3"),
+            ("square", "9", { $0.square() }, "9²", "sqr(9)", "81"),
+            ("reciprocal", "4", { $0.reciprocal() }, "1/(4)", "1/(4)", "0.25"),
+            ("percent", "50", { $0.applyPercent() }, "50%", "50%", "0.5")
+        ]
+        let trailingOperators: [(BinaryOperator, String)] = [
+            (.add, "+"), (.subtract, "−"), (.multiply, "×"), (.divide, "÷")
+        ]
+
+        for fixture in fixtures {
+            for (op, opSymbol) in trailingOperators {
+                let viewModel = CalculatorViewModel()
+                enter(fixture.input, into: viewModel)
+                fixture.apply(viewModel)
+                viewModel.setOperator(op)
+                viewModel.evaluate()
+
+                let label = "\(fixture.name) trailing \(opSymbol)"
+                XCTAssertEqual(viewModel.display, fixture.expectedResult, "Unexpected result for \(label)")
+                XCTAssertEqual(viewModel.expressionDisplay, "\(fixture.expectedDisplayExpression) =", "Unexpected expression for \(label)")
+                XCTAssertEqual(viewModel.history.count, 1, "Unexpected history count for \(label)")
+                XCTAssertEqual(viewModel.history.first?.expression, fixture.expectedHistoryExpression, "Unexpected history expression for \(label)")
+                XCTAssertEqual(viewModel.history.first?.result, fixture.expectedResult, "Unexpected history result for \(label)")
+            }
+        }
+    }
+
+    func testEvaluateTrailingOperatorInChainUsesComputedAccumulatorAndStoresHistory() {
+        let viewModel = CalculatorViewModel()
+
+        enter("1", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("2", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("3", into: viewModel)
+        viewModel.setOperator(.add)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "6")
+        XCTAssertEqual(viewModel.expressionDisplay, "1 + 2 + 3 =")
+        XCTAssertEqual(viewModel.history.count, 1)
+        XCTAssertEqual(viewModel.history.first?.expression, "1 + 2 + 3")
+        XCTAssertEqual(viewModel.history.first?.result, "6")
+    }
+
     func testMixedPrecedenceSimpleChainUsesNestedPostEqualsDisplayAndPrecedenceOnEvaluate() {
         let viewModel = CalculatorViewModel()
 
@@ -1950,6 +2005,91 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.expressionDisplay, "=round(0, 0)")
     }
 
+    // MARK: Regression: rounding precision must not drift during further input
+    /// Before the fix, when the user typed a RHS operand with more decimal digits than the
+    /// LHS, `updateDisplay` passed `currentInput` (the RHS) as the `sourceValue` for
+    /// `spreadsheetRoundScale`, causing the displayed scale to change on every keystroke.
+    /// After the fix the scale is anchored to the accumulated LHS while typing.
+    func testRoundingOperationScaleRemainsAnchoredToLHSWhileTypingRHSOperand() {
+        let viewModel = CalculatorViewModel()
+
+        // Enter LHS and enable rounding at precision 4.
+        // For "10.123456" (8 sig-digits) and precision 4:
+        //   effectiveLevels = min(4, 7) = 4, retainedDigits = 4, magnitude = 1
+        //   spreadsheetRoundScale = 4 − 1 − 1 = 2
+        pasteString("10.123456", into: viewModel)
+        viewModel.beginResultRounding()
+        viewModel.setResultRoundingPrecision(4)
+        XCTAssertEqual(viewModel.expressionDisplay, "=round(10.123456, 2) ≈")
+
+        viewModel.setOperator(.add)
+
+        // Type the RHS operand digit-by-digit (using enter rather than pasteString so
+        // pasting a plain value does not reset the rounding state).  The old code
+        // would recompute the scale from "0.0999999999" (9 sig-digits, magnitude ≈ −2,
+        // scale ≈ 6) and show "=round(…, 6) ≈".  With the fix the scale stays at 2
+        // (anchored to the accumulated LHS value "10.123456").
+        enter("0.0999999999", into: viewModel)
+        XCTAssertEqual(viewModel.expressionDisplay, "=round(10.123456 + 0.0999999999, 2) ≈")
+    }
+
+    /// Before the fix, the display rounded the RHS operand while it was being typed
+    /// (e.g. "0.0999999999" collapsed to "0.1"), making in-progress input invisible.
+    /// After the fix the raw typed value is preserved in the display during a pending op.
+    func testRoundingDisplayIsNotPrematurelyAppliedWhileTypingRHSOperand() {
+        let viewModel = CalculatorViewModel()
+
+        pasteString("10.123456", into: viewModel)
+        viewModel.beginResultRounding()
+        viewModel.setResultRoundingPrecision(4)
+        viewModel.setOperator(.add)
+
+        // Type a 10-significant-digit RHS digit-by-digit.  Without the fix the
+        // display would show the rounded value "0.1" while the user is still
+        // entering digits.  With the fix the full typed value is preserved.
+        enter("0.0999999999", into: viewModel)
+        XCTAssertEqual(viewModel.display, "0.0999999999")
+    }
+
+    /// Verify that precision=4 is still applied correctly after equals: the expression
+    /// display reflects the scale computed from the actual result value, and the numeric
+    /// display shows the correctly-rounded result.
+    func testRoundingFinalResultAfterPendingOperationUsesResultBasedScale() {
+        let viewModel = CalculatorViewModel()
+
+        pasteString("10.123456", into: viewModel)
+        viewModel.beginResultRounding()
+        viewModel.setResultRoundingPrecision(4)
+        viewModel.setOperator(.add)
+        enter("0.0999999999", into: viewModel)
+        viewModel.evaluate()
+
+        // Result = 10.2234559999 (12 significant digits).
+        // effectiveLevels = min(4, 11) = 4, retainedDigits = 8, magnitude = 1
+        // spreadsheetRoundScale = 8 − 1 − 1 = 6
+        // NSDecimalRound(10.2234559999, 6) = 10.223456
+        XCTAssertEqual(viewModel.display, "10.223456")
+        XCTAssertEqual(viewModel.expressionDisplay, "=round(10.2234559999, 6) ≈")
+    }
+
+    /// Ensure no precision change occurs on the internal `resultRoundingPrecision` property
+    /// when more digits are typed after enabling rounding.
+    func testResultRoundingPrecisionPropertyRemainsFixedDuringFurtherInput() {
+        let viewModel = CalculatorViewModel()
+
+        pasteString("10.123456", into: viewModel)
+        viewModel.beginResultRounding()
+        viewModel.setResultRoundingPrecision(4)
+        XCTAssertEqual(viewModel.resultRoundingPrecision, 4)
+
+        viewModel.setOperator(.add)
+        enter("0.0999999999", into: viewModel)
+        XCTAssertEqual(viewModel.resultRoundingPrecision, 4)
+
+        viewModel.evaluate()
+        XCTAssertEqual(viewModel.resultRoundingPrecision, 4)
+    }
+
     func testCopyOperationThenPasteReplaysTheOperation() {
         let sourceViewModel = CalculatorViewModel()
         enter("12", into: sourceViewModel)
@@ -2421,20 +2561,28 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.display, "0")
     }
 
-    func testMultiplyOverflowSetsErrorState() {
+    func testEvaluateAfterTrailingMultiplyOperatorDoesNotDuplicateOperandIntoOverflow() {
         let viewModel = CalculatorViewModel()
 
-        // Get to ≈7.9e28 via five squarings of 8 (stays within Decimal range),
-        // then multiply that value by itself — the product ≈6.3e57 overflows.
+        // Get to ≈7.9e28 via five squarings of 8 (still in-range), then press
+        // multiply and evaluate without a right operand. This must finalize the
+        // existing value rather than duplicating the operand into an overflow.
         enter("8", into: viewModel)
-        for _ in 0..<5 { viewModel.square() }   // display: ≈7.9e28, no error yet
+        for _ in 0..<5 { viewModel.square() }
+        let expectedDisplay = viewModel.display
         XCTAssertFalse(viewModel.isErrorState, "Pre-condition: value should be valid before multiply")
 
         viewModel.setOperator(.multiply)
-        viewModel.evaluate()                      // repeats: ≈7.9e28 × ≈7.9e28 → overflow
+        viewModel.evaluate()
 
-        XCTAssertTrue(viewModel.isErrorState)
-        XCTAssertEqual(viewModel.display, "Out of range")
+        XCTAssertFalse(viewModel.isErrorState)
+        XCTAssertEqual(viewModel.display, expectedDisplay)
+        XCTAssertEqual(viewModel.history.count, 1)
+        // The stored history entry must not include the trailing operator and
+        // must record the pre-multiply value, not a doubled/overflowed result.
+        XCTAssertEqual(viewModel.history.first?.result, expectedDisplay)
+        XCTAssertFalse(viewModel.history.first?.expression.hasSuffix("×") ?? true,
+                       "History expression must not end with trailing operator")
     }
 
     func testOverflowKeepsOperationRowEmptyAndOperationCopyUnavailable() {
