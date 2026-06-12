@@ -81,6 +81,7 @@
 - When a repo behavior is unclear, inspect the existing shared view-model flow before introducing new state.
 - If making a structural change, explain why it improves maintainability and why it still fits the repo's layout.
 - If tests are absent for the area you changed, say so clearly and describe the manual verification path.
+- For `gh` issue comments, PR comments, and PR bodies, use real multiline markdown (for example, heredoc or `--body-file`) and never send literal escaped `\n` sequences.
 
 ## Session shorthand
 - Think of the repo as: shared calculator engine plus two thin app shells.
