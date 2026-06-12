@@ -13,20 +13,12 @@ Primary format for easiest user installation:
 
 - Signed and notarized drag-and-drop `.dmg` containing `EnterCalc.app` and an `Applications` shortcut.
 
-Optional secondary format:
-
-- Signed and notarized `.pkg` installer.
-
 ## One-Time Requirements
 
 Before your first notarized release, ensure these are available in the Apple Developer account:
 
 - `Developer ID Application` certificate (used to sign the app bundle)
 - App-specific password for notarization
-
-If you also distribute a `.pkg`, you additionally need:
-
-- `Developer ID Installer` certificate (used to sign the `.pkg`)
 
 Install certificates locally in Keychain Access and confirm they appear in your login keychain.
 
@@ -54,24 +46,16 @@ Output DMG location:
 
 - `dist/EnterCalc-<version>-<build>-macOS.dmg`
 
+For the `1.0.0` release, move/rename the final notarized artifact to:
+
+- `dist/macOS/EnterCalc-v1.0.0.dmg`
+
 The DMG contains:
 
 - `EnterCalc.app`
 - `Applications` symlink for drag-and-drop install
 
 ## 3) Configure Notary Profile (One-Time)
-
-From the repository root:
-
-```bash
-scripts/macos/build-installer-pkg.sh \
-  --app "/path/to/EnterCalc.xcarchive/Products/Applications/EnterCalc.app" \
-  --installer-cert "Developer ID Installer: YOUR NAME (TEAMID)"
-```
-
-Output package location:
-
-- `dist/EnterCalc-<version>-<build>-macOS.pkg`
 
 Store notarization credentials in keychain:
 
@@ -95,7 +79,7 @@ Profile naming guidance:
 
 ```bash
 scripts/macos/notarize-distribution.sh \
-  --file "dist/EnterCalc-<version>-<build>-macOS.dmg" \
+  --file "dist/macOS/EnterCalc-v1.0.0.dmg" \
   --profile EnterCalcNotary
 ```
 
@@ -111,7 +95,7 @@ The script does all of the following:
 Run final checks:
 
 ```bash
-xcrun stapler validate "dist/EnterCalc-<version>-<build>-macOS.dmg"
+xcrun stapler validate "dist/macOS/EnterCalc-v1.0.0.dmg"
 ```
 
 ## 6) Release Prep (Without Publishing Yet)
@@ -136,16 +120,18 @@ If we automate later, a workflow can:
 
 For now, local notarization remains the source of truth.
 
-## Optional: Build a PKG Too
-
-If you want both distribution formats, build and notarize a `.pkg` as well:
+## Example 1.0.0 End-to-End Commands
 
 ```bash
-scripts/macos/build-installer-pkg.sh \
-  --app "/path/to/EnterCalc.xcarchive/Products/Applications/EnterCalc.app" \
-  --installer-cert "Developer ID Installer: YOUR NAME (TEAMID)"
+scripts/macos/build-installer-dmg.sh \
+  --app "/path/to/EnterCalc.xcarchive/Products/Applications/EnterCalc.app"
+
+mkdir -p dist/macOS
+mv -f "dist/EnterCalc-1.0.0-1-macOS.dmg" "dist/macOS/EnterCalc-v1.0.0.dmg"
 
 scripts/macos/notarize-distribution.sh \
-  --file "dist/EnterCalc-<version>-<build>-macOS.pkg" \
-  --profile EnterCalcNotary
+  --file "dist/macOS/EnterCalc-v1.0.0.dmg" \
+  --profile TipliAINotary
+
+xcrun stapler validate "dist/macOS/EnterCalc-v1.0.0.dmg"
 ```
