@@ -69,3 +69,4 @@ Need help or want to report a bug?
 
 - [Accessibility Features](./accessibility)
 - [Keyboard Actions Matrix](./keyboard)
+- [macOS Installer & Notarization](./macos-installer)
