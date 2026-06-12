@@ -4,6 +4,8 @@
 
 You enter calculations, EnterCalc returns results. EnterCalc is a native calculator for iOS and macOS, focused on simplicity, intuitive quality-of-life improvements, and easy multitasking.
 
+Download on the Apple App Store: [apps.apple.com/app/id6777242723](https://apps.apple.com/app/id6777242723)
+
 ## Support
 
 - Public support page: [tipliai.github.io/enterCalc/support](https://tipliai.github.io/enterCalc/support/)
