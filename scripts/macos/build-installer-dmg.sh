@@ -5,7 +5,7 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/macos/build-installer-dmg.sh --app /path/to/EnterCalc.app [--out-dir dist] [--volume-name "EnterCalc Installer"]
+  scripts/macos/build-installer-dmg.sh --app /path/to/EnterCalc.app [--out-dir dist/macOS] [--output /custom/path/EnterCalc-v1.0.0.dmg] [--volume-name "EnterCalc Installer"]
 
 Description:
   Builds a drag-and-drop DMG that contains EnterCalc.app and an Applications symlink.
@@ -17,7 +17,8 @@ EOF
 }
 
 APP_PATH=""
-OUT_DIR="dist"
+OUT_DIR="dist/macOS"
+OUTPUT_PATH=""
 VOLUME_NAME="EnterCalc Installer"
 
 while [[ $# -gt 0 ]]; do
@@ -28,6 +29,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --out-dir)
       OUT_DIR="$2"
+      shift 2
+      ;;
+    --output)
+      OUTPUT_PATH="$2"
       shift 2
       ;;
     --volume-name)
@@ -66,11 +71,14 @@ if [[ ! -f "$INFO_PLIST" ]]; then
 fi
 
 SHORT_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")"
-BUILD_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")"
-DMG_NAME="${APP_NAME}-${SHORT_VERSION}-${BUILD_VERSION}-macOS.dmg"
 
-mkdir -p "$OUT_DIR"
-OUTPUT_DMG="$OUT_DIR/$DMG_NAME"
+if [[ -n "$OUTPUT_PATH" ]]; then
+  OUTPUT_DMG="$OUTPUT_PATH"
+else
+  OUTPUT_DMG="$OUT_DIR/${APP_NAME}-v${SHORT_VERSION}.dmg"
+fi
+
+mkdir -p "$(dirname "$OUTPUT_DMG")"
 
 STAGING_DIR="$(mktemp -d)"
 cleanup() {

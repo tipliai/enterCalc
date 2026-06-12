@@ -37,6 +37,11 @@ apple/xcode/EnterCalc.xcodeproj/xcuserdata/
 # Distribution artifacts
 dist/*
 !dist/.gitkeep
+!dist/macOS/
+!dist/macOS/*.dmg
+
+# Local-only VS Code settings
+.vscode/settings.json
 
 # Generated host assets
 apple/xcode/Resources/Assets.xcassets/
