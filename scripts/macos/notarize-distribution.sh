@@ -23,11 +23,11 @@ PROFILE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --file)
-      FILE_PATH="$2"
+      FILE_PATH="${2:?Missing value for --file}"
       shift 2
       ;;
     --profile)
-      PROFILE="$2"
+      PROFILE="${2:?Missing value for --profile}"
       shift 2
       ;;
     -h|--help)

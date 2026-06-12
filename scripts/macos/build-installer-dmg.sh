@@ -24,19 +24,19 @@ VOLUME_NAME="EnterCalc Installer"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --app)
-      APP_PATH="$2"
+      APP_PATH="${2:?Missing value for --app}"
       shift 2
       ;;
     --out-dir)
-      OUT_DIR="$2"
+      OUT_DIR="${2:?Missing value for --out-dir}"
       shift 2
       ;;
     --output)
-      OUTPUT_PATH="$2"
+      OUTPUT_PATH="${2:?Missing value for --output}"
       shift 2
       ;;
     --volume-name)
-      VOLUME_NAME="$2"
+      VOLUME_NAME="${2:?Missing value for --volume-name}"
       shift 2
       ;;
     -h|--help)
@@ -90,7 +90,11 @@ echo "Verifying app code signature..."
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
 echo "Preparing DMG staging layout..."
-cp -R "$APP_PATH" "$STAGING_DIR/$APP_NAME.app"
+ditto "$APP_PATH" "$STAGING_DIR/$APP_NAME.app"
+
+echo "Verifying staged app code signature..."
+codesign --verify --deep --strict --verbose=2 "$STAGING_DIR/$APP_NAME.app"
+
 ln -s /Applications "$STAGING_DIR/Applications"
 
 echo "Building DMG..."
