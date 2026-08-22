@@ -6,7 +6,12 @@ permalink: /tests/
 # EnterCalc Unit Test Matrix
 
 This document tracks the shared-module checks currently discovered by `swift test list` for the Swift package in `apple/`.
-Each row maps directly to a discovered test method in `apple/tests/CalculatorViewModelTests.swift`.
+Each row in the matrix below maps directly to a discovered test method in `apple/tests/CalculatorViewModelTests.swift`.
+
+### Other suites
+
+- `apple/tests/CurrencyCatalogTests.swift` — region-to-symbol detection for the default currency (en-GB gives £, en-US gives $, de-DE gives €), the fallback for regions whose currency the catalog does not carry, and invariants that keep the catalog usable: symbols unique, currency codes not shared between symbols, and every offered symbol actually accepted by the calculator engine.
+- `apple/tests/CurrencyModeTests.swift` — entering and leaving currency mode via the currency key, including that leaving preserves the entered value, that it clears a symbol differing from the configured one, and that toggling is undoable.
 
 Current verification status on macOS:
 - `swift test list` discovers `179` `CalculatorViewModelTests` methods.

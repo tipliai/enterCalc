@@ -474,6 +474,34 @@ public final class CalculatorViewModel: ObservableObject {
         completeUndoableChange(from: snapshot)
     }
 
+    /// Drops the active currency symbol, returning the calculator to plain
+    /// number entry. The entered value itself is untouched.
+    public func clearCurrencySymbol() {
+        guard activeCurrencySymbol != nil else { return }
+        let snapshot = beginUndoableChange()
+        finishDirectDisplayEditingIfNeeded()
+        isPendingEntryClearedByClearButton = false
+        activeCurrencySymbol = nil
+        shouldPreserveTypedCurrencyInput = false
+        refreshCurrentSessionDisplayTokens()
+        completeUndoableChange(from: snapshot)
+    }
+
+    /// Backs the on-screen currency key: the first press enters currency mode
+    /// with `symbol`, the next one leaves it.
+    ///
+    /// Any active symbol clears, not just a matching one. A symbol typed on a
+    /// hardware keyboard is entered the same way as one from the key, so the
+    /// key stays a reliable way out of currency mode regardless of how it was
+    /// entered.
+    public func toggleCurrencySymbol(_ symbol: String) {
+        if activeCurrencySymbol == nil {
+            inputCurrencySymbol(symbol)
+        } else {
+            clearCurrencySymbol()
+        }
+    }
+
     // Inserts the locale decimal separator, guarding against a second separator
     // in the same operand.
     public func inputDecimal() {

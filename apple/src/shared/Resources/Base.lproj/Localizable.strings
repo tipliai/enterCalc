@@ -16,6 +16,7 @@
 "settings.language.defaultOption" = "Default (%@)";
 "settings.userInterface" = "User Interface";
 "settings.numberFormat.style" = "Number style";
+"settings.currency.symbol" = "Currency symbol";
 "settings.numberFormat.scientific" = "Use scientific notation";
 "settings.percent.classicBehavior" = "Use alternative keypad";
 "settings.rounding.disableSwipeDown" = "Disable swipe down to round";
@@ -28,6 +29,8 @@
 "settings.credit.linkText" = "GitHub";
 "settings.credit.middle" = ".";
 "calculator.mode.basic" = "Basic";
+"calculator.mode.currency" = "Currency";
+"calculator.currency.toggle" = "Toggle currency";
 "history.title" = "History";
 "history.empty" = "History has yet to be written.";
 "history.emptyAfterClear" = "";
