@@ -16,6 +16,7 @@
 "settings.language.defaultOption" = "Predeterminado (%@)";
 "settings.userInterface" = "Interfaz de usuario";
 "settings.numberFormat.style" = "Estilo numérico";
+"settings.currency.symbol" = "Símbolo de moneda";
 "settings.numberFormat.scientific" = "Usar notación científica";
 "settings.percent.classicBehavior" = "Usar teclado alternativo";
 "settings.buttonSound.disabled" = "Desactivar sonido de botones";
@@ -26,6 +27,8 @@
 "settings.credit.linkText" = "GitHub";
 "settings.credit.middle" = ".";
 "calculator.mode.basic" = "Básico";
+"calculator.mode.currency" = "Moneda";
+"calculator.currency.toggle" = "Alternar moneda";
 "history.title" = "Historial";
 "history.empty" = "La historia aún está por escribirse.";
 "history.emptyAfterClear" = "";

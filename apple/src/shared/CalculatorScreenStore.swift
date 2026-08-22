@@ -14,6 +14,9 @@ public struct CalculatorScreenSettings: Equatable {
     public var disablesSwipeDownToRound: Bool
     public var disablesButtonSound: Bool
     public var keypadHeightMultiplier: Double
+    /// Symbol the currency key inserts. Defaults to the device region's
+    /// currency until the user picks one in Settings.
+    public var currencySymbol: String
 
     public init(
         themeRawValue: String,
@@ -24,7 +27,8 @@ public struct CalculatorScreenSettings: Equatable {
         usesEnterKeySymbol: Bool = true,
         disablesSwipeDownToRound: Bool = false,
         disablesButtonSound: Bool = false,
-        keypadHeightMultiplier: Double = 1.0
+        keypadHeightMultiplier: Double = 1.0,
+        currencySymbol: String = CurrencyCatalog.detected().symbol
     ) {
         self.themeRawValue = themeRawValue
         self.languageCode = languageCode
@@ -35,6 +39,7 @@ public struct CalculatorScreenSettings: Equatable {
         self.disablesSwipeDownToRound = disablesSwipeDownToRound
         self.disablesButtonSound = disablesButtonSound
         self.keypadHeightMultiplier = keypadHeightMultiplier
+        self.currencySymbol = currencySymbol
     }
 
     public var numberFormatStyle: NumberFormatStyle {

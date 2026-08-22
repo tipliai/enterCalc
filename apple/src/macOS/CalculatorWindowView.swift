@@ -763,13 +763,51 @@ struct CalculatorWindowView: View {
             .allowsHitTesting(false)
     }
 
+    // Currency mode is derived state, not a separate selection: the calculator
+    // is in it exactly when a currency symbol is showing.
+    private var currentModeLabelKey: String {
+        viewModel.activeCurrencySymbol == nil ? "calculator.mode.basic" : "calculator.mode.currency"
+    }
+
+    // Outlined text control, deliberately unlike a keypad key: it changes how
+    // the value is labelled rather than entering anything.
+    private func currencyToggleButton(opacity: Double) -> some View {
+        let isActive = viewModel.activeCurrencySymbol != nil
+        return Button {
+            viewModel.toggleCurrencySymbol(windowSettings.currencySymbol)
+        } label: {
+            Text(windowSettings.currencySymbol)
+                .font(EnterCalcFont.appFont(size: 11))
+                .foregroundStyle((isActive ? palette.accent : primaryForeground).opacity(opacity))
+                .frame(minWidth: 20)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4)
+                        .strokeBorder(
+                            (isActive ? palette.accent : palette.textSecondary).opacity(opacity * 0.7),
+                            lineWidth: 1
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(macLocalized("calculator.currency.toggle", bundle: currentLocalizationBundle)))
+        .accessibilityAddTraits(isActive ? [.isSelected] : [])
+    }
+
     private func memoryControls(opacity: Double) -> some View {
-        return Text(macLocalized("calculator.mode.basic", bundle: currentLocalizationBundle))
-            .font(EnterCalcFont.appFont(size: 12))
-            .foregroundStyle(primaryForeground.opacity(opacity))
+        return HStack(spacing: 6) {
+            Text(macLocalized(currentModeLabelKey, bundle: currentLocalizationBundle))
+                .font(EnterCalcFont.appFont(size: 12))
+                .foregroundStyle(primaryForeground.opacity(opacity))
+                .lineLimit(1)
+
+            Spacer(minLength: 4)
+
+            currencyToggleButton(opacity: opacity)
+        }
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: 16, alignment: .leading)
-            .lineLimit(1)
             .clipped()
             .animation(reduceMotionEnabled ? nil : .easeInOut(duration: 0.18), value: opacity)
             .anchorPreference(
@@ -2387,6 +2425,7 @@ private struct SettingsSheet: View {
     @Binding var selectedLanguage: String
     @Binding var usesScientificNotation: Bool
     @Binding var selectedNumberFormat: NumberFormatStyle
+    @Binding var selectedCurrencySymbol: String
     @Binding var usesAlternativeKeypad: Bool
     @Binding var usesEnterKeySymbol: Bool
     @Binding var disablesSwipeDownToRound: Bool
@@ -2449,6 +2488,14 @@ private struct SettingsSheet: View {
                         Picker(macLocalized("settings.numberFormat.style", bundle: localizationBundle), selection: $selectedNumberFormat) {
                             ForEach(NumberFormatStyle.allCases, id: \.self) { style in
                                 Text(style.example).tag(style)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .font(.system(size: settingsBodySize))
+
+                        Picker(macLocalized("settings.currency.symbol", bundle: localizationBundle), selection: $selectedCurrencySymbol) {
+                            ForEach(CurrencyCatalog.all) { option in
+                                Text(option.symbol).tag(option.symbol)
                             }
                         }
                         .pickerStyle(.menu)
@@ -2823,6 +2870,17 @@ private extension CalculatorWindowView {
                 set: { newValue in
                     updateWindowSettings { $0.numberFormatStyleRawValue = newValue.rawValue }
                     viewModel.setNumberFormatStyle(newValue)
+                }
+            ),
+            selectedCurrencySymbol: Binding(
+                get: { windowSettings.currencySymbol },
+                set: { newValue in
+                    updateWindowSettings { $0.currencySymbol = newValue }
+                    // Re-label a value already on screen so the change is
+                    // visible immediately rather than only on the next entry.
+                    if viewModel.activeCurrencySymbol != nil {
+                        viewModel.inputCurrencySymbol(newValue)
+                    }
                 }
             ),
             usesAlternativeKeypad: Binding(

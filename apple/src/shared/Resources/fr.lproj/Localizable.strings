@@ -16,6 +16,7 @@
 "settings.language.defaultOption" = "Par défaut (%@)";
 "settings.userInterface" = "Interface utilisateur";
 "settings.numberFormat.style" = "Style des nombres";
+"settings.currency.symbol" = "Symbole monétaire";
 "settings.numberFormat.scientific" = "Utiliser la notation scientifique";
 "settings.percent.classicBehavior" = "Utiliser le clavier alternatif";
 "settings.buttonSound.disabled" = "Désactiver le son des boutons";
@@ -26,6 +27,8 @@
 "settings.credit.linkText" = "GitHub";
 "settings.credit.middle" = ".";
 "calculator.mode.basic" = "Basique";
+"calculator.mode.currency" = "Devise";
+"calculator.currency.toggle" = "Activer la devise";
 "history.title" = "Historique";
 "history.empty" = "L’historique est encore à écrire.";
 "history.emptyAfterClear" = "";

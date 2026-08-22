@@ -8,6 +8,7 @@ public enum CalculatorScreenSettingsPersistence {
     private static let alternativeKeypadKey = "settings.keypad.alternative"
     private static let newDefaultKeypadMigrationKey = "settings.keypad.newDefault.v1"
     private static let legacyClassicPercentKey = "settings.percent.classic"
+    private static let currencySymbolKey = "settings.currency.symbol"
 
     public static func load(from defaults: UserDefaults = .standard) -> CalculatorScreenSettings {
         migrateLegacyKeypadPreferenceIfNeeded(in: defaults)
@@ -23,7 +24,8 @@ public enum CalculatorScreenSettingsPersistence {
             usesEnterKeySymbol: defaults.object(forKey: "settings.equals.enterKeySymbol") as? Bool ?? true,
             disablesSwipeDownToRound: defaults.object(forKey: "settings.rounding.disableSwipeDown") as? Bool ?? false,
             disablesButtonSound: defaults.object(forKey: "settings.buttonSound.disabled") as? Bool ?? false,
-            keypadHeightMultiplier: min(max(storedKeypadHeightMultiplier, 0.5), 1.0)
+            keypadHeightMultiplier: min(max(storedKeypadHeightMultiplier, 0.5), 1.0),
+            currencySymbol: storedCurrencySymbol(from: defaults)
         )
     }
 
@@ -39,6 +41,20 @@ public enum CalculatorScreenSettingsPersistence {
         defaults.set(settings.disablesSwipeDownToRound, forKey: "settings.rounding.disableSwipeDown")
         defaults.set(settings.disablesButtonSound, forKey: "settings.buttonSound.disabled")
         defaults.set(settings.keypadHeightMultiplier, forKey: "settings.keypadHeightMultiplier")
+        defaults.set(settings.currencySymbol, forKey: currencySymbolKey)
+    }
+
+    /// Falls back to the region default until the user picks a symbol, so the
+    /// currency key is useful on first launch without any setup. A stored value
+    /// that is no longer offered also falls back rather than persisting a symbol
+    /// the picker cannot display.
+    public static func storedCurrencySymbol(from defaults: UserDefaults = .standard) -> String {
+        guard let stored = defaults.string(forKey: currencySymbolKey),
+              CurrencyCatalog.option(forSymbol: stored) != nil else {
+            return CurrencyCatalog.detected().symbol
+        }
+
+        return stored
     }
 
     private static func usesAlternativeKeypad(from defaults: UserDefaults) -> Bool {
