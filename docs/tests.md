@@ -9,8 +9,8 @@ This document tracks the shared-module checks currently discovered by `swift tes
 Each row maps directly to a discovered test method in `apple/tests/CalculatorViewModelTests.swift`.
 
 Current verification status on macOS:
-- `swift test list` discovers `179` `CalculatorViewModelTests` methods.
-- This matrix documents the same `179` methods with no missing or extra entries.
+- `swift test list` discovers `186` `CalculatorViewModelTests` methods.
+- This matrix documents the same `186` methods with no missing or extra entries.
 - The current macOS run includes the AppKit-only clipboard tests guarded by `canImport(AppKit)`.
 
 ## UI Settings Expectations
