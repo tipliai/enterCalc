@@ -1228,10 +1228,123 @@ final class CalculatorViewModelTests: XCTestCase {
 
         viewModel.evaluate()
 
-        XCTAssertEqual(viewModel.display, "0.08")
+        // Adding two percentages keeps percent form in the result; the stored
+        // value stays the decimal so later arithmetic is unaffected.
+        XCTAssertEqual(viewModel.display, "8%")
         XCTAssertEqual(viewModel.expressionDisplay, "5% + 3% =")
         XCTAssertEqual(viewModel.history.first?.expression, "5% + 3%")
         XCTAssertEqual(viewModel.history.first?.result, "0.08")
+        XCTAssertEqual(viewModel.history.first?.displayResult, "8%")
+    }
+
+    func testPercentPlusPercentKeepsPercentInResult() {
+        let viewModel = CalculatorViewModel()
+
+        enter("9", into: viewModel)
+        viewModel.applyPercent()
+        viewModel.setOperator(.add)
+        enter("9", into: viewModel)
+        viewModel.applyPercent()
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "18%")
+        XCTAssertEqual(viewModel.expressionDisplay, "9% + 9% =")
+    }
+
+    func testPercentMinusPercentKeepsPercentInResult() {
+        let viewModel = CalculatorViewModel()
+
+        enter("10", into: viewModel)
+        viewModel.applyPercent()
+        viewModel.setOperator(.subtract)
+        enter("4", into: viewModel)
+        viewModel.applyPercent()
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "6%")
+        XCTAssertEqual(viewModel.expressionDisplay, "10% − 4% =")
+    }
+
+    // Only percent-plus-percent carries the symbol through. A percent applied to
+    // a plain operand is a share *of* that operand, so its result is a value.
+    func testPercentAddedToPlainNumberStillResolvesToValue() {
+        let viewModel = CalculatorViewModel()
+
+        enter("200", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("10", into: viewModel)
+        viewModel.applyPercent()
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "220")
+    }
+
+    // × and ÷ keep decimal semantics: 9% × 9% is 0.81%, not 81%, so rendering a
+    // percent symbol there would misstate the result.
+    func testPercentTimesPercentStaysDecimal() {
+        let viewModel = CalculatorViewModel()
+
+        enter("9", into: viewModel)
+        viewModel.applyPercent()
+        viewModel.setOperator(.multiply)
+        enter("9", into: viewModel)
+        viewModel.applyPercent()
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "0.0081")
+    }
+
+    // The percent result is a display form over a decimal value, so continuing
+    // to calculate uses the underlying 0.18 rather than 18.
+    func testCalculationContinuingFromPercentResultUsesDecimalValue() {
+        let viewModel = CalculatorViewModel()
+
+        enter("9", into: viewModel)
+        viewModel.applyPercent()
+        viewModel.setOperator(.add)
+        enter("9", into: viewModel)
+        viewModel.applyPercent()
+        viewModel.evaluate()
+        viewModel.setOperator(.add)
+        enter("1", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "1.18")
+    }
+
+    // Guards against the result token being re-wrapped into "18%%": applying %
+    // to an "18%" result has to work from the stored 0.18, matching how % on any
+    // other value behaves.
+    func testPercentPressedOnPercentResultUsesUnderlyingValue() {
+        let viewModel = CalculatorViewModel()
+
+        enter("9", into: viewModel)
+        viewModel.applyPercent()
+        viewModel.setOperator(.add)
+        enter("9", into: viewModel)
+        viewModel.applyPercent()
+        viewModel.evaluate()
+        viewModel.applyPercent()
+
+        XCTAssertEqual(viewModel.display, "0.0018")
+        XCTAssertEqual(viewModel.expressionDisplay, "0.18%")
+    }
+
+    func testUndoAfterPercentPlusPercentRestoresPendingPercentState() {
+        let viewModel = CalculatorViewModel()
+
+        enter("9", into: viewModel)
+        viewModel.applyPercent()
+        viewModel.setOperator(.add)
+        enter("9", into: viewModel)
+        viewModel.applyPercent()
+        viewModel.evaluate()
+        XCTAssertEqual(viewModel.display, "18%")
+
+        viewModel.undo()
+
+        XCTAssertEqual(viewModel.display, "9%")
+        XCTAssertEqual(viewModel.expressionDisplay, "9% + 9%")
     }
 
     func testAdditionAfterStandalonePercentUsesPercentValueAsLeftOperand() {
