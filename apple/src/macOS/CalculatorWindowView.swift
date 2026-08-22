@@ -2475,6 +2475,15 @@ private struct SettingsSheet: View {
                         Toggle(macLocalized("settings.rounding.disableSwipeDown", bundle: localizationBundle), isOn: $disablesSwipeDownToRound)
                             .font(.system(size: settingsBodySize))
                     }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(macLocalized("settings.credits", bundle: localizationBundle))
+                            .font(.system(size: settingsSectionSize))
+                        Link(destination: AppStoreLinks.writeReviewURL) {
+                            Label(macLocalized("settings.rateApp", bundle: localizationBundle), systemImage: "star")
+                                .font(.system(size: settingsBodySize))
+                        }
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .padding(.top, 16)
