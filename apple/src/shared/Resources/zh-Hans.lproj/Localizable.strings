@@ -20,6 +20,7 @@
 "settings.percent.classicBehavior" = "使用备用键盘布局";
 "settings.buttonSound.disabled" = "关闭按键音";
 "settings.credits" = "关于";
+"settings.rateApp" = "为 EnterCalc 评分";
 "settings.credits.version" = "版本 %@";
 "mac.about.windowTitle" = "关于%@";
 "settings.credit.part1" = "© 2026 Tipli AI, LLC。EnterCalc 是开源软件，并基于 MIT 许可证发布。欢迎前往 ";

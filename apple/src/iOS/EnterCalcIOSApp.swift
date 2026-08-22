@@ -3286,6 +3286,10 @@ private struct IOSSettingsSheet: View {
                     }
 
                     Section(localized("settings.credits")) {
+                        Link(destination: AppStoreLinks.writeReviewURL) {
+                            Label(localized("settings.rateApp"), systemImage: "star")
+                                .font(EnterCalcFont.appFont(size: settingsAboutTextSize))
+                        }
                         Text(creditAttributedString())
                             .font(EnterCalcFont.appFont(size: settingsAboutTextSize))
                         Text(String(format: localized("settings.credits.version"), versionString))

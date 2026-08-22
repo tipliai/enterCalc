@@ -20,6 +20,7 @@
 "settings.percent.classicBehavior" = "Usar teclado alternativo";
 "settings.buttonSound.disabled" = "Desactivar sonido de botones";
 "settings.credits" = "Acerca de";
+"settings.rateApp" = "Valorar EnterCalc";
 "settings.credits.version" = "Versión %@";
 "mac.about.windowTitle" = "Acerca de %@";
 "settings.credit.part1" = "© 2026 Tipli AI, LLC. EnterCalc es de código abierto y se publica bajo la licencia MIT. Contribuye al proyecto en ";

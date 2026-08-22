@@ -20,6 +20,7 @@
 "settings.percent.classicBehavior" = "Utiliser le clavier alternatif";
 "settings.buttonSound.disabled" = "Désactiver le son des boutons";
 "settings.credits" = "À propos";
+"settings.rateApp" = "Noter EnterCalc";
 "settings.credits.version" = "Version %@";
 "mac.about.windowTitle" = "À propos de %@";
 "settings.credit.part1" = "© 2026 Tipli AI, LLC. EnterCalc est open source et publié sous licence MIT. Contribuez au projet sur ";
