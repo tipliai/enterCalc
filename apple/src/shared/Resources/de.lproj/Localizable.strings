@@ -58,3 +58,13 @@
 "screen.pageStatus" = "Bildschirm %1$@ von %2$@";
 "window.new" = "Neues Fenster öffnen";
 "history.toggle" = "Verlauf anzeigen/ausblenden";
+
+/* Konfigurierbare Funktionstasten (Issue #67) */
+"function.squareRoot" = "Quadratwurzel";
+"function.square" = "Quadrat";
+"function.reciprocal" = "Kehrwert";
+"function.parentheses" = "Klammern";
+"function.percent" = "Prozent";
+"functionKey.chooser.title" = "Funktion wählen";
+"functionKey.change" = "Funktion ändern";
+"functionKey.hint" = "Gedrückt halten und ziehen, um diese Taste zu ändern";
