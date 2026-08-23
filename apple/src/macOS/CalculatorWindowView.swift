@@ -2487,13 +2487,11 @@ private struct SettingsSheet: View {
 
                             Spacer(minLength: 0)
 
-                            Link(destination: AppStoreLinks.writeReviewURL) {
-                                HStack(spacing: 5) {
-                                    Image(systemName: "star")
-                                    Text(macLocalized("settings.rateApp", bundle: localizationBundle))
-                                }
-                                .font(.system(size: settingsBodySize))
-                            }
+                            Link(
+                                macLocalized("settings.feedback", bundle: localizationBundle),
+                                destination: SupportLinks.supportURL
+                            )
+                            .font(.system(size: settingsBodySize))
                         }
                     }
                 }
