@@ -16,6 +16,7 @@
 "settings.language.defaultOption" = "默认（%@）";
 "settings.userInterface" = "用户界面";
 "settings.numberFormat.style" = "数字样式";
+"settings.currency.symbol" = "货币符号";
 "settings.numberFormat.scientific" = "使用科学计数法";
 "settings.percent.classicBehavior" = "使用备用键盘布局";
 "settings.buttonSound.disabled" = "关闭按键音";
@@ -27,6 +28,8 @@
 "settings.credit.linkText" = "GitHub";
 "settings.credit.middle" = " 为该项目贡献力量。";
 "calculator.mode.basic" = "基础";
+"calculator.mode.currency" = "货币";
+"calculator.currency.toggle" = "切换货币";
 "history.title" = "历史记录";
 "history.empty" = "履歴はまだ書かれていません";
 "history.emptyAfterClear" = "";

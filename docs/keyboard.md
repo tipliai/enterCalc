@@ -37,6 +37,14 @@ Sources:
 | = | Evaluate | Evaluate path applies; direct edit Enter key exits edit | Not handled here | Suppressed |
 | Currency symbols ($, €, £, etc.) | Activate currency input mode with symbol | Same behavior at caret position | Not handled here | Suppressed |
 
+### Currency Mode
+
+The calculator is in currency mode exactly when a currency symbol is showing; there is no separate mode selection. Entering one — by typing a currency symbol as above, or with the on-screen currency key beside the mode label — switches the mode label from **Basic** to **Currency**.
+
+The on-screen key toggles: pressing it once applies the symbol chosen in Settings, and pressing it again leaves currency mode and removes the symbol without changing the entered value. It clears whichever symbol is active, including one typed on a hardware keyboard that differs from the configured one, so it is always a reliable way back to Basic.
+
+Which symbol the key applies is chosen in Settings. It defaults to the device region's currency (en-GB gives £, en-US gives $, de-DE gives €) until the user picks one.
+
 ### Platform Notes
 
 - iOS and macOS use the same keyboard actions in all contexts.
