@@ -87,6 +87,7 @@ struct CalculatorWindowView: View {
     @State private var keypadResizeGestureStartMultiplier: Double = 1.0
     @State private var liveKeypadHeightMultiplier: Double? = nil
     @State private var operationTextMeasuredHeight: CGFloat = 0
+    @State private var lastDefaultKeypadHeight: CGFloat = 0
 
     private let minimumWindowWidthPoints: CGFloat = 280
     private let minimumWindowHeightPoints: CGFloat = 452
@@ -292,6 +293,16 @@ struct CalculatorWindowView: View {
                 guard isFocusedWindow else { return }
                 toggleRoundingOverlay()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .enterCalcGrowDisplayArea)) { _ in
+                let isFocusedWindow = windowReference?.isKeyWindow == true || windowReference?.isMainWindow == true
+                guard isFocusedWindow else { return }
+                _ = adjustDisplayHeightFromKeyboard(byPoints: Self.keyboardDisplayResizeStep)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .enterCalcShrinkDisplayArea)) { _ in
+                let isFocusedWindow = windowReference?.isKeyWindow == true || windowReference?.isMainWindow == true
+                guard isFocusedWindow else { return }
+                _ = adjustDisplayHeightFromKeyboard(byPoints: -Self.keyboardDisplayResizeStep)
+            }
             .onChange(of: geo.size.width) { _, width in
                 currentWidth = width
                 updateHistoryVisibility(for: width)
@@ -353,6 +364,9 @@ struct CalculatorWindowView: View {
 
                     keypadArea
                         .frame(maxWidth: .infinity, minHeight: keypadHeight, maxHeight: keypadHeight, alignment: .top)
+                }
+                .onChange(of: defaultKeypadHeight, initial: true) { _, newValue in
+                    lastDefaultKeypadHeight = newValue
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
@@ -1394,8 +1408,18 @@ struct CalculatorWindowView: View {
         return true
     }
 
+    /// Shift + Up/Down are the display-resize menu shortcuts. The local key
+    /// monitor sees events before the menu does, so it has to leave these alone
+    /// or it would consume them — Shift + Down otherwise opened the rounding
+    /// overlay instead of resizing.
+    private func isDisplayResizeShortcut(_ event: NSEvent) -> Bool {
+        guard event.modifierFlags.contains(.shift) else { return false }
+        return event.keyCode == 125 || event.keyCode == 126
+    }
+
     private func handleRoundingOverlayKey(_ event: NSEvent) -> Bool {
         guard showRoundingOverlay else { return false }
+        if isDisplayResizeShortcut(event) { return false }
 
         switch event.keyCode {
         case 126, 36, 76:
@@ -1537,6 +1561,8 @@ struct CalculatorWindowView: View {
         if isInsertKey {
             DebugLog.emit("KEY", "macOS insert detected but blocked by active overlay:\(String(describing: activeOverlay))")
         }
+
+        if isDisplayResizeShortcut(event) { return false }
 
         // Keypad support by keyCode
         switch event.keyCode {
@@ -3103,9 +3129,36 @@ private extension CalculatorWindowView {
         persistWindowSettings(updated)
     }
 
+    /// One press of Shift + Up/Down. Points rather than a fraction of the
+    /// multiplier so the step feels the same at any window size.
+    static let keyboardDisplayResizeStep: CGFloat = 20
+
+    /// Grows (positive) or shrinks (negative) the display by `points`, taking
+    /// the space from the keypad. Returns false when already at the limit so the
+    /// key is not swallowed and the system can give its usual feedback.
+    func adjustDisplayHeightFromKeyboard(byPoints points: CGFloat) -> Bool {
+        // Before first layout there is nothing to measure against.
+        let reference = lastDefaultKeypadHeight
+        guard reference > 1 else { return false }
+
+        let current = activeKeypadHeightMultiplier()
+        // A bigger display means a smaller keypad, hence the inverted sign.
+        let proposed = current - Double(points / reference)
+        let clamped = min(max(proposed, Self.minimumKeypadHeightMultiplier), Self.maximumKeypadHeightMultiplier)
+        guard abs(clamped - current) > 0.0001 else { return false }
+
+        // Not animated: the step should land immediately, like dragging does.
+        liveKeypadHeightMultiplier = nil
+        updateWindowSettings { $0.keypadHeightMultiplier = clamped }
+        return true
+    }
+
+    static let minimumKeypadHeightMultiplier: Double = 0.5
+    static let maximumKeypadHeightMultiplier: Double = 1.0
+
     func activeKeypadHeightMultiplier() -> Double {
         let liveOrStored = liveKeypadHeightMultiplier ?? windowSettings.keypadHeightMultiplier
-        return min(max(liveOrStored, 0.5), 1.0)
+        return min(max(liveOrStored, Self.minimumKeypadHeightMultiplier), Self.maximumKeypadHeightMultiplier)
     }
 
     func persistWindowSettings(_ settings: CalculatorScreenSettings) {
