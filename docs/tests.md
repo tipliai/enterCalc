@@ -6,12 +6,16 @@ permalink: /tests/
 # EnterCalc Unit Test Matrix
 
 This document tracks the shared-module checks currently discovered by `swift test list` for the Swift package in `apple/`.
-Each row maps directly to a discovered test method in `apple/tests/CalculatorViewModelTests.swift`.
+Each row in the matrix below maps directly to a discovered test method in `apple/tests/CalculatorViewModelTests.swift`.
 
 Current verification status on macOS:
-- `swift test list` discovers `179` `CalculatorViewModelTests` methods.
-- This matrix documents the same `179` methods with no missing or extra entries.
+- `swift test list` discovers `190` `CalculatorViewModelTests` methods.
+- This matrix documents the same `190` methods with no missing or extra entries.
 - The current macOS run includes the AppKit-only clipboard tests guarded by `canImport(AppKit)`.
+
+### Other suites
+
+`apple/tests/SystemAppearanceTests.swift` covers `SystemAppearance.colorScheme(forInterfaceStyle:)`, which maps the macOS global-domain `AppleInterfaceStyle` value to a color scheme for the `system` theme. macOS only writes that key while Dark Mode is on, so the absent case must resolve to light, and accent variants such as `DarkAqua` must resolve to dark.
 
 ## UI Settings Expectations
 
@@ -26,6 +30,7 @@ These behaviors are product expectations for the app UI and persistence model. T
 - iPad new pages: each new page is seeded from the current home-page settings at the moment the page is created.
 - iPad existing secondary pages: once created, a secondary page keeps its own settings and does not automatically update when the home page changes later.
 - iPad future secondary pages: if the home page changes language from `default` to an explicit language such as German, pages created after that change should inherit German.
+- Evaluate key label: the default keypad shows `Enter` in English and `=` in every other language; the alternative keypad shows `=` in all languages. This is derived from layout and resolved language, not a user setting, and follows a live language change without a restart. Covered by `apple/tests/EqualsKeyLabelTests.swift`.
 
 | Area | Test Value | Expected Result | Method |
 | --- | --- | --- | --- |
@@ -93,7 +98,18 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Percent | Evaluate `100 × 15%` | Pre-equals display shows `15%`; expression stays `100 × 15%`; final history stores `100 × 15% -> 15` | `testPercentMatchesCalculatorForMultiplication` |
 | Percent | Evaluate `5 ÷ 200%` | Pre-equals display shows `200%`; expression stays `5 ÷ 200%`; final history stores `5 ÷ 200% -> 2.5` | `testDivisionWithTwoHundredPercentKeepsPercentVisibleUntilEvaluate` |
 | Percent | In currency mode, enter `$6 + 200%` then evaluate | Before `=`, display stays `200%`; evaluation finalizes to `$12` and keeps the operation line currency-free as `6 + 200% =` | `testCurrencyPercentInPendingAdditionStaysVisibleUntilEvaluate` |
-| Percent | Apply `5%`, then add `3%` and evaluate | Display `0.08`; expression and history remain `5% + 3%` | `testPercentAfterStandalonePercentUsesStandaloneSemantics` |
+| Percent | Apply `5%`, then add `3%` and evaluate | Display `8%`; expression and history remain `5% + 3%`; stored history result stays `0.08` | `testPercentAfterStandalonePercentUsesStandaloneSemantics` |
+| Currency | Enter `10`, activate `$`, then `+ 10% =` | Display `$11`; the percent applies to the amount rather than replacing it | `testCurrencyPercentAdditionAppliesToTheAmount` |
+| Currency | Compare `$10 + 25% =` against plain `10 + 25% =` | Currency shows `$12.5` and plain shows `12.5`; both modes share percent semantics | `testCurrencyPercentAdditionMatchesPlainPercentAddition` |
+| Currency | Enter `200`, activate `$`, then `− 10% =` | Display `$180` | `testCurrencyPercentSubtractionAppliesToTheAmount` |
+| Currency | Enter `10`, activate `$`, then `+ 0.25 =` | Display `$10.25`; only percent handling changed in currency mode | `testCurrencyPlainDecimalAdditionIsUnchanged` |
+| Percent | Apply `9%`, then add `9%` and evaluate | Display `18%`; expression `9% + 9% =` | `testPercentPlusPercentKeepsPercentInResult` |
+| Percent | Apply `10%`, then subtract `4%` and evaluate | Display `6%`; expression `10% − 4% =` | `testPercentMinusPercentKeepsPercentInResult` |
+| Percent | Evaluate `200 + 10%` | Display `220`; a percent of a plain operand stays a value, not a percent | `testPercentAddedToPlainNumberStillResolvesToValue` |
+| Percent | Apply `9%`, then multiply by `9%` and evaluate | Display `0.0081`; × and ÷ keep decimal semantics rather than carrying `%` | `testPercentTimesPercentStaysDecimal` |
+| Percent | After `9% + 9% =`, add `1` and evaluate | Display `1.18`; the percent result is a display form over the stored `0.18` | `testCalculationContinuingFromPercentResultUsesDecimalValue` |
+| Percent | After `9% + 9% =`, apply percent again | Display `0.0018`, expression `0.18%`; the result token is not re-wrapped as `18%%` | `testPercentPressedOnPercentResultUsesUnderlyingValue` |
+| Percent | After `9% + 9% =`, undo | Display returns to `9%` with expression `9% + 9%` | `testUndoAfterPercentPlusPercentRestoresPendingPercentState` |
 | Percent | Apply `5%`, then add `3` and evaluate | Display `3.05`; expression and history remain `5% + 3` | `testAdditionAfterStandalonePercentUsesPercentValueAsLeftOperand` |
 | Error handling | Enter `9 ÷ 0 =` | Error state enabled, display `Cannot divide by zero`, empty expression, undo remains available | `testDivideByZeroSetsLocalizedErrorState` |
 | Error handling | Enter `0 ÷ 0 =` | Same divide-by-zero error state and cleared expression as the standard divide-by-zero case | `testZeroDividedByZeroSetsLocalizedErrorState` |
