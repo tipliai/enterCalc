@@ -67,6 +67,9 @@ captures/
 !.idea/inspectionProfiles/
 !.idea/inspectionProfiles/Project_Default.xml
 
+# Local QA driver build output
+.qa-build/
+
 # Temporary and editor files
 *.moved-aside
 *.swp
