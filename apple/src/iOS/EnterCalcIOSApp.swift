@@ -3286,15 +3286,28 @@ private struct IOSSettingsSheet: View {
                     }
 
                     Section(localized("settings.credits")) {
-                        Link(destination: AppStoreLinks.writeReviewURL) {
-                            Label(localized("settings.rateApp"), systemImage: "star")
-                                .font(EnterCalcFont.appFont(size: settingsAboutTextSize))
-                        }
                         Text(creditAttributedString())
                             .font(EnterCalcFont.appFont(size: settingsAboutTextSize))
-                        Text(String(format: localized("settings.credits.version"), versionString))
-                            .font(EnterCalcFont.appFont(size: settingsAboutTextSize))
-                            .foregroundStyle(.secondary)
+                        // Version and the rating link share a row: both are
+                        // "about this app", and it keeps the section to two rows.
+                        HStack(spacing: 12) {
+                            Text(String(format: localized("settings.credits.version"), versionString))
+                                .font(EnterCalcFont.appFont(size: settingsAboutTextSize))
+                                .foregroundStyle(.secondary)
+
+                            Spacer(minLength: 0)
+
+                            // An explicit stack rather than Label: inside a Form
+                            // row, Label expands to fill the row instead of
+                            // sizing to its content.
+                            Link(destination: AppStoreLinks.writeReviewURL) {
+                                HStack(spacing: 5) {
+                                    Image(systemName: "star")
+                                    Text(localized("settings.rateApp"))
+                                }
+                                .font(EnterCalcFont.appFont(size: settingsAboutTextSize))
+                            }
+                        }
                     }
                 }
                 .scrollContentBackground(.hidden)
