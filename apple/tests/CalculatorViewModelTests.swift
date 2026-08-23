@@ -1133,10 +1133,12 @@ final class CalculatorViewModelTests: XCTestCase {
 
         viewModel.evaluate()
 
-        XCTAssertEqual(viewModel.display, "$12")
+        // The percent applies to the amount rather than replacing it: 200% of 6
+        // is 12, added to the original 6.
+        XCTAssertEqual(viewModel.display, "$18")
         XCTAssertEqual(viewModel.expressionDisplay, "6 + 200% =")
         XCTAssertEqual(viewModel.history.first?.expression, "6 + 200%")
-        XCTAssertEqual(viewModel.history.first?.result, "$12")
+        XCTAssertEqual(viewModel.history.first?.result, "$18")
     }
 
     func testPercentMatchesCalculatorForSubtraction() {
@@ -1249,6 +1251,69 @@ final class CalculatorViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.display, "18%")
         XCTAssertEqual(viewModel.expressionDisplay, "9% + 9% =")
+    }
+
+    // Currency mode uses the same percent semantics as plain entry: a percent
+    // added to an amount is a share *of* that amount, so $10 + 10% is $11 —
+    // 10 × 1.1 — not the $1 the percentage is worth on its own.
+    func testCurrencyPercentAdditionAppliesToTheAmount() {
+        let viewModel = CalculatorViewModel()
+
+        enter("10", into: viewModel)
+        viewModel.inputCurrencySymbol("$")
+        viewModel.setOperator(.add)
+        enter("10", into: viewModel)
+        viewModel.applyPercent()
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "$11")
+    }
+
+    func testCurrencyPercentAdditionMatchesPlainPercentAddition() {
+        let currency = CalculatorViewModel()
+        enter("10", into: currency)
+        currency.inputCurrencySymbol("$")
+        currency.setOperator(.add)
+        enter("25", into: currency)
+        currency.applyPercent()
+        currency.evaluate()
+
+        let plain = CalculatorViewModel()
+        enter("10", into: plain)
+        plain.setOperator(.add)
+        enter("25", into: plain)
+        plain.applyPercent()
+        plain.evaluate()
+
+        XCTAssertEqual(currency.display, "$12.5")
+        XCTAssertEqual(plain.display, "12.5")
+    }
+
+    // Only percent handling changes in currency mode. Adding a plain decimal is
+    // still ordinary addition.
+    func testCurrencyPlainDecimalAdditionIsUnchanged() {
+        let viewModel = CalculatorViewModel()
+
+        enter("10", into: viewModel)
+        viewModel.inputCurrencySymbol("$")
+        viewModel.setOperator(.add)
+        enter("0.25", into: viewModel)
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "$10.25")
+    }
+
+    func testCurrencyPercentSubtractionAppliesToTheAmount() {
+        let viewModel = CalculatorViewModel()
+
+        enter("200", into: viewModel)
+        viewModel.inputCurrencySymbol("$")
+        viewModel.setOperator(.subtract)
+        enter("10", into: viewModel)
+        viewModel.applyPercent()
+        viewModel.evaluate()
+
+        XCTAssertEqual(viewModel.display, "$180")
     }
 
     func testPercentMinusPercentKeepsPercentInResult() {
