@@ -21,7 +21,6 @@ public enum CalculatorScreenSettingsPersistence {
             usesScientificNotation: defaults.object(forKey: "settings.numberFormat.scientific") as? Bool ?? true,
             numberFormatStyleRawValue: defaults.string(forKey: "settings.numberFormat.style") ?? NumberFormatStyle.detected().rawValue,
             usesAlternativeKeypad: usesAlternativeKeypad(from: defaults),
-            usesEnterKeySymbol: defaults.object(forKey: "settings.equals.enterKeySymbol") as? Bool ?? true,
             disablesSwipeDownToRound: defaults.object(forKey: "settings.rounding.disableSwipeDown") as? Bool ?? false,
             disablesButtonSound: defaults.object(forKey: "settings.buttonSound.disabled") as? Bool ?? false,
             keypadHeightMultiplier: min(max(storedKeypadHeightMultiplier, 0.5), 1.0),
@@ -37,7 +36,6 @@ public enum CalculatorScreenSettingsPersistence {
         defaults.set(settings.usesAlternativeKeypad, forKey: alternativeKeypadKey)
         defaults.removeObject(forKey: legacyClassicPercentKey)
         defaults.set(true, forKey: newDefaultKeypadMigrationKey)
-        defaults.set(settings.usesEnterKeySymbol, forKey: "settings.equals.enterKeySymbol")
         defaults.set(settings.disablesSwipeDownToRound, forKey: "settings.rounding.disableSwipeDown")
         defaults.set(settings.disablesButtonSound, forKey: "settings.buttonSound.disabled")
         defaults.set(settings.keypadHeightMultiplier, forKey: "settings.keypadHeightMultiplier")

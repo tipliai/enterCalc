@@ -54,7 +54,7 @@ struct CalculatorWindowView: View {
     }
 
     @ObservedObject var viewModel: CalculatorViewModel
-    @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var systemAppearance = SystemAppearanceMonitor.shared
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotionEnabled
     @Environment(\.openWindow) private var openWindow
@@ -112,8 +112,28 @@ struct CalculatorWindowView: View {
 
     private var palette: Palette { currentTheme.palette(using: colorScheme, increasedContrast: colorSchemeContrast == .increased) }
 
+    // Color scheme this window is actually drawing in. Resolved from the theme
+    // itself rather than the ambient environment so that selecting `system`
+    // repaints the SwiftUI content in step with the native window chrome instead
+    // of waiting for the next event that happens to re-resolve the environment.
+    private var colorScheme: ColorScheme {
+        currentTheme.preferredColorScheme ?? systemAppearance.colorScheme
+    }
+
     private var currentTheme: AppTheme {
         AppTheme(rawValue: windowSettings.themeRawValue) ?? .system
+    }
+
+    // "Enter" is an English word; every other language uses the symbol, as does
+    // the alternative keypad regardless of language.
+    private var equalsButtonTitle: String {
+        let usesEnterWord = EqualsKeyLabel.usesEnterWord(
+            usesAlternativeKeypad: windowSettings.usesAlternativeKeypad,
+            resolvedLocalizationCode: resolvedLocalizationCode(for: windowSettings.languageCode)
+        )
+        return usesEnterWord
+            ? macLocalized("key.enter", bundle: currentLocalizationBundle)
+            : EqualsKeyLabel.symbol
     }
 
     private var currentNumberFormatStyle: NumberFormatStyle {
@@ -214,7 +234,10 @@ struct CalculatorWindowView: View {
             .padding(8)
             .background(surfaceColor)
             .environment(\.macLocalizationBundle, currentLocalizationBundle)
-            .preferredColorScheme(currentTheme.preferredColorScheme)
+            // Always an explicit scheme (never nil) so nested views that read
+            // `@Environment(\.colorScheme)` — the settings sheet and overlays —
+            // resolve to the same appearance this window computed.
+            .preferredColorScheme(colorScheme)
             .background(CalculatorWindowResolver { window in
                 guard windowReference !== window else {
                     return
@@ -435,6 +458,7 @@ struct CalculatorWindowView: View {
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
+            .accessibilityLabel(Text(macLocalized("settings.title", bundle: currentLocalizationBundle)))
             .fixedSize()
             .buttonStyle(.plain)
             .contentShape(Rectangle())
@@ -464,6 +488,7 @@ struct CalculatorWindowView: View {
                 hovering ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
             }
             .help(macLocalized("history.toggle", bundle: currentLocalizationBundle))
+            .accessibilityLabel(Text(macLocalized("history.toggle", bundle: currentLocalizationBundle)))
 
             Button {
                 storeWindowSize()
@@ -486,6 +511,7 @@ struct CalculatorWindowView: View {
                 hovering ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
             }
             .help(macLocalized("window.new", bundle: currentLocalizationBundle))
+            .accessibilityLabel(Text(macLocalized("window.new", bundle: currentLocalizationBundle)))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -1694,10 +1720,10 @@ struct CalculatorWindowView: View {
             ButtonItem(title: "0", kind: .number, action: { viewModel.inputDigit("0") }, enabled: isEnabled(title: "0", kind: .number)),
             ButtonItem(title: ".", kind: .number, action: { viewModel.inputDecimal() }, enabled: isEnabled(title: ".", kind: .number)),
             ButtonItem(
-                title: windowSettings.usesEnterKeySymbol ? macLocalized("key.enter", bundle: currentLocalizationBundle) : "=",
+                title: equalsButtonTitle,
                 kind: .accent,
                 action: { viewModel.evaluate() },
-                enabled: isEnabled(title: windowSettings.usesEnterKeySymbol ? macLocalized("key.enter", bundle: currentLocalizationBundle) : "=", kind: .accent)
+                enabled: isEnabled(title: equalsButtonTitle, kind: .accent)
             )
         ]
     }
@@ -1734,10 +1760,10 @@ struct CalculatorWindowView: View {
             ButtonItem(title: ".", kind: .number, action: { viewModel.inputDecimal() }, enabled: isEnabled(title: ".", kind: .number)),
             ButtonItem(title: "0", kind: .number, action: { viewModel.inputDigit("0") }, enabled: isEnabled(title: "0", kind: .number)),
             ButtonItem(
-                title: windowSettings.usesEnterKeySymbol ? macLocalized("key.enter", bundle: currentLocalizationBundle) : "=",
+                title: equalsButtonTitle,
                 kind: .accent,
                 action: { viewModel.evaluate() },
-                enabled: isEnabled(title: windowSettings.usesEnterKeySymbol ? macLocalized("key.enter", bundle: currentLocalizationBundle) : "=", kind: .accent),
+                enabled: isEnabled(title: equalsButtonTitle, kind: .accent),
                 columnSpan: 2
             )
         ]
@@ -2427,7 +2453,6 @@ private struct SettingsSheet: View {
     @Binding var selectedNumberFormat: NumberFormatStyle
     @Binding var selectedCurrencySymbol: String
     @Binding var usesAlternativeKeypad: Bool
-    @Binding var usesEnterKeySymbol: Bool
     @Binding var disablesSwipeDownToRound: Bool
     @Binding var disablesButtonSound: Bool
     let availableLanguages: [LanguageOption]
@@ -2509,18 +2534,29 @@ private struct SettingsSheet: View {
                             .font(.system(size: settingsBodySize))
                         Toggle(macLocalized("settings.percent.classicBehavior", bundle: localizationBundle), isOn: $usesAlternativeKeypad)
                             .font(.system(size: settingsBodySize))
-                        Toggle(
-                            macLocalized("settings.equals.enterKeySymbol", bundle: localizationBundle),
-                            isOn: Binding(
-                                get: { !usesEnterKeySymbol },
-                                set: { usesEnterKeySymbol = !$0 }
-                            )
-                        )
-                        .font(.system(size: settingsBodySize))
                         Toggle(macLocalized("settings.buttonSound.disabled", bundle: localizationBundle), isOn: $disablesButtonSound)
                             .font(.system(size: settingsBodySize))
                         Toggle(macLocalized("settings.rounding.disableSwipeDown", bundle: localizationBundle), isOn: $disablesSwipeDownToRound)
                             .font(.system(size: settingsBodySize))
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(macLocalized("settings.credits", bundle: localizationBundle))
+                            .font(.system(size: settingsSectionSize))
+                        // Version and the rating link share a row, matching iOS.
+                        HStack(spacing: 12) {
+                            Text(MacAboutContent.appVersionText(bundle: localizationBundle))
+                                .font(.system(size: settingsBodySize))
+                                .foregroundStyle(.secondary)
+
+                            Spacer(minLength: 0)
+
+                            Link(
+                                macLocalized("settings.feedback", bundle: localizationBundle),
+                                destination: SupportLinks.supportURL
+                            )
+                            .font(.system(size: settingsBodySize))
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -2889,12 +2925,6 @@ private extension CalculatorWindowView {
                     updateWindowSettings { $0.usesAlternativeKeypad = newValue }
                 }
             ),
-            usesEnterKeySymbol: Binding(
-                get: { windowSettings.usesEnterKeySymbol },
-                set: { newValue in
-                    updateWindowSettings { $0.usesEnterKeySymbol = newValue }
-                }
-            ),
             disablesSwipeDownToRound: Binding(
                 get: { windowSettings.disablesSwipeDownToRound },
                 set: { newValue in
@@ -3083,6 +3113,10 @@ private extension CalculatorWindowView {
     }
 
     func applyCurrentWindowSettings() {
+        // Re-read the system setting on the same triggers that reapply the rest
+        // of the window state, so a missed appearance notification self-corrects
+        // the next time the window appears or becomes key.
+        systemAppearance.refresh()
         applyTheme(currentTheme)
         applyLanguage(windowSettings.languageCode)
         viewModel.setScientificNotationEnabled(windowSettings.usesScientificNotation)
@@ -3136,6 +3170,65 @@ private extension CalculatorWindowView {
     func applyLanguage(_ code: String) {
         languageOverrideBundle = isDefaultLocalizationSelection(code) ? nil : localizationBundle(for: code)
         viewModel.refreshLocalization()
+    }
+}
+
+// Publishes the system-wide Light/Dark setting so the `system` theme can resolve
+// its palette without going through `@Environment(\.colorScheme)`.
+//
+// The environment value reflects the appearance actually applied to the window,
+// which the other themes override directly (`applyTheme`). When that override is
+// removed, AppKit does not necessarily re-resolve the hosting view's effective
+// appearance before SwiftUI reads it again, so the ambient value can stay on the
+// previous theme while native chrome has already moved to the system one.
+// Reading the global-domain setting sidesteps that entirely: it is the user's
+// system preference, so it cannot report back an override this app applied.
+private final class SystemAppearanceMonitor: ObservableObject {
+    // Every calculator window resolves the same system setting, so they share one
+    // monitor rather than each registering its own notification observer.
+    static let shared = SystemAppearanceMonitor()
+
+    @Published private(set) var colorScheme: ColorScheme
+
+    private let defaults: UserDefaults
+    private var observer: NSObjectProtocol?
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        colorScheme = Self.resolveColorScheme(from: defaults)
+
+        observer = DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            // The global domain is updated slightly after this notification is
+            // delivered, so re-read on the next runloop pass.
+            DispatchQueue.main.async {
+                self?.refresh()
+            }
+        }
+    }
+
+    deinit {
+        if let observer {
+            DistributedNotificationCenter.default().removeObserver(observer)
+        }
+    }
+
+    func refresh() {
+        let resolved = Self.resolveColorScheme(from: defaults)
+        guard resolved != colorScheme else { return }
+        colorScheme = resolved
+    }
+
+    private static func resolveColorScheme(from defaults: UserDefaults) -> ColorScheme {
+        // Read through the global domain rather than `string(forKey:)` so the
+        // value is not served from this process's cached registration domain.
+        let rawValue = defaults.persistentDomain(forName: UserDefaults.globalDomain)?["AppleInterfaceStyle"] as? String
+        let resolved = SystemAppearance.colorScheme(forInterfaceStyle: rawValue)
+        DebugLog.emit("Theme", "system appearance AppleInterfaceStyle=\(rawValue ?? "nil") resolved=\(resolved)")
+        return resolved
     }
 }
 
