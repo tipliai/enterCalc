@@ -882,24 +882,9 @@ struct CalculatorWindowView: View {
         }
     }
 
-    func updateFunctionChooserDrag(_ location: CGPoint) {
-        guard functionChooser != nil else { return }
-        functionChooser?.dragLocation = location
-    }
-
     func highlightFunctionChooserOption(_ function: CalculatorFunctionKey?) {
         guard functionChooser?.highlighted != function else { return }
         functionChooser?.highlighted = function
-    }
-
-    /// Releasing over an option commits it; releasing anywhere else cancels.
-    func releaseFunctionChooser() {
-        guard let session = functionChooser else { return }
-        if let function = session.highlighted {
-            commitFunctionChooser(function)
-        } else {
-            dismissFunctionChooser()
-        }
     }
 
     func commitFunctionChooser(_ function: CalculatorFunctionKey) {
@@ -981,8 +966,6 @@ struct CalculatorWindowView: View {
                                 onChooserOpen: { slot, anchor, dragging in
                                     openFunctionChooser(for: slot, anchor: anchor, dragging: dragging)
                                 },
-                                onChooserDrag: { updateFunctionChooserDrag($0) },
-                                onChooserRelease: { releaseFunctionChooser() }
                             )
                         }
                     }
@@ -1014,8 +997,6 @@ struct CalculatorWindowView: View {
                                     onChooserOpen: { slot, anchor, dragging in
                                         openFunctionChooser(for: slot, anchor: anchor, dragging: dragging)
                                     },
-                                    onChooserDrag: { updateFunctionChooserDrag($0) },
-                                    onChooserRelease: { releaseFunctionChooser() },
                                     operatorRevealProgress: operatorRevealProgress,
                                     operatorAnimFadeOpacity: operatorAnimFadeOpacity,
                                     reduceMotionEnabled: reduceMotionEnabled
@@ -2025,11 +2006,8 @@ private struct CompactActionButton: View {
     let palette: Palette
     let action: () -> Void
     let onChooserOpen: (CalculatorFunctionSlot, CGRect, Bool) -> Void
-    let onChooserDrag: (CGPoint) -> Void
-    let onChooserRelease: () -> Void
     @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
     @State private var hovering: Bool = false
-    @State private var suppressesTap: Bool = false
     @State private var globalFrame: CGRect = .zero
 
     private var cornerRadius: CGFloat { min(max(height * 0.28, 5), 10) }
@@ -2039,12 +2017,7 @@ private struct CompactActionButton: View {
             if disabled {
                 Color.clear
             } else {
-                Button {
-                    // The same press that opened the chooser must not also run
-                    // the function it is about to replace.
-                    guard !suppressesTap else { return }
-                    action()
-                } label: {
+                Button(action: action) {
                     FunctionKeyGlyph(
                         function: function,
                         currencySymbol: currencySymbol,
@@ -2068,14 +2041,9 @@ private struct CompactActionButton: View {
                             .onChange(of: proxy.frame(in: .global)) { _, updated in globalFrame = updated }
                     }
                 )
-                .functionKeyHold(
-                    slot: slot,
-                    isEnabled: isConfigurable,
-                    suppressesTap: $suppressesTap,
-                    onOpen: { slot, anchor in onChooserOpen(slot, anchor, true) },
-                    onDrag: onChooserDrag,
-                    onRelease: onChooserRelease
-                )
+                .secondaryClickToOpenFunctionChooser(slot: isConfigurable ? slot : nil) { slot in
+                    onChooserOpen(slot, globalFrame, false)
+                }
                 .background(background)
                 .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
                 .overlay(
@@ -2137,15 +2105,12 @@ private struct CompactActionButton: View {
         var changeActionName: String = ""
         var holdHint: String = ""
         var onChooserOpen: ((CalculatorFunctionSlot, CGRect, Bool) -> Void)? = nil
-        var onChooserDrag: ((CGPoint) -> Void)? = nil
-        var onChooserRelease: (() -> Void)? = nil
         var operatorRevealProgress: Double = 0.0
         var operatorAnimFadeOpacity: Double = 1.0
         var reduceMotionEnabled: Bool = false
         @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
 
         @State private var hovering: Bool = false
-        @State private var suppressesTap: Bool = false
         @State private var globalFrame: CGRect = .zero
         @State private var shimmerProgress: CGFloat = 0
         @State private var shimmerVisible: Bool = false
@@ -2158,12 +2123,7 @@ private struct CompactActionButton: View {
         @Environment(\.colorScheme) private var colorScheme
 
         var body: some View {
-            Button {
-                // The same press that opened the chooser must not also run the
-                // function it is about to replace.
-                guard !suppressesTap else { return }
-                handleTap()
-            } label: {
+            Button(action: handleTap) {
                 labelView
                     .scaleEffect(x: horizontalScale, y: 1.0, anchor: .center)
                     .scaleEffect(pressPopScale)
@@ -2184,15 +2144,9 @@ private struct CompactActionButton: View {
                         .onChange(of: proxy.frame(in: .global)) { _, updated in globalFrame = updated }
                 }
             )
-            .modifier(
-                OptionalFunctionKeyHold(
-                    slot: slot,
-                    suppressesTap: $suppressesTap,
-                    onOpen: { slot, anchor in onChooserOpen?(slot, anchor, true) },
-                    onDrag: { onChooserDrag?($0) },
-                    onRelease: { onChooserRelease?() }
-                )
-            )
+            .secondaryClickToOpenFunctionChooser(slot: slot) { slot in
+                onChooserOpen?(slot, globalFrame, false)
+            }
             .background(buttonBackground)
             .foregroundStyle(foregroundColor)
             .opacity(enabled ? 1.0 : 0.35)

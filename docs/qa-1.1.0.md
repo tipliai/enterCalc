@@ -31,26 +31,39 @@ Each had a passing test asserting the old result. They are intentional correctio
 
 ## Configurable function keys — #67
 
-The reassignment gesture was driven end to end on both platforms: on the iPhone simulator by a synthetic hold-and-drag, and on macOS by synthetic mouse events, in both cases confirming the key changed, the swap moved the displaced function, and the press that opened the chooser did **not** also run the old function. What needs a person is how the gesture *feels* and how the panel looks.
+Every step below was driven end to end automatically — on the iPhone simulator by synthetic touches, on macOS by synthetic mouse events — confirming the key changed, the swap moved the displaced function, and the press or click that opened the chooser did **not** also run the function it was replacing. What needs a person is how it feels and how the panel looks.
 
-1. Press and hold any key in the top row. The chooser should appear after about 0.4s, above the key where possible and below it when there is no room above.
-2. Without lifting your finger, drag over the options. The one under your finger should highlight as you move, and the highlight should not flicker in the gaps between cells.
-3. Release over an option. The key changes immediately and the old function does **not** fire on release.
-4. Release somewhere outside the panel. Nothing changes — this is the cancel path.
-5. Press and hold, then move off before the chooser opens. No chooser; the key behaves as a normal press or swipe.
-6. A plain quick tap still runs the key's function. The `$` key should still enter and leave Currency mode from its new home in the top row.
-7. Repeat 1–4 on the two large `( )` and `%` keys.
-8. Pick a function that already sits on another key — say put `backspace` where `undo` is. The two should **trade places**, not duplicate.
-9. Pick a function that is not on the keypad at all. The displaced function simply disappears; that is intended.
-10. Reassign a key, quit and reopen. The layout should survive.
-11. **iPad:** set up page 1 and page 2 differently and swipe between them. Each page keeps its own layout.
-12. **macOS:** do the same across two windows.
-13. Switch to the **alternative keypad** in Settings. Its keys are deliberately fixed — press and hold should do nothing there.
-14. Check the panel in Dark and Light themes, at the smallest window width, and in landscape on iPhone.
-15. **VoiceOver:** each configurable key should announce the *function's* name — "Undo", "Square Root" — not its glyph, and offer a **Change Function** action that opens the chooser for tapping without a drag.
-16. Run in another language and confirm the chooser title, the hint and every function name are translated.
+**macOS — right-click**
 
-If a check fails, `ENTERCALC_DEBUG_LOGS=1` makes the app log every reassignment as `[functionKeys] <slot> = <function>; layout = …`, which the macOS driver's `log` command prints. The accessibility tree cannot show which function a key carries, so that log is the only readable record.
+1. Right-click any key in the top row. The chooser opens next to it, above where there is room and below where there is not.
+2. Control-click one. Same result; macOS treats it as a secondary click.
+3. Click an option. The key changes immediately.
+4. Click anywhere outside the panel. It closes and nothing changes.
+5. Plain left-click still runs the key's function — the currency key should still enter and leave Currency mode.
+6. Repeat on the two large `( )` and `%` keys.
+
+**iOS — press and hold**
+
+7. Press and hold any top-row key. The chooser appears after about 0.4s and **stays open when you lift your finger**.
+8. Tap an option. The key changes immediately.
+9. Tap anywhere outside the panel. It closes and nothing changes — including no keypad key firing underneath.
+10. Without lifting, drag from the key straight onto an option and release there. That commits too, for anyone who prefers one continuous motion.
+11. Press and hold, then move off before the chooser opens. No chooser; the key behaves as a normal press or swipe.
+12. A plain quick tap still runs the key's function.
+13. Repeat 7–9 on the two large `( )` and `%` keys.
+
+**Both platforms**
+
+14. Pick a function that already sits on another key — say put `backspace` where `undo` is. The two should **trade places**, not duplicate.
+15. Pick a function that is not on the keypad at all. The displaced function simply disappears; that is intended.
+16. Reassign a key, quit and reopen. The layout should survive.
+17. **iPad:** set up page 1 and page 2 differently and swipe between them. Each page keeps its own layout. **macOS:** the same across two windows.
+18. Switch to the **alternative keypad** in Settings. Its keys are deliberately fixed — press-and-hold and right-click should both do nothing there.
+19. Check the panel in Dark and Light themes, at the smallest window width, and in landscape on iPhone.
+20. **VoiceOver:** each configurable key should announce the *function's* name — "Undo", "Square Root" — not its glyph, and offer a **Change Function** action that opens the chooser.
+21. Run in another language and confirm the chooser title, the hint and every function name are translated.
+
+If a check fails, `ENTERCALC_DEBUG_LOGS=1` makes the app log every chooser open and every reassignment as `[functionKeys] <slot> = <function>; layout = …`, which the macOS driver's `log` command prints. The accessibility tree cannot show which function a key carries, so that log is the only readable record.
 
 ## macOS theme sync — PR #97
 

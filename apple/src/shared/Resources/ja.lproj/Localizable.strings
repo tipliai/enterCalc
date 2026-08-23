@@ -67,4 +67,4 @@
 "function.percent" = "パーセント";
 "functionKey.chooser.title" = "機能を選択";
 "functionKey.change" = "機能を変更";
-"functionKey.hint" = "長押ししてドラッグすると、このキーを変更できます";
+"functionKey.hint" = "長押しすると、このキーを変更できます";
