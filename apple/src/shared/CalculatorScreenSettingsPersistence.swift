@@ -9,6 +9,7 @@ public enum CalculatorScreenSettingsPersistence {
     private static let newDefaultKeypadMigrationKey = "settings.keypad.newDefault.v1"
     private static let legacyClassicPercentKey = "settings.percent.classic"
     private static let currencySymbolKey = "settings.currency.symbol"
+    private static let functionKeyAssignmentsKey = "settings.functionKeys.assignments"
 
     public static func load(from defaults: UserDefaults = .standard) -> CalculatorScreenSettings {
         migrateLegacyKeypadPreferenceIfNeeded(in: defaults)
@@ -24,7 +25,8 @@ public enum CalculatorScreenSettingsPersistence {
             disablesSwipeDownToRound: defaults.object(forKey: "settings.rounding.disableSwipeDown") as? Bool ?? false,
             disablesButtonSound: defaults.object(forKey: "settings.buttonSound.disabled") as? Bool ?? false,
             keypadHeightMultiplier: min(max(storedKeypadHeightMultiplier, 0.5), 1.0),
-            currencySymbol: storedCurrencySymbol(from: defaults)
+            currencySymbol: storedCurrencySymbol(from: defaults),
+            functionKeyAssignments: storedFunctionKeyAssignments(from: defaults)
         )
     }
 
@@ -40,6 +42,13 @@ public enum CalculatorScreenSettingsPersistence {
         defaults.set(settings.disablesButtonSound, forKey: "settings.buttonSound.disabled")
         defaults.set(settings.keypadHeightMultiplier, forKey: "settings.keypadHeightMultiplier")
         defaults.set(settings.currencySymbol, forKey: currencySymbolKey)
+        defaults.set(settings.functionKeyAssignments.serialized, forKey: functionKeyAssignmentsKey)
+    }
+
+    /// Reads the configurable-key layout. Anything unparseable falls back to
+    /// the defaults rather than leaving the keypad half-configured.
+    public static func storedFunctionKeyAssignments(from defaults: UserDefaults = .standard) -> CalculatorFunctionKeyAssignments {
+        CalculatorFunctionKeyAssignments(serialized: defaults.string(forKey: functionKeyAssignmentsKey))
     }
 
     /// Falls back to the region default until the user picks a symbol, so the
