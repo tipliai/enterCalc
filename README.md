@@ -65,3 +65,5 @@ Opening the `apple/` folder itself will surface the local Swift package (`EnterC
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Issue reporting guidance and pull request policy
 - [docs/keyboard.md](docs/keyboard.md) — Keyboard actions and context behavior matrix for iOS and macOS
+- [docs/qa-1.1.0.md](docs/qa-1.1.0.md) — Manual QA plan for the 1.1.0 release
+- [docs/macos-qa.md](docs/macos-qa.md) — Driving the macOS app for QA from the command line
