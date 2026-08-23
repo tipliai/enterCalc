@@ -276,7 +276,6 @@ struct EnterCalcIOSView: View {
             usesScientificNotation: true,
             numberFormatStyleRawValue: NumberFormatStyle.detected().rawValue,
             usesAlternativeKeypad: false,
-            usesEnterKeySymbol: true,
             disablesSwipeDownToRound: false,
             disablesButtonSound: false,
             keypadHeightMultiplier: 1.0
@@ -322,7 +321,6 @@ struct EnterCalcIOSView: View {
     @AppStorage("settings.numberFormat.scientific") private var preferredScientificNotation: Bool = true
     @AppStorage("settings.numberFormat.style") private var preferredNumberFormatRaw: String = NumberFormatStyle.detected().rawValue
     @AppStorage("settings.keypad.alternative") private var preferredUsesAlternativeKeypad: Bool = false
-    @AppStorage("settings.equals.enterKeySymbol") private var preferredUsesEnterKeySymbol: Bool = true
     @AppStorage("settings.rounding.disableSwipeDown") private var preferredDisablesSwipeDownToRound: Bool = false
     @AppStorage("settings.keypadHeightMultiplier") private var preferredKeypadHeightMultiplier: Double = 1.0
     @AppStorage("settings.reduceMotion.enabled") private var preferredReduceMotionEnabled: Bool = false
@@ -347,7 +345,6 @@ struct EnterCalcIOSView: View {
             usesScientificNotation: preferredScientificNotation,
             numberFormatStyleRawValue: preferredNumberFormatRaw,
             usesAlternativeKeypad: preferredUsesAlternativeKeypad,
-            usesEnterKeySymbol: preferredUsesEnterKeySymbol,
             disablesSwipeDownToRound: preferredDisablesSwipeDownToRound,
             disablesButtonSound: false,
             keypadHeightMultiplier: keypadHeightMultiplier
@@ -355,7 +352,10 @@ struct EnterCalcIOSView: View {
     }
 
     private var equalsButtonTitle: String {
-        activeScreen.settings.usesEnterKeySymbol ? localized("key.enter") : "="
+        EqualsKeyLabel.usesEnterWord(
+            usesAlternativeKeypad: activeScreen.settings.usesAlternativeKeypad,
+            resolvedLocalizationCode: resolvedLocalizationCode(for: activeScreen.settings.languageCode)
+        ) ? localized("key.enter") : EqualsKeyLabel.symbol
     }
 
     private var clearButtonTitle: String {
@@ -627,7 +627,6 @@ struct EnterCalcIOSView: View {
                     usesScientificNotation: activeScientificNotationBinding,
                     selectedNumberFormat: activeNumberFormatBinding,
                     usesAlternativeKeypad: activeAlternativeKeypadBinding,
-                    usesEnterKeySymbol: activeEnterKeySymbolBinding,
                     disablesSwipeDownToRound: activeDisableSwipeDownToRoundBinding,
                     availableLanguages: availableLanguageOptions(),
                     counterRotatesForUpsideDownPortrait: counterRotatesForUpsideDownPortrait
@@ -699,15 +698,6 @@ private extension EnterCalcIOSView {
             get: { activeScreen.settings.usesAlternativeKeypad },
             set: { newValue in
                 updateActiveScreenSettings { $0.usesAlternativeKeypad = newValue }
-            }
-        )
-    }
-
-    var activeEnterKeySymbolBinding: Binding<Bool> {
-        Binding(
-            get: { activeScreen.settings.usesEnterKeySymbol },
-            set: { newValue in
-                updateActiveScreenSettings { $0.usesEnterKeySymbol = newValue }
             }
         )
     }
@@ -959,7 +949,6 @@ private extension EnterCalcIOSView {
             preferredScientificNotation = updated.usesScientificNotation
             preferredNumberFormatRaw = updated.numberFormatStyleRawValue
             preferredUsesAlternativeKeypad = updated.usesAlternativeKeypad
-            preferredUsesEnterKeySymbol = updated.usesEnterKeySymbol
             preferredDisablesSwipeDownToRound = updated.disablesSwipeDownToRound
             preferredKeypadHeightMultiplier = updated.keypadHeightMultiplier
             screenStore.syncHomeScreenSettings(updated)
@@ -3138,7 +3127,6 @@ private struct IOSSettingsSheet: View {
     @Binding var usesScientificNotation: Bool
     @Binding var selectedNumberFormat: String
     @Binding var usesAlternativeKeypad: Bool
-    @Binding var usesEnterKeySymbol: Bool
     @Binding var disablesSwipeDownToRound: Bool
     let availableLanguages: [LanguageOption]
     let counterRotatesForUpsideDownPortrait: Bool
@@ -3147,7 +3135,6 @@ private struct IOSSettingsSheet: View {
     @State private var draftScientificNotation: Bool
     @State private var draftNumberFormat: NumberFormatStyle
     @State private var draftUsesAlternativeKeypad: Bool
-    @State private var draftUsesEnterKeySymbol: Bool
     @State private var draftDisablesSwipeDownToRound: Bool
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -3162,7 +3149,6 @@ private struct IOSSettingsSheet: View {
         usesScientificNotation: Binding<Bool>,
         selectedNumberFormat: Binding<String>,
         usesAlternativeKeypad: Binding<Bool>,
-        usesEnterKeySymbol: Binding<Bool>,
         disablesSwipeDownToRound: Binding<Bool>,
         availableLanguages: [LanguageOption],
         counterRotatesForUpsideDownPortrait: Bool
@@ -3174,7 +3160,6 @@ private struct IOSSettingsSheet: View {
         self._usesScientificNotation = usesScientificNotation
         self._selectedNumberFormat = selectedNumberFormat
         self._usesAlternativeKeypad = usesAlternativeKeypad
-        self._usesEnterKeySymbol = usesEnterKeySymbol
         self._disablesSwipeDownToRound = disablesSwipeDownToRound
         self.availableLanguages = availableLanguages
         self.counterRotatesForUpsideDownPortrait = counterRotatesForUpsideDownPortrait
@@ -3183,7 +3168,6 @@ private struct IOSSettingsSheet: View {
         _draftScientificNotation = State(initialValue: usesScientificNotation.wrappedValue)
         _draftNumberFormat = State(initialValue: NumberFormatStyle(rawValue: selectedNumberFormat.wrappedValue) ?? NumberFormatStyle.detected())
         _draftUsesAlternativeKeypad = State(initialValue: usesAlternativeKeypad.wrappedValue)
-        _draftUsesEnterKeySymbol = State(initialValue: usesEnterKeySymbol.wrappedValue)
         _draftDisablesSwipeDownToRound = State(initialValue: disablesSwipeDownToRound.wrappedValue)
     }
 
@@ -3211,7 +3195,6 @@ private struct IOSSettingsSheet: View {
         usesScientificNotation = draftScientificNotation
         selectedNumberFormat = draftNumberFormat.rawValue
         usesAlternativeKeypad = draftUsesAlternativeKeypad
-        usesEnterKeySymbol = draftUsesEnterKeySymbol
         disablesSwipeDownToRound = draftDisablesSwipeDownToRound
     }
 
@@ -3275,13 +3258,6 @@ private struct IOSSettingsSheet: View {
                         }
                         Toggle(localized("settings.numberFormat.scientific"), isOn: $draftScientificNotation)
                         Toggle(localized("settings.percent.classicBehavior"), isOn: $draftUsesAlternativeKeypad)
-                        Toggle(
-                            localized("settings.equals.enterKeySymbol"),
-                            isOn: Binding(
-                                get: { !draftUsesEnterKeySymbol },
-                                set: { draftUsesEnterKeySymbol = !$0 }
-                            )
-                        )
                         Toggle(localized("settings.rounding.disableSwipeDown"), isOn: $draftDisablesSwipeDownToRound)
                     }
 
