@@ -74,6 +74,7 @@ struct EnterCalcMacApp: App {
                 Button(localized("history.copyOperation")) {
                     actionContext?.copyOperation()
                 }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
                 .disabled(actionContext?.canCopyOperation != true)
             }
 

@@ -58,3 +58,7 @@
 "screen.pageStatus" = "Screen %1$@ of %2$@";
 "window.new" = "Open New Window";
 "history.toggle" = "Toggle History Panel";
+
+/* Page switching shortcuts (issue #83) */
+"screen.next" = "Next Screen";
+"screen.previous" = "Previous Screen";

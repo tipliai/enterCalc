@@ -12,6 +12,7 @@ Current verification status on macOS:
 - `swift test list` discovers `190` `CalculatorViewModelTests` methods.
 - This matrix documents the same `190` methods with no missing or extra entries.
 - The current macOS run includes the AppKit-only clipboard tests guarded by `canImport(AppKit)`.
+- A full `swift test` run executes `238` tests across every suite, of which `13` fail. Those 13 failures span 4 methods, all in `CalculatorViewModelTests`, and reproduce identically on an untouched checkout — they pre-date the 1.1.0 work and are not regressions.
 
 ### Other suites
 
@@ -21,6 +22,7 @@ Current verification status on macOS:
 - `apple/tests/EqualsKeyLabelTests.swift` — whether the evaluate key shows `Enter` or `=`, derived from keypad layout and resolved language.
 - `apple/tests/ReviewPromptPolicyTests.swift` — the gates on the in-app review prompt, and the semantics of the completed-calculation counter.
 - `apple/tests/SupportLinksTests.swift` — pins the support page URL used by the Feedback link.
+- `apple/tests/CalculatorPagerGestureIntentTests.swift` — how deliberate a swipe has to be before it counts as page navigation (#83). Covers the case the issue reports — a finger sliding a few points while pressing a key must not page — alongside the opposite one, that an ordinary swipe still does. Also pins the relationship the feel depends on: paging engages *above* the 8pt at which a keypad key gives up on its own tap, so the two thresholds bound a deliberate dead band rather than overlapping, and the axis threshold stays reachable given the minimum drag distance.
 
 ## UI Settings Expectations
 

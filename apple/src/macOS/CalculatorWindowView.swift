@@ -1519,7 +1519,14 @@ struct CalculatorWindowView: View {
             }
             switch chars.lowercased() {
             case "c":
-                copyCurrentResultToPasteboard()
+                // The monitor sees events before the menus do, so the Copy
+                // Operation menu item's ⇧⌘C would never reach it — the same
+                // trap that swallowed the display-resize shortcuts in #110.
+                if event.modifierFlags.contains(.shift) {
+                    copyCurrentOperationToPasteboard()
+                } else {
+                    copyCurrentResultToPasteboard()
+                }
                 return true
             case "v":
                 viewModel.pasteFromPasteboard()
