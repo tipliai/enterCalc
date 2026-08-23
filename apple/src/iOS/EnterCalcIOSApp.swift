@@ -71,6 +71,8 @@ extension Notification.Name {
     static let enterCalcIOSToggleRoundingPanel = Notification.Name("EnterCalc.iOS.ToggleRoundingPanel")
     static let enterCalcIOSGrowDisplayArea = Notification.Name("EnterCalc.iOS.GrowDisplayArea")
     static let enterCalcIOSShrinkDisplayArea = Notification.Name("EnterCalc.iOS.ShrinkDisplayArea")
+    static let enterCalcIOSGoToNextScreen = Notification.Name("EnterCalc.iOS.GoToNextScreen")
+    static let enterCalcIOSGoToPreviousScreen = Notification.Name("EnterCalc.iOS.GoToPreviousScreen")
 }
 
 // Tracks the usage the review prompt is gated on, and remembers which release
@@ -341,6 +343,7 @@ struct EnterCalcIOSApp: App {
                 Button(localized("history.copyOperation")) {
                     actionContext?.copyOperation()
                 }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
                 .disabled(actionContext?.canCopyOperation != true)
             }
 
@@ -402,6 +405,25 @@ struct EnterCalcIOSApp: App {
                     Label(localized("display.shrink"), systemImage: "arrow.up.and.down")
                 }
                 .keyboardShortcut(.downArrow, modifiers: [.shift])
+
+                Divider()
+
+                // The arrow points the way the pages move, matching the swipe:
+                // dragging left brings the page on the right into view, so
+                // Shift + Left does too. Requested this way in #83.
+                Button {
+                    NotificationCenter.default.post(name: .enterCalcIOSGoToNextScreen, object: nil)
+                } label: {
+                    Label(localized("screen.next"), systemImage: "chevron.right")
+                }
+                .keyboardShortcut(.leftArrow, modifiers: [.shift])
+
+                Button {
+                    NotificationCenter.default.post(name: .enterCalcIOSGoToPreviousScreen, object: nil)
+                } label: {
+                    Label(localized("screen.previous"), systemImage: "chevron.left")
+                }
+                .keyboardShortcut(.rightArrow, modifiers: [.shift])
             }
         }
     }
@@ -555,6 +577,10 @@ struct EnterCalcIOSView: View {
         isResizingKeypadHeight || liveHistoryOverlayHeight != nil
     }
 
+    /// Long enough to read as a crossfade, short enough not to hold up the
+    /// page change itself.
+    static let themeTransitionDuration: Double = 0.28
+
     private var legacyRows: [[IOSCalcButton]] {
         [
             [
@@ -676,6 +702,12 @@ struct EnterCalcIOSView: View {
                 .accessibilityHidden(true)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            // Pages can carry different themes, and switching between a dark
+            // one and a light one used to be a hard cut (#83). Animating on the
+            // resolved theme lets every colour-driven modifier below crossfade
+            // instead — background, keys and text together, rather than the
+            // background alone, which would look worse than the hard cut.
+            .animation(reduceMotionEnabled ? nil : .easeInOut(duration: Self.themeTransitionDuration), value: activeTheme)
             .preferredColorScheme(activeTheme.preferredColorScheme)
             .focusedSceneValue(\.calculatorActions, actionContext)
             .transaction { transaction in
@@ -796,6 +828,12 @@ struct EnterCalcIOSView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .enterCalcIOSShrinkDisplayArea)) { _ in
                 adjustDisplayHeightFromKeyboard(byPoints: -Self.keyboardDisplayResizeStep)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .enterCalcIOSGoToNextScreen)) { _ in
+                goToNextScreenFromKeyboard()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .enterCalcIOSGoToPreviousScreen)) { _ in
+                goToPreviousScreenFromKeyboard()
             }
             .onReceive(NotificationCenter.default.publisher(for: .enterCalcIOSToggleRoundingPanel)) { _ in
                 #if canImport(UIKit)
@@ -922,7 +960,14 @@ private extension EnterCalcIOSView {
             }
             switch chars.lowercased() {
             case "c":
-                copyCurrentResultToPasteboard(from: viewModel)
+                // Handled here as well as in the menu, because this capture
+                // view sees hardware-keyboard events first — the same reason
+                // ⌘C is handled here rather than left to the Copy menu item.
+                if event.modifierFlags.contains(.shift) {
+                    copyCurrentOperationToPasteboard(from: viewModel)
+                } else {
+                    copyCurrentResultToPasteboard(from: viewModel)
+                }
                 return true
             case "v":
                 pasteFromPasteboard(into: viewModel)
@@ -1133,6 +1178,28 @@ private extension EnterCalcIOSView {
         let screen = activeScreen
         screen.applyCalculatorSettings()
         applyLanguage(screen.settings.languageCode, refreshing: screen.viewModel)
+    }
+
+    /// Shift + Left. Moving past the last page opens a new one, matching what
+    /// swiping in the same direction already does — the shortcut is not a
+    /// second, more limited way to get around.
+    func goToNextScreenFromKeyboard() {
+        guard !isInteractionDisabled else { return }
+
+        if screenStore.activeIndex < screenStore.screenCount - 1 {
+            navigateToScreen(at: screenStore.activeIndex + 1)
+        } else if screenStore.canCreateScreen {
+            createScreenAfterActive()
+        }
+    }
+
+    /// Shift + Right. There is nothing before the first page, so this stops
+    /// rather than wrapping.
+    func goToPreviousScreenFromKeyboard() {
+        guard !isInteractionDisabled else { return }
+        guard screenStore.activeIndex > 0 else { return }
+
+        navigateToScreen(at: screenStore.activeIndex - 1)
     }
 
     func navigateToScreen(at index: Int) {

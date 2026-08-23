@@ -29,6 +29,20 @@ Each had a passing test asserting the old result. They are intentional correctio
 2. `$6 + 200%` was `$12`, now `$18` — the percent applies to the amount instead of replacing it.
 3. All Clear used to switch currency mode off; it now stays on.
 
+## Page switching — #83
+
+The swipe-intent change was driven on the iPad simulator: a 12pt horizontal drift starting on a digit key now enters nothing and turns no page, while a 400pt swipe pages normally and still creates a new page past the last one. There is a deliberate dead band between the two — a keypad key gives up on its tap at 8pt of horizontal travel, and paging does not engage until 18pt, so a slide in between does nothing. That is the intended fix: a slip of that size is not a clear press or a clear swipe.
+
+**The keyboard shortcuts were not driven.** Sending hardware keys to the simulator needs the Mac's display awake, and it was asleep for this pass — the same limitation that blocked the macOS driver.
+
+1. **iPad with a hardware keyboard:** Shift + Left moves to the page on the **right**, Shift + Right to the page on the **left**. This looks inverted; it is deliberate — the arrow points the way the pages move, matching the swipe. Confirm it feels right, and say so if it does not, because it is one line to flip.
+2. Shift + Left on the last page opens a new page, the same as swiping. Shift + Right on the first page does nothing rather than wrapping.
+3. Both appear under **View** in the menu bar, translated, and are reachable by VoiceOver.
+4. **⇧⌘C copies the operation** on both platforms, while ⌘C still copies the result. Worth checking carefully: both platforms intercept keyboard events before the menus see them, so this needed handling in two places, not just the menu item. Without that it would have silently copied the result instead.
+5. **Swipe feel:** with pages open, check that ordinary keypad use never turns a page, and that a deliberate swipe still feels responsive rather than sticky. The thresholds are named constants in `CalculatorPagerGestureIntent` if they want tuning.
+6. **Theme fade:** set two pages to different themes — Dark and Light — and switch between them. The change should crossfade over about a quarter-second rather than cutting. Check with Reduce Motion on, where it should cut instantly instead.
+7. **macOS:** confirm Cmd + ` still cycles calculator windows and that the Window menu lists them. #83 asked whether Shift + Arrow should do this; the answer taken was no — see [keyboard.md](keyboard.md) for why.
+
 ## macOS theme sync — PR #97
 
 The fix rests entirely on this check: the repro could not be reproduced automatically, because the macOS QA driver reads text and structure but not colors.
