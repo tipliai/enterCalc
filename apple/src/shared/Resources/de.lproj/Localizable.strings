@@ -38,6 +38,8 @@
 "key.enter" = "Eingabe";
 "settings.rounding.disableSwipeDown" = "Runterwischen zum Runden deaktivieren";
 "rounding.toggle" = "Rundungspanel ein-/ausblenden";
+"display.grow" = "Anzeige vergrößern";
+"display.shrink" = "Anzeige verkleinern";
 "rounding.title" = "Ergebnis runden";
 "rounding.remove" = "Rundung entfernen";
 "copy" = "Kopieren";
