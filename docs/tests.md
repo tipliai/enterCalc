@@ -6,12 +6,16 @@ permalink: /tests/
 # EnterCalc Unit Test Matrix
 
 This document tracks the shared-module checks currently discovered by `swift test list` for the Swift package in `apple/`.
-Each row maps directly to a discovered test method in `apple/tests/CalculatorViewModelTests.swift`.
+Each row in the matrix below maps directly to a discovered test method in `apple/tests/CalculatorViewModelTests.swift`.
 
 Current verification status on macOS:
 - `swift test list` discovers `179` `CalculatorViewModelTests` methods.
 - This matrix documents the same `179` methods with no missing or extra entries.
 - The current macOS run includes the AppKit-only clipboard tests guarded by `canImport(AppKit)`.
+
+### Other suites
+
+`apple/tests/SystemAppearanceTests.swift` covers `SystemAppearance.colorScheme(forInterfaceStyle:)`, which maps the macOS global-domain `AppleInterfaceStyle` value to a color scheme for the `system` theme. macOS only writes that key while Dark Mode is on, so the absent case must resolve to light, and accent variants such as `DarkAqua` must resolve to dark.
 
 ## UI Settings Expectations
 
