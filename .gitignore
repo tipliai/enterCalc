@@ -54,19 +54,6 @@ apple/.build/
 apple/.swiftpm/
 apple/Package.resolved
 
-# Android / Gradle / Android Studio
-.gradle/
-**/build/
-*.iml
-local.properties
-captures/
-.idea/
-!.idea/.gitignore
-!.idea/codeStyles/
-!.idea/codeStyles/Project.xml
-!.idea/inspectionProfiles/
-!.idea/inspectionProfiles/Project_Default.xml
-
 # Temporary and editor files
 *.moved-aside
 *.swp

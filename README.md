@@ -35,9 +35,9 @@ Download on the Apple App Store: [apps.apple.com/app/id6777242723](https://apps.
 - Lightweight and distraction-free
 - Privacy-focused, operates entirely on your device with no tracking or analytics
 
-## Version 1.0.0 Scope
+## Release Scope
 
-The initial `1.0.0` release focuses on the core Basic calculator experience.
+The initial `1.0.0` release focused on the core Basic calculator experience. `1.1.0` builds on that with bug fixes and workflow improvements.
 
 Planned future enhancements include:
 
@@ -64,5 +64,4 @@ Opening the `apple/` folder itself will surface the local Swift package (`EnterC
 ### Additional Documentation
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Issue reporting guidance and pull request policy
-- [android/README.md](android/README.md) — Native Android placeholder structure and shared-resource strategy
 - [docs/keyboard.md](docs/keyboard.md) — Keyboard actions and context behavior matrix for iOS and macOS
