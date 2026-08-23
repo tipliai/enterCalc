@@ -68,3 +68,27 @@
 "functionKey.chooser.title" = "機能を選択";
 "functionKey.change" = "機能を変更";
 "functionKey.hint" = "長押しすると、このキーを変更できます";
+
+/* 通貨モードのツール: 消費税とチップ (Issue #92) */
+"currency.vat.title" = "消費税";
+"currency.vat.add" = "消費税を加算";
+"currency.vat.remove" = "消費税を差し引く";
+"currency.vat.rate" = "税率";
+"currency.vat.rate.decrease" = "税率を下げる";
+"currency.vat.rate.increase" = "税率を上げる";
+"currency.vat.net" = "税抜";
+"currency.vat.amount" = "消費税";
+"currency.vat.gross" = "税込";
+"currency.tip.title" = "チップ";
+"currency.tip.bill" = "会計";
+"currency.tip.rate" = "チップ";
+"currency.tip.rate.decrease" = "チップを減らす";
+"currency.tip.rate.increase" = "チップを増やす";
+"currency.tip.split" = "割り勘";
+"currency.tip.split.decrease" = "人数を減らす";
+"currency.tip.split.increase" = "人数を増やす";
+"currency.tip.amount" = "チップ";
+"currency.tip.total" = "合計";
+"currency.tip.perPerson" = "1人あたり";
+"currency.tool.use" = "結果を使う";
+"currency.tool.close" = "閉じる";
