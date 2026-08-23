@@ -38,6 +38,8 @@
 "history.copyOperation" = "Copy Operation";
 "key.enter" = "Enter";
 "rounding.toggle" = "Toggle Rounding Panel";
+"display.grow" = "Increase Display Size";
+"display.shrink" = "Decrease Display Size";
 "rounding.title" = "Round Result";
 "rounding.remove" = "Remove";
 "copy" = "Copy";

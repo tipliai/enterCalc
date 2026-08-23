@@ -4,6 +4,8 @@ import AppKit
 import EnterCalcCore
 
 extension Notification.Name {
+    static let enterCalcGrowDisplayArea = Notification.Name("EnterCalc.macOS.GrowDisplayArea")
+    static let enterCalcShrinkDisplayArea = Notification.Name("EnterCalc.macOS.ShrinkDisplayArea")
     static let enterCalcToggleHistoryPanel = Notification.Name("EnterCalc.ToggleHistoryPanel")
     static let enterCalcToggleRoundingPanel = Notification.Name("EnterCalc.ToggleRoundingPanel")
 }
@@ -117,6 +119,24 @@ struct EnterCalcMacApp: App {
                     Label(localized("rounding.toggle"), systemImage: "slider.horizontal.below.rectangle")
                 }
                 .keyboardShortcut("r", modifiers: [.command])
+
+                Divider()
+
+                // Also the only way to resize the display without a pointer:
+                // the split between display and keypad is otherwise drag-only.
+                Button {
+                    NotificationCenter.default.post(name: .enterCalcGrowDisplayArea, object: nil)
+                } label: {
+                    Label(localized("display.grow"), systemImage: "arrow.up.and.down")
+                }
+                .keyboardShortcut(.upArrow, modifiers: [.shift])
+
+                Button {
+                    NotificationCenter.default.post(name: .enterCalcShrinkDisplayArea, object: nil)
+                } label: {
+                    Label(localized("display.shrink"), systemImage: "arrow.up.and.down")
+                }
+                .keyboardShortcut(.downArrow, modifiers: [.shift])
             }
         }
     }
