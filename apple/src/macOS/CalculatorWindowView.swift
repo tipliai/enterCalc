@@ -2479,9 +2479,21 @@ private struct SettingsSheet: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text(macLocalized("settings.credits", bundle: localizationBundle))
                             .font(.system(size: settingsSectionSize))
-                        Link(destination: AppStoreLinks.writeReviewURL) {
-                            Label(macLocalized("settings.rateApp", bundle: localizationBundle), systemImage: "star")
+                        // Version and the rating link share a row, matching iOS.
+                        HStack(spacing: 12) {
+                            Text(MacAboutContent.appVersionText(bundle: localizationBundle))
                                 .font(.system(size: settingsBodySize))
+                                .foregroundStyle(.secondary)
+
+                            Spacer(minLength: 0)
+
+                            Link(destination: AppStoreLinks.writeReviewURL) {
+                                HStack(spacing: 5) {
+                                    Image(systemName: "star")
+                                    Text(macLocalized("settings.rateApp", bundle: localizationBundle))
+                                }
+                                .font(.system(size: settingsBodySize))
+                            }
                         }
                     }
                 }
