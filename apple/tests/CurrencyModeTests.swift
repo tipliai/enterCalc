@@ -120,4 +120,79 @@ final class CurrencyModeTests: XCTestCase {
         XCTAssertEqual(viewModel.activeCurrencySymbol, "$")
         XCTAssertTrue(viewModel.display.contains("$"), "expected currency in \(viewModel.display)")
     }
+
+    // MARK: - The symbol is visible whenever currency mode is on
+
+    // Pressing the currency key with nothing entered has to show "$0", not a
+    // bare "0" — otherwise the only sign the mode is on is the label, and the
+    // key looks like it did nothing.
+    func testCurrencyOnAnUntouchedZeroShowsTheSymbol() {
+        let viewModel = CalculatorViewModel()
+        viewModel.toggleCurrencySymbol("$")
+
+        XCTAssertEqual(viewModel.display, "$0")
+    }
+
+    func testCurrencyOnATypedZeroShowsTheSymbol() {
+        let viewModel = CalculatorViewModel()
+        enter("0", into: viewModel)
+        viewModel.toggleCurrencySymbol("$")
+
+        XCTAssertEqual(viewModel.display, "$0")
+    }
+
+    // All Clear keeps currency mode on, so the zero it leaves behind has to
+    // keep the symbol too.
+    func testAllClearLeavesTheSymbolOnTheZero() {
+        let viewModel = CalculatorViewModel()
+        viewModel.toggleCurrencySymbol("$")
+        enter("12", into: viewModel)
+        viewModel.clearAll()
+
+        XCTAssertEqual(viewModel.activeCurrencySymbol, "$")
+        XCTAssertEqual(viewModel.display, "$0")
+    }
+
+    // Sweeps the states a value can be in and asserts the symbol is on screen
+    // in every one of them. Percent is excluded deliberately: the result is a
+    // ratio rather than an amount, so it drops the symbol on purpose.
+    func testSymbolStaysVisibleAcrossValueStates() {
+        let cases: [(String, (CalculatorViewModel) -> Void)] = [
+            ("nothing entered", { _ in }),
+            ("typed zero", { $0.inputDigit("0") }),
+            ("typed value", { $0.inputDigit("1"); $0.inputDigit("2") }),
+            ("after all clear", { $0.inputDigit("1"); $0.clearAll() }),
+            ("pending operator", { $0.inputDigit("5"); $0.setOperator(.add) }),
+            ("after evaluate", { vm in
+                vm.inputDigit("1"); vm.setOperator(.add); vm.inputDigit("2"); vm.evaluate()
+            }),
+            ("after backspace to empty", { $0.inputDigit("7"); $0.backspace() }),
+            ("after sign toggle", { $0.inputDigit("5"); $0.toggleSign() }),
+            ("after square", { $0.inputDigit("3"); $0.square() }),
+            ("after undo", { $0.inputDigit("9"); $0.undo() })
+        ]
+
+        for (name, steps) in cases {
+            let viewModel = CalculatorViewModel()
+            viewModel.toggleCurrencySymbol("$")
+            steps(viewModel)
+
+            XCTAssertEqual(viewModel.activeCurrencySymbol, "$", "currency mode lost: \(name)")
+            XCTAssertTrue(
+                viewModel.display.contains("$"),
+                "expected the symbol in \(name), got \(viewModel.display)"
+            )
+        }
+    }
+
+    // The configured symbol is whatever the user picked, so the check above
+    // must not be quietly specific to the dollar sign.
+    func testSymbolStaysVisibleForOtherCurrencies() {
+        for symbol in ["€", "£", "¥", "₹"] {
+            let viewModel = CalculatorViewModel()
+            viewModel.toggleCurrencySymbol(symbol)
+
+            XCTAssertEqual(viewModel.display, "\(symbol)0", "wrong display for \(symbol)")
+        }
+    }
 }
