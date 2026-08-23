@@ -69,6 +69,8 @@ import EnterCalcCore
 extension Notification.Name {
     static let enterCalcIOSToggleHistoryPanel = Notification.Name("EnterCalc.iOS.ToggleHistoryPanel")
     static let enterCalcIOSToggleRoundingPanel = Notification.Name("EnterCalc.iOS.ToggleRoundingPanel")
+    static let enterCalcIOSGrowDisplayArea = Notification.Name("EnterCalc.iOS.GrowDisplayArea")
+    static let enterCalcIOSShrinkDisplayArea = Notification.Name("EnterCalc.iOS.ShrinkDisplayArea")
 }
 
 // Tracks the usage the review prompt is gated on, and remembers which release
@@ -382,6 +384,24 @@ struct EnterCalcIOSApp: App {
                     Label(localized("rounding.toggle"), systemImage: "slider.horizontal.below.rectangle")
                 }
                 .keyboardShortcut("r", modifiers: [.command])
+
+                Divider()
+
+                // Also the only way to resize the display without touch: the
+                // split between display and keypad is otherwise drag-only.
+                Button {
+                    NotificationCenter.default.post(name: .enterCalcIOSGrowDisplayArea, object: nil)
+                } label: {
+                    Label(localized("display.grow"), systemImage: "arrow.up.and.down")
+                }
+                .keyboardShortcut(.upArrow, modifiers: [.shift])
+
+                Button {
+                    NotificationCenter.default.post(name: .enterCalcIOSShrinkDisplayArea, object: nil)
+                } label: {
+                    Label(localized("display.shrink"), systemImage: "arrow.up.and.down")
+                }
+                .keyboardShortcut(.downArrow, modifiers: [.shift])
             }
         }
     }
@@ -429,6 +449,10 @@ struct EnterCalcIOSView: View {
     @State private var previousScreenCount: Int = 1
     @State private var keypadResizeGestureStartMultiplier: Double = 1.0
     @State private var isResizingKeypadHeight: Bool = false
+    // The height the keypad multiplier is relative to, captured while laying out
+    // the resize handle so a keyboard step can be expressed in points. Zero in
+    // landscape, where the keypad is pinned and there is nothing to resize.
+    @State private var lastKeypadResizeReferenceHeight: CGFloat = 0
     @State private var historyOverlayResizeGestureStartHeight: CGFloat = 0
     @State private var isResizingHistoryOverlay: Bool = false
     @State private var liveHistoryOverlayHeight: CGFloat? = nil
@@ -766,6 +790,12 @@ struct EnterCalcIOSView: View {
                 syncPhoneUpsideDownPresentation()
                 updateDisplayShimmerParallax()
                 reconcileDisplayLayoutAfterOrientationChange()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .enterCalcIOSGrowDisplayArea)) { _ in
+                adjustDisplayHeightFromKeyboard(byPoints: Self.keyboardDisplayResizeStep)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .enterCalcIOSShrinkDisplayArea)) { _ in
+                adjustDisplayHeightFromKeyboard(byPoints: -Self.keyboardDisplayResizeStep)
             }
             .onReceive(NotificationCenter.default.publisher(for: .enterCalcIOSToggleRoundingPanel)) { _ in
                 #if canImport(UIKit)
@@ -2981,6 +3011,8 @@ private extension EnterCalcIOSView {
                 isResizingKeypadHeight = false
             }
 
+        let resizeReferenceHeight = max(metrics.keypadHeight + metrics.displayHeight, 1)
+
         return ZStack {
             RoundedRectangle(cornerRadius: 0.5, style: .continuous)
                 .fill(lineColor)
@@ -3002,14 +3034,38 @@ private extension EnterCalcIOSView {
         .frame(height: max(height, 36))
         .contentShape(Rectangle())
         .highPriorityGesture(dragGesture)
-        .accessibilityLabel(Text("Resize keypad"))
-        .accessibilityHint(Text("Drag up or down to resize the keypad"))
+        .accessibilityLabel(Text(localized("keypad.resize.label")))
+        .accessibilityHint(Text(localized("keypad.resize.hint")))
+        // Remembered so the Shift + Up/Down menu commands can step by points.
+        .onChange(of: resizeReferenceHeight, initial: true) { _, newValue in
+            lastKeypadResizeReferenceHeight = newValue
+        }
     }
 
     func cancelKeypadResize(screen: CalculatorScreenSession) {
         let finalMultiplierText = String(format: "%.3f", normalizedKeypadHeightMultiplier(for: screen))
         DebugLog.emit("UI", "Keypad resize cancelled screen:\(screen.id) finalMultiplier:\(finalMultiplierText)")
         isResizingKeypadHeight = false
+    }
+
+    /// One press of Shift + Up/Down, in points so the step feels the same at any
+    /// size. Matches macOS.
+    static let keyboardDisplayResizeStep: CGFloat = 20
+
+    /// Grows (positive) or shrinks (negative) the display, taking the space from
+    /// the keypad. The split is otherwise drag-only, so without this a hardware
+    /// keyboard or VoiceOver user cannot change it at all.
+    func adjustDisplayHeightFromKeyboard(byPoints points: CGFloat) {
+        // Landscape pins the keypad to full height, so there is nothing to move.
+        guard lastKeypadResizeReferenceHeight > 1 else { return }
+
+        let current = normalizedKeypadHeightMultiplier(for: activeScreen)
+        // A bigger display means a smaller keypad, hence the inverted sign.
+        let proposed = current - Double(points / lastKeypadResizeReferenceHeight)
+        let clamped = clamp(proposed, to: 0.5...1.0)
+        guard abs(clamped - current) > 0.0001 else { return }
+
+        updateActiveScreenSettings { $0.keypadHeightMultiplier = clamped }
     }
 
     func normalizedKeypadHeightMultiplier(for screen: CalculatorScreenSession) -> Double {

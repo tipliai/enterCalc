@@ -40,6 +40,8 @@
 "rounding.toggle" = "Mostrar/ocultar panel de redondeo";
 "display.grow" = "Aumentar tamaño de pantalla";
 "display.shrink" = "Reducir tamaño de pantalla";
+"keypad.resize.label" = "Redimensionar teclado";
+"keypad.resize.hint" = "Arrastra, o pulsa Mayús más las flechas arriba y abajo, para redimensionar la pantalla";
 "rounding.title" = "Redondear el resultado";
 "rounding.remove" = "Eliminar redondeo";
 "copy" = "Copiar";

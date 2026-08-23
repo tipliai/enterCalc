@@ -40,6 +40,8 @@
 "rounding.toggle" = "Afficher/masquer le panneau d'arrondi";
 "display.grow" = "Agrandir l'affichage";
 "display.shrink" = "Réduire l'affichage";
+"keypad.resize.label" = "Redimensionner le clavier";
+"keypad.resize.hint" = "Faites glisser, ou appuyez sur Maj plus les flèches haut et bas, pour redimensionner l'affichage";
 "rounding.title" = "Arrondir le résultat";
 "rounding.remove" = "Supprimer l'arrondi";
 "copy" = "Copier";

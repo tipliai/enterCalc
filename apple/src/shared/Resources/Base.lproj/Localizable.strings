@@ -40,6 +40,8 @@
 "rounding.toggle" = "Toggle Rounding Panel";
 "display.grow" = "Increase Display Size";
 "display.shrink" = "Decrease Display Size";
+"keypad.resize.label" = "Resize keypad";
+"keypad.resize.hint" = "Drag, or press Shift plus the Up and Down arrow keys, to resize the display";
 "rounding.title" = "Round Result";
 "rounding.remove" = "Remove";
 "copy" = "Copy";
