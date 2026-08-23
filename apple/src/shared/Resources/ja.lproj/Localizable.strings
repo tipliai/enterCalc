@@ -58,3 +58,13 @@
 "screen.pageStatus" = "画面 %1$@ / %2$@";
 "window.new" = "新しいウィンドウを開く";
 "history.toggle" = "履歴パネルを表示/非表示";
+
+/* カスタマイズ可能なファンクションキー (Issue #67) */
+"function.squareRoot" = "平方根";
+"function.square" = "2乗";
+"function.reciprocal" = "逆数";
+"function.parentheses" = "かっこ";
+"function.percent" = "パーセント";
+"functionKey.chooser.title" = "機能を選択";
+"functionKey.change" = "機能を変更";
+"functionKey.hint" = "長押ししてドラッグすると、このキーを変更できます";

@@ -58,3 +58,13 @@
 "screen.pageStatus" = "Écran %1$@ sur %2$@";
 "window.new" = "Ouvrir une nouvelle fenêtre";
 "history.toggle" = "Afficher/Masquer l'historique";
+
+/* Touches de fonction configurables (ticket #67) */
+"function.squareRoot" = "Racine carrée";
+"function.square" = "Carré";
+"function.reciprocal" = "Inverse";
+"function.parentheses" = "Parenthèses";
+"function.percent" = "Pourcentage";
+"functionKey.chooser.title" = "Choisir une fonction";
+"functionKey.change" = "Changer de fonction";
+"functionKey.hint" = "Maintenez appuyé, puis faites glisser pour changer cette touche";

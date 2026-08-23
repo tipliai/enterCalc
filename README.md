@@ -25,6 +25,7 @@ Download on the Apple App Store: [apps.apple.com/app/id6777242723](https://apps.
 - Landscape mode support
 - Optional scientific notation
 - Configurable rounding behavior
+- Function keys you can reassign per page by pressing, holding and dragging
 - Currency symbol handling
 - Multiple number formatting styles
 - Multiple language and localization options

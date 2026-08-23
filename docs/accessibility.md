@@ -10,6 +10,13 @@ This page is a quick guide to accessibility features available in EnterCalc.
 ### Labels and control clarity
 
 - Core controls in calculator, history, and settings are labeled for assistive technologies.
+- Configurable function keys announce the *function* they currently carry — "Undo", "Square Root" — rather than the glyph drawn on them, so the label follows the key when it is reassigned.
+
+### Reassigning a function key without the drag gesture
+
+- Function keys are normally changed by pressing and holding, then dragging over the chooser and releasing, which VoiceOver users cannot perform.
+- Every configurable key therefore also offers a **Change Function** action. Activating it opens the same chooser, whose options are ordinary buttons that commit on a single tap or click. The key currently assigned is marked as selected.
+- The keys carry a hint describing the hold-and-drag gesture for anyone who can use it.
 
 ### Reduced Motion support
 
