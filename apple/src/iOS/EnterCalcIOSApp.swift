@@ -25,6 +25,10 @@ private enum IOSActionHaptics {
         true
 #endif
     }()
+    // `prepare()` warms the Taptic Engine, which takes time the system does not
+    // have if it is called in the same breath as the feedback. Preparing after
+    // firing warms the engine for the *next* press instead of adding work to
+    // this one, which is what the API is for.
     static func performKeyPress(isEnterKey: Bool = false) {
         guard supportsHaptics else {
             if !isEnterKey {
@@ -33,19 +37,19 @@ private enum IOSActionHaptics {
             return
         }
 
-        keyPressImpact.prepare()
         keyPressImpact.impactOccurred(intensity: 1.0)
+        keyPressImpact.prepare()
     }
 
     static func perform(emphasized: Bool) {
         if emphasized {
-            mediumImpact.prepare()
             mediumImpact.impactOccurred(intensity: 1)
-            successNotification.prepare()
             successNotification.notificationOccurred(.success)
+            mediumImpact.prepare()
+            successNotification.prepare()
         } else {
-            lightImpact.prepare()
             lightImpact.impactOccurred(intensity: 1.0)
+            lightImpact.prepare()
         }
     }
 
@@ -63,6 +67,61 @@ import EnterCalcCore
 extension Notification.Name {
     static let enterCalcIOSToggleHistoryPanel = Notification.Name("EnterCalc.iOS.ToggleHistoryPanel")
     static let enterCalcIOSToggleRoundingPanel = Notification.Name("EnterCalc.iOS.ToggleRoundingPanel")
+}
+
+// Caches whether haptics are switched off, so the key-press path does not touch
+// UserDefaults on every tap. The stored value is only changed from Settings, and
+// UserDefaults posts a notification when it does.
+@MainActor
+final class IOSHapticsPreference {
+    static let shared = IOSHapticsPreference()
+
+    private static let key = "settings.haptics.disabled"
+    private static let legacyKey = "settings.haptics.actions"
+
+    private(set) var isDisabled: Bool
+    private var observer: NSObjectProtocol?
+
+    private init() {
+        isDisabled = Self.readFromDefaults()
+        // Covers changes made inside the app. Changes made in the Settings app
+        // are a separate process and do not post here, which is why the scene
+        // also refreshes this on becoming active.
+        observer = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: UserDefaults.standard,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.refresh()
+            }
+        }
+    }
+
+    deinit {
+        if let observer {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    func refresh() {
+        isDisabled = Self.readFromDefaults()
+    }
+
+    private static func readFromDefaults() -> Bool {
+        let defaults = UserDefaults.standard
+
+        if defaults.object(forKey: key) != nil {
+            return defaults.bool(forKey: key)
+        }
+
+        // Older builds stored the inverse under a different key.
+        if let legacyUsesActionHaptics = defaults.object(forKey: legacyKey) as? Bool {
+            return !legacyUsesActionHaptics
+        }
+
+        return false
+    }
 }
 
 // Snapshot of a hardware-keyboard press, decoupled from UIKit so the SwiftUI
@@ -560,6 +619,10 @@ struct EnterCalcIOSView: View {
                 }
 
                 syncSystemSettingsMetadata()
+                // The haptics preference lives in the Settings bundle, so it is
+                // changed by the Settings app rather than in this process and no
+                // change notification arrives. Re-read it on the way back in.
+                IOSHapticsPreference.shared.refresh()
                 if isDefaultLocalizationSelection(activeScreen.settings.languageCode) {
                     applyActiveScreenConfiguration()
                 }
@@ -4483,19 +4546,12 @@ private extension EnterCalcIOSView {
         defaults.set(systemSettingsVersionString(), forKey: "settings.about.version")
     }
 
+    // Read once and cached: this is consulted on every key press, and it was
+    // re-registering a defaults domain and doing several dictionary lookups
+    // each time. The value only changes from Settings, which posts a change
+    // notification, so there is nothing to poll for.
     func actionHapticsDisabled() -> Bool {
-        let defaults = UserDefaults.standard
-        defaults.register(defaults: ["settings.haptics.disabled": false])
-
-        if defaults.object(forKey: "settings.haptics.disabled") != nil {
-            return defaults.bool(forKey: "settings.haptics.disabled")
-        }
-
-        if let legacyUsesActionHaptics = defaults.object(forKey: "settings.haptics.actions") as? Bool {
-            return !legacyUsesActionHaptics
-        }
-
-        return false
+        IOSHapticsPreference.shared.isDisabled
     }
 
     func systemSettingsVersionString() -> String {
@@ -4677,8 +4733,9 @@ private struct IOSCompactActionButton: View {
 
     var body: some View {
         Button {
-            pressFeedback()
+            // Result first, feedback second — see IOSKeypadButton.handleTap.
             action()
+            pressFeedback()
         } label: {
             Image(systemName: button.symbol)
                 .font(EnterCalcFont.appFont(size: boundedIconFontSize))
@@ -4919,8 +4976,11 @@ private struct IOSKeypadButton: View {
     }
 
     private func handleTap() {
-        pressFeedback(button.kind)
+        // The calculation runs first so the display updates as early as
+        // possible; feedback is what the press *confirms*, not what it does, so
+        // it must not sit in front of the result.
         action()
+        pressFeedback(button.kind)
         guard !reduceMotionEnabled else {
             shimmerVisible = false
             return
