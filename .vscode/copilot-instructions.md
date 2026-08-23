@@ -1,7 +1,7 @@
 # EnterCalc AI Instructions
 
 ## Project summary
-- This project is a native calculator app with active Apple-platform targets and a placeholder native Android target scaffold.
+- This project is a native calculator app for Apple platforms (iOS and macOS).
 - Branding tagline: "EnterCalc: Your Calculation Crunching Companion".
 - The repo is organized as a Swift Package, with shared calculator logic in `apple/src/shared/` and Apple app targets in `apple/src/`.
 - Prefer fixing behavior in the shared module first. Only add platform-specific code when the behavior is truly UI- or OS-specific.
@@ -26,7 +26,6 @@
 - `apple/src/shared/`: shared module `EnterCalcCore`. This is where calculator logic, theme definitions, localization helpers, resources, and shared utilities belong.
 - `apple/src/macOS/`: the richer desktop app. This target contains the main calculator window, keyboard handling, history panel, memory overlay, settings sheet integration, and macOS window behavior.
 - `apple/src/iOS/`: a leaner SwiftUI app target with the shared view model and a simplified keypad UI.
-- `android/`: placeholder native Android project structure for future implementation.
 - `tools/`: internal repository helper scripts.
 - `apple/tests/`: currently mostly used for log capture. Test coverage appears light, so be explicit about anything that is manually verified versus untested.
 - `docs/`: documentation and future supporting notes.
@@ -40,7 +39,6 @@
 - `apple/src/macOS/KeyCaptureView.swift`: macOS keyboard event capture glue.
 - `apple/src/macOS/EnterCalcMacApp.swift`: macOS app entry point.
 - `apple/src/iOS/EnterCalcIOSApp.swift`: iOS app entry point and simplified keypad layout.
-- `android/README.md`: source of truth for Android scaffold boundaries and shared-resource expectations.
 
 ## Architecture guidance
 - Keep calculation rules and display-state transitions in the shared view model, not in button handlers.
@@ -49,7 +47,6 @@
 - When changing strings visible to users, update localization resources for all existing languages when practical. At minimum, preserve existing keys and call out any untranslated additions.
 - Keep visual tokens centralized in `Theme.swift` instead of adding one-off color literals throughout views.
 - If a new feature needs both shared logic and platform integration, keep the layering obvious so the relationship is easy to follow for open source contributors.
-- For Android-prep changes, prioritize reusable user-facing resources (copy, localization source text, icons) without forcing cross-platform UI abstractions prematurely.
 
 ## macOS vs iOS expectations
 - The macOS app is the feature-complete desktop experience. It includes keyboard support, window management, history, memory overlay behavior, settings, and more nuanced layout logic.
@@ -62,7 +59,6 @@
 - Localization or language switching: check `apple/src/shared/Localization.swift` and `apple/src/shared/Resources/`.
 - macOS keyboard, window, history, or memory overlay behavior: check `apple/src/macOS/CalculatorWindowView.swift` and `apple/src/macOS/KeyCaptureView.swift`.
 - iOS keypad layout or interaction: check `apple/src/iOS/EnterCalcIOSApp.swift`.
-- Android scaffolding or Android-ready resource planning: check `android/README.md` and `android/app/src/main/`.
 - Build or local run workflow: check `apple/Package.swift` and the shared Xcode schemes.
 
 ## Build and run
