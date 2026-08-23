@@ -58,3 +58,7 @@
 "screen.pageStatus" = "Pantalla %1$@ de %2$@";
 "window.new" = "Abrir nueva ventana";
 "history.toggle" = "Mostrar/ocultar historial";
+
+/* Page switching shortcuts (issue #83) */
+"screen.next" = "Pantalla siguiente";
+"screen.previous" = "Pantalla anterior";

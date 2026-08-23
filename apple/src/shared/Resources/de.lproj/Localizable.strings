@@ -58,3 +58,7 @@
 "screen.pageStatus" = "Bildschirm %1$@ von %2$@";
 "window.new" = "Neues Fenster öffnen";
 "history.toggle" = "Verlauf anzeigen/ausblenden";
+
+/* Page switching shortcuts (issue #83) */
+"screen.next" = "Nächster Bildschirm";
+"screen.previous" = "Vorheriger Bildschirm";

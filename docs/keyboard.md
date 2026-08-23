@@ -26,6 +26,8 @@ Sources:
 | Up Arrow | No mapped action | No mapped action | Close rounding overlay | Suppressed |
 | Shift + Up Arrow | Increase display size (20pt) | Increase display size | Increase display size | Increase display size |
 | Shift + Down Arrow | Decrease display size (20pt) | Decrease display size | Decrease display size | Decrease display size |
+| Shift + Left Arrow | iPad: go to the page on the **right** | Same | Same | Same |
+| Shift + Right Arrow | iPad: go to the page on the **left** | Same | Same | Same |
 | Escape | Clear all | Exit direct edit | Remove rounding and close overlay | Close overlay |
 | End | Clear all | Exit direct edit | Close overlay | Close overlay |
 | Backspace | Delete one char/digit via model backspace | Delete one char/digit before caret | Remove rounding and close overlay | Close overlay |
@@ -64,11 +66,26 @@ These are menu commands under **View → Increase / Decrease Display Size**, not
 
 The step is not animated — it lands immediately, matching how dragging behaves.
 
+### Switching pages (iPad)
+
+**Shift + Left/Right Arrow** moves between calculator pages, as menu commands so they are discoverable and reachable by VoiceOver.
+
+The direction looks inverted at first glance and is deliberate: the arrow points the way the *pages* move, matching the swipe. Dragging left brings the page on the right into view, so Shift + Left does the same. Requested this way in #83.
+
+Shift + Left past the last page **opens a new page**, the same as swiping in that direction, so the shortcut is not a more limited way to get around than the gesture. Shift + Right stops at the first page rather than wrapping.
+
+macOS has no equivalent because its pages are separate windows — see below.
+
+### Navigating between windows (macOS)
+
+Investigated for #83 and deliberately **not** implemented. macOS already cycles an app's windows with **Cmd + `** (a system shortcut, on by default), and every calculator window appears in the standard **Window** menu. Adding Shift + Left/Right on top would duplicate that, take two more key combinations away from the calculator, and mean teaching the local key monitor to ignore them — the same trap that made Shift + Down open the rounding overlay instead of resizing. The app's key monitor passes Cmd + ` straight through, so window cycling already works.
+
 ### Command Shortcuts
 
 - Cmd + Backspace: clear all.
 - Cmd + Forward Delete: clear all.
 - Cmd + C: copy current result.
+- Cmd + Shift + C: copy the current operation.
 - Cmd + V: paste into calculator.
 - Cmd + Z: undo.
 - Cmd + Shift + Z: redo.

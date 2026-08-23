@@ -1,5 +1,35 @@
 import SwiftUI
 
+/// How deliberate a swipe has to be before it counts as page navigation (#83).
+///
+/// These govern *recognition*, not commitment. The distance needed to actually
+/// change page is the pager's `activationThresholdRatio`, and raising that
+/// would make a real swipe feel sluggish. The problem being solved is the
+/// opposite one: a finger that slides a few points while pressing a key should
+/// never start paging at all.
+public enum CalculatorPagerGestureIntent {
+    /// Movement before the gesture is even considered. A tap that drifts stays
+    /// a tap.
+    public static let minimumDragDistance: CGFloat = 18
+    /// Movement along the paging axis before the page starts following the
+    /// finger.
+    public static let minimumAxisTravel: CGFloat = 16
+    /// How much further the paging axis has to travel than the other one. A
+    /// diagonal smudge off a key is not a page swipe.
+    public static let axisDominanceRatio: CGFloat = 1.4
+    /// Movement before a drag counts as under way, for interaction locks.
+    public static let dragEngagedDistance: CGFloat = 10
+
+    /// Whether a drag is deliberate enough to be page navigation rather than a
+    /// slip while using the keypad.
+    public static func isPagingIntent(translation: CGSize, axis: Axis) -> Bool {
+        let along = axis == .horizontal ? translation.width : translation.height
+        let across = axis == .horizontal ? translation.height : translation.width
+
+        return abs(along) > minimumAxisTravel && abs(along) > abs(across) * axisDominanceRatio
+    }
+}
+
 public struct CalculatorScreenPager<Content: View>: View {
     private struct DragState {
         var translation: CGFloat = 0
@@ -138,7 +168,7 @@ public struct CalculatorScreenPager<Content: View>: View {
     }
 
     private var isDraggingOnPagingAxis: Bool {
-        dragState.isPagingAxis && abs(dragState.translation) > 6
+        dragState.isPagingAxis && abs(dragState.translation) > CalculatorPagerGestureIntent.dragEngagedDistance
     }
 
     private var isInteractionLocked: Bool {
@@ -204,7 +234,7 @@ public struct CalculatorScreenPager<Content: View>: View {
     }
 
     private func dragGesture(pageDimension: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 10, coordinateSpace: .local)
+        DragGesture(minimumDistance: CalculatorPagerGestureIntent.minimumDragDistance, coordinateSpace: .local)
             .updating($dragState) { value, state, _ in
                 let followsPagingAxis = isPredominantlyAlongPagingAxis(translation: value.translation)
                 state = DragState(
@@ -273,11 +303,7 @@ public struct CalculatorScreenPager<Content: View>: View {
     }
 
     private func isPredominantlyAlongPagingAxis(translation: CGSize) -> Bool {
-        if pagingAxis == .horizontal {
-            return abs(translation.width) > 8 && abs(translation.width) > abs(translation.height) * 1.15
-        }
-
-        return abs(translation.height) > 8 && abs(translation.height) > abs(translation.width) * 1.15
+        CalculatorPagerGestureIntent.isPagingIntent(translation: translation, axis: pagingAxis)
     }
 
     private func isPredominantlyVertical(translation: CGSize) -> Bool {
