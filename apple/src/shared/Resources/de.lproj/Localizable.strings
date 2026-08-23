@@ -40,6 +40,8 @@
 "rounding.toggle" = "Rundungspanel ein-/ausblenden";
 "display.grow" = "Anzeige vergrößern";
 "display.shrink" = "Anzeige verkleinern";
+"keypad.resize.label" = "Tastenfeld anpassen";
+"keypad.resize.hint" = "Ziehen oder Umschalt plus Pfeil nach oben/unten drücken, um die Anzeige anzupassen";
 "rounding.title" = "Ergebnis runden";
 "rounding.remove" = "Rundung entfernen";
 "copy" = "Kopieren";

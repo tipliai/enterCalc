@@ -40,6 +40,8 @@
 "rounding.toggle" = "切换四舍五入面板";
 "display.grow" = "增大显示区域";
 "display.shrink" = "减小显示区域";
+"keypad.resize.label" = "调整键盘大小";
+"keypad.resize.hint" = "拖动，或按 Shift 加上下箭头键，以调整显示区域大小";
 "rounding.title" = "对结果进行四舍五入";
 "rounding.remove" = "取消四舍五入";
 "copy" = "复制";
