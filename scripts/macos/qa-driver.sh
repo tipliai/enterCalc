@@ -29,7 +29,7 @@ Commands:
   enter                 Press Return (evaluate).
   key <name>            Press a named key: escape, delete, tab.
 
-  settings-open         Open the settings sheet.
+  settings-open [item]  Open settings via the gear menu (item name is localized).
   settings-close        Close it (Escape).
   theme <name>          Pick an App theme by its visible name, e.g. theme Dark.
   popup <label> <value> Pick any settings popup value by label.
@@ -189,11 +189,21 @@ cmd_key() {
   echo "pressed: $name"
 }
 
+# The gear is a menu button: clicking it opens a menu, and the settings overlay
+# is an item inside that menu. The item name is localized, so it can be
+# overridden when the app is running in another language.
 cmd_settings_open() {
   require_running
+  local item="${1:-Settings}"
   activate_app
-  run_osa 'tell application "System Events" to tell process "'"$APP_PROCESS"'" to click menu button 1 of group 1 of window 1' >/dev/null
-  sleep 0.8
+  run_osa '
+tell application "System Events" to tell process "'"$APP_PROCESS"'"
+  set gear to menu button 1 of group 1 of window 1
+  click gear
+  delay 0.6
+  click menu item "'"$item"'" of menu 1 of gear
+end tell' >/dev/null
+  sleep 1
   echo "settings opened"
 }
 
@@ -209,6 +219,9 @@ cmd_popup() {
   activate_app
   run_osa '
 tell application "System Events" to tell process "'"$APP_PROCESS"'"
+  if (count of scroll areas of group 1 of window 1) is 0 then
+    error "Settings is not open — run: settings-open"
+  end if
   set target to pop up button "'"$label"'" of scroll area 1 of group 1 of window 1
   click target
   delay 0.5
@@ -245,7 +258,7 @@ main() {
     type) cmd_type "$@" ;;
     enter) cmd_enter ;;
     key) cmd_key "$@" ;;
-    settings-open) cmd_settings_open ;;
+    settings-open) cmd_settings_open "$@" ;;
     settings-close) cmd_settings_close ;;
     theme) cmd_theme "$@" ;;
     popup) cmd_popup "$@" ;;
