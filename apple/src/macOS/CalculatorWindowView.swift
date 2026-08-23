@@ -2492,6 +2492,25 @@ private struct SettingsSheet: View {
                         Toggle(macLocalized("settings.rounding.disableSwipeDown", bundle: localizationBundle), isOn: $disablesSwipeDownToRound)
                             .font(.system(size: settingsBodySize))
                     }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(macLocalized("settings.credits", bundle: localizationBundle))
+                            .font(.system(size: settingsSectionSize))
+                        // Version and the rating link share a row, matching iOS.
+                        HStack(spacing: 12) {
+                            Text(MacAboutContent.appVersionText(bundle: localizationBundle))
+                                .font(.system(size: settingsBodySize))
+                                .foregroundStyle(.secondary)
+
+                            Spacer(minLength: 0)
+
+                            Link(
+                                macLocalized("settings.feedback", bundle: localizationBundle),
+                                destination: SupportLinks.supportURL
+                            )
+                            .font(.system(size: settingsBodySize))
+                        }
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .padding(.top, 16)

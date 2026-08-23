@@ -20,6 +20,7 @@
 "settings.percent.classicBehavior" = "Alternatives Tastenfeld verwenden";
 "settings.buttonSound.disabled" = "Tastenton deaktivieren";
 "settings.credits" = "Info";
+"settings.feedback" = "Feedback";
 "settings.credits.version" = "Version %@";
 "mac.about.windowTitle" = "Info %@";
 "settings.credit.part1" = "© 2026 Tipli AI, LLC. EnterCalc ist Open Source und wird unter der MIT-Lizenz veröffentlicht. Hilf mit, auf ";
