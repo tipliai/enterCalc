@@ -5196,10 +5196,19 @@ private struct IOSKeypadButton: View {
     }
 
     private func handleTap() {
+        // Bracketed for #90: the outer interval is the whole press, the inner
+        // one is just the calculation and display update. The gap between them
+        // is what confirmation costs on the critical path, which is precisely
+        // what the issue suspects — and now something Instruments can show.
+        let state = InputLatencySignpost.beginPress()
+        defer { InputLatencySignpost.endPress(state) }
+
         // The calculation runs first so the display updates as early as
         // possible; feedback is what the press *confirms*, not what it does, so
         // it must not sit in front of the result.
-        action()
+        InputLatencySignpost.measuring(InputLatencySignpost.resultInterval) {
+            action()
+        }
         pressFeedback(button.kind)
         guard !reduceMotionEnabled else {
             shimmerVisible = false

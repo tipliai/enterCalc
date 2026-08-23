@@ -29,6 +29,25 @@ Each had a passing test asserting the old result. They are intentional correctio
 2. `$6 + 200%` was `$12`, now `$18` — the percent applies to the amount instead of replacing it.
 3. All Clear used to switch currency mode off; it now stays on.
 
+## Input latency — #90
+
+#104 removed work that sat between the touch and the display update, but this issue's acceptance criterion is a *number* — a median tap-to-display latency at least 20% lower — and a number needs an instrument. The press path is now bracketed by two signposts, so the measurement is a trace rather than a research project.
+
+**On a device, with Instruments:**
+
+1. Instruments → **Points of Interest**, targeting EnterCalc on the device.
+2. Record, then tap the keypad twenty or so times at a natural pace.
+3. Two intervals appear per press. **`keypad press`** is the whole press; **`keypad result`** is the calculation and display update alone. The difference is what confirmation — haptics, sound, press animation — costs on the critical path.
+4. Compare the median of `keypad press` against a build from before #104 for the ≥20% figure.
+
+**Without Instruments**, the same signposts come out of the unified log, which is enough to see the shape:
+
+```bash
+xcrun simctl spawn booted log stream --style compact --signpost --predicate 'subsystem == "com.tipliai.entercalc"'
+```
+
+**What the simulator already shows.** Across four taps: `keypad press` median **12.5ms**, `keypad result` median **1.0ms** — so roughly 92% of the press is confirmation rather than calculation. Treat that as a direction to look in, not a result: it is the simulator, where haptics do nothing at all, the log's timestamps are only millisecond-resolution, and four taps is not a sample. The device numbers are the ones the acceptance criterion is about.
+
 ## macOS theme sync — PR #97
 
 The fix rests entirely on this check: the repro could not be reproduced automatically, because the macOS QA driver reads text and structure but not colors.
