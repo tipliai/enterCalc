@@ -124,6 +124,18 @@ struct CalculatorWindowView: View {
         AppTheme(rawValue: windowSettings.themeRawValue) ?? .system
     }
 
+    // "Enter" is an English word; every other language uses the symbol, as does
+    // the alternative keypad regardless of language.
+    private var equalsButtonTitle: String {
+        let usesEnterWord = EqualsKeyLabel.usesEnterWord(
+            usesAlternativeKeypad: windowSettings.usesAlternativeKeypad,
+            resolvedLocalizationCode: resolvedLocalizationCode(for: windowSettings.languageCode)
+        )
+        return usesEnterWord
+            ? macLocalized("key.enter", bundle: currentLocalizationBundle)
+            : EqualsKeyLabel.symbol
+    }
+
     private var currentNumberFormatStyle: NumberFormatStyle {
         NumberFormatStyle(rawValue: windowSettings.numberFormatStyleRawValue) ?? NumberFormatStyle.detected()
     }
@@ -1670,10 +1682,10 @@ struct CalculatorWindowView: View {
             ButtonItem(title: "0", kind: .number, action: { viewModel.inputDigit("0") }, enabled: isEnabled(title: "0", kind: .number)),
             ButtonItem(title: ".", kind: .number, action: { viewModel.inputDecimal() }, enabled: isEnabled(title: ".", kind: .number)),
             ButtonItem(
-                title: windowSettings.usesEnterKeySymbol ? macLocalized("key.enter", bundle: currentLocalizationBundle) : "=",
+                title: equalsButtonTitle,
                 kind: .accent,
                 action: { viewModel.evaluate() },
-                enabled: isEnabled(title: windowSettings.usesEnterKeySymbol ? macLocalized("key.enter", bundle: currentLocalizationBundle) : "=", kind: .accent)
+                enabled: isEnabled(title: equalsButtonTitle, kind: .accent)
             )
         ]
     }
@@ -1710,10 +1722,10 @@ struct CalculatorWindowView: View {
             ButtonItem(title: ".", kind: .number, action: { viewModel.inputDecimal() }, enabled: isEnabled(title: ".", kind: .number)),
             ButtonItem(title: "0", kind: .number, action: { viewModel.inputDigit("0") }, enabled: isEnabled(title: "0", kind: .number)),
             ButtonItem(
-                title: windowSettings.usesEnterKeySymbol ? macLocalized("key.enter", bundle: currentLocalizationBundle) : "=",
+                title: equalsButtonTitle,
                 kind: .accent,
                 action: { viewModel.evaluate() },
-                enabled: isEnabled(title: windowSettings.usesEnterKeySymbol ? macLocalized("key.enter", bundle: currentLocalizationBundle) : "=", kind: .accent),
+                enabled: isEnabled(title: equalsButtonTitle, kind: .accent),
                 columnSpan: 2
             )
         ]
@@ -2402,7 +2414,6 @@ private struct SettingsSheet: View {
     @Binding var usesScientificNotation: Bool
     @Binding var selectedNumberFormat: NumberFormatStyle
     @Binding var usesAlternativeKeypad: Bool
-    @Binding var usesEnterKeySymbol: Bool
     @Binding var disablesSwipeDownToRound: Bool
     @Binding var disablesButtonSound: Bool
     let availableLanguages: [LanguageOption]
@@ -2476,14 +2487,6 @@ private struct SettingsSheet: View {
                             .font(.system(size: settingsBodySize))
                         Toggle(macLocalized("settings.percent.classicBehavior", bundle: localizationBundle), isOn: $usesAlternativeKeypad)
                             .font(.system(size: settingsBodySize))
-                        Toggle(
-                            macLocalized("settings.equals.enterKeySymbol", bundle: localizationBundle),
-                            isOn: Binding(
-                                get: { !usesEnterKeySymbol },
-                                set: { usesEnterKeySymbol = !$0 }
-                            )
-                        )
-                        .font(.system(size: settingsBodySize))
                         Toggle(macLocalized("settings.buttonSound.disabled", bundle: localizationBundle), isOn: $disablesButtonSound)
                             .font(.system(size: settingsBodySize))
                         Toggle(macLocalized("settings.rounding.disableSwipeDown", bundle: localizationBundle), isOn: $disablesSwipeDownToRound)
@@ -2843,12 +2846,6 @@ private extension CalculatorWindowView {
                 get: { windowSettings.usesAlternativeKeypad },
                 set: { newValue in
                     updateWindowSettings { $0.usesAlternativeKeypad = newValue }
-                }
-            ),
-            usesEnterKeySymbol: Binding(
-                get: { windowSettings.usesEnterKeySymbol },
-                set: { newValue in
-                    updateWindowSettings { $0.usesEnterKeySymbol = newValue }
                 }
             ),
             disablesSwipeDownToRound: Binding(

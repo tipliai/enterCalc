@@ -30,6 +30,7 @@ These behaviors are product expectations for the app UI and persistence model. T
 - iPad new pages: each new page is seeded from the current home-page settings at the moment the page is created.
 - iPad existing secondary pages: once created, a secondary page keeps its own settings and does not automatically update when the home page changes later.
 - iPad future secondary pages: if the home page changes language from `default` to an explicit language such as German, pages created after that change should inherit German.
+- Evaluate key label: the default keypad shows `Enter` in English and `=` in every other language; the alternative keypad shows `=` in all languages. This is derived from layout and resolved language, not a user setting, and follows a live language change without a restart. Covered by `apple/tests/EqualsKeyLabelTests.swift`.
 
 | Area | Test Value | Expected Result | Method |
 | --- | --- | --- | --- |
