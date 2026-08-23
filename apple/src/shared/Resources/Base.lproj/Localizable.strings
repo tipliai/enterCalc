@@ -68,3 +68,27 @@
 "functionKey.chooser.title" = "Choose Function";
 "functionKey.change" = "Change Function";
 "functionKey.hint" = "Press and hold to change this key";
+
+/* Currency mode tools: VAT and tipping (issue #92) */
+"currency.vat.title" = "VAT";
+"currency.vat.add" = "Add VAT";
+"currency.vat.remove" = "Remove VAT";
+"currency.vat.rate" = "Rate";
+"currency.vat.rate.decrease" = "Decrease Rate";
+"currency.vat.rate.increase" = "Increase Rate";
+"currency.vat.net" = "Ex VAT";
+"currency.vat.amount" = "VAT";
+"currency.vat.gross" = "Inc VAT";
+"currency.tip.title" = "Tip";
+"currency.tip.bill" = "Bill";
+"currency.tip.rate" = "Tip";
+"currency.tip.rate.decrease" = "Decrease Tip";
+"currency.tip.rate.increase" = "Increase Tip";
+"currency.tip.split" = "Split";
+"currency.tip.split.decrease" = "Fewer People";
+"currency.tip.split.increase" = "More People";
+"currency.tip.amount" = "Tip";
+"currency.tip.total" = "Total";
+"currency.tip.perPerson" = "Each";
+"currency.tool.use" = "Use Result";
+"currency.tool.close" = "Close";

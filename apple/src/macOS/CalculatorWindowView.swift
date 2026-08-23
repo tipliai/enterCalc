@@ -51,6 +51,8 @@ struct CalculatorWindowView: View {
         case history
         case rounding
         case settings
+        case vat
+        case tip
     }
 
     @ObservedObject var viewModel: CalculatorViewModel
@@ -99,6 +101,13 @@ struct CalculatorWindowView: View {
     @State private var windowSettings: CalculatorScreenSettings
     /// Live hold-and-drag reassignment of a configurable key, if one is running.
     @State private var functionChooser: FunctionKeyChooserSession? = nil
+    // Currency-mode tool settings (#92). Per window, and session state rather
+    // than a stored preference: they belong to the calculation in progress, the
+    // same way the currency symbol itself does.
+    @State private var vatRate: Decimal = 20
+    @State private var vatRemovesTax: Bool = false
+    @State private var tipRate: Decimal = 18
+    @State private var tipSplitCount: Int = TipBreakdown.defaultSplitCount
     @AppStorage("window.width") private var storedWindowWidth: Double = 0
     @AppStorage("window.height") private var storedWindowHeight: Double = 0
     @AppStorage("window.historyOpen") private var storedHistoryOpen: Bool = false
@@ -209,6 +218,14 @@ struct CalculatorWindowView: View {
         activeOverlay == .history
     }
 
+    private var showVATOverlay: Bool {
+        activeOverlay == .vat
+    }
+
+    private var showTipOverlay: Bool {
+        activeOverlay == .tip
+    }
+
     private var showRoundingOverlay: Bool {
         activeOverlay == .rounding
     }
@@ -269,6 +286,9 @@ struct CalculatorWindowView: View {
                 }
 
                 applyCurrentWindowSettings()
+            }
+            .onChange(of: viewModel.activeCurrencySymbol) { _, _ in
+                dismissCurrencyToolsIfNeeded()
             }
             .onChange(of: scenePhase) { _, newPhase in
                 guard newPhase == .active, isDefaultLocalizationSelection(windowSettings.languageCode) else {
@@ -416,6 +436,18 @@ struct CalculatorWindowView: View {
                                 .frame(width: geo.size.width, alignment: .top)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                                 .allowsHitTesting(activeOverlay == .history)
+                                .transition(.opacity)
+                        } else if showVATOverlay {
+                            vatOverlay()
+                                .frame(width: geo.size.width, alignment: .top)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                                .allowsHitTesting(activeOverlay == .vat)
+                                .transition(.opacity)
+                        } else if showTipOverlay {
+                            tipOverlay()
+                                .frame(width: geo.size.width, alignment: .top)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                                .allowsHitTesting(activeOverlay == .tip)
                                 .transition(.opacity)
                         } else if showRoundingOverlay {
                             roundingOverlay()
@@ -820,6 +852,11 @@ struct CalculatorWindowView: View {
                 .lineLimit(1)
 
             Spacer(minLength: 4)
+
+            if viewModel.activeCurrencySymbol != nil {
+                currencyToolButton(titleKey: "currency.vat.title", pane: .vat, opacity: opacity)
+                currencyToolButton(titleKey: "currency.tip.title", pane: .tip, opacity: opacity)
+            }
         }
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: 16, alignment: .leading)
@@ -1342,6 +1379,85 @@ struct CalculatorWindowView: View {
             .padding(.bottom, -8)
     }
 
+    private func vatOverlay() -> some View {
+        CurrencyVATPanel(
+            value: viewModel.currentValue,
+            rate: vatRate,
+            isRemoving: vatRemovesTax,
+            palette: palette,
+            localized: { macLocalized($0, bundle: currentLocalizationBundle) },
+            format: { viewModel.formattedValue($0) },
+            formatRate: { viewModel.formattedValue($0, includingCurrency: false) },
+            onRateChange: { vatRate = max($0, 0) },
+            onDirectionChange: { vatRemovesTax = $0 },
+            onApply: { result in
+                viewModel.applyToolResult(result, describedBy: vatSummary())
+                setActiveOverlay(nil)
+            },
+            onDismiss: { setActiveOverlay(nil) }
+        )
+        .background(memoryOverlayBackgroundColor)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func tipOverlay() -> some View {
+        CurrencyTipPanel(
+            bill: viewModel.currentValue,
+            rate: tipRate,
+            splitCount: tipSplitCount,
+            palette: palette,
+            localized: { macLocalized($0, bundle: currentLocalizationBundle) },
+            format: { viewModel.formattedValue($0) },
+            formatRate: { viewModel.formattedValue($0, includingCurrency: false) },
+            onRateChange: { tipRate = max($0, 0) },
+            onSplitChange: { tipSplitCount = min(max($0, TipBreakdown.splitCountRange.lowerBound), TipBreakdown.splitCountRange.upperBound) },
+            onApply: { result in
+                viewModel.applyToolResult(result, describedBy: tipSummary())
+                setActiveOverlay(nil)
+            },
+            onDismiss: { setActiveOverlay(nil) }
+        )
+        .background(memoryOverlayBackgroundColor)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The operation line left behind after a tool writes its result, so the
+    /// display says where the number came from.
+    private func vatSummary() -> String {
+        let rate = viewModel.formattedValue(vatRate, includingCurrency: false)
+        let action = macLocalized(vatRemovesTax ? "currency.vat.remove" : "currency.vat.add", bundle: currentLocalizationBundle)
+        return "\(action) \(rate)% ="
+    }
+
+    private func tipSummary() -> String {
+        let rate = viewModel.formattedValue(tipRate, includingCurrency: false)
+        return "\(macLocalized("currency.tip.title", bundle: currentLocalizationBundle)) \(rate)% ="
+    }
+
+    /// Compact outlined pill, deliberately unlike a keypad key: it opens a tool
+    /// rather than entering anything.
+    private func currencyToolButton(titleKey: String, pane: OverlayPane, opacity: Double) -> some View {
+        let isActive = activeOverlay == pane
+        return Button {
+            setActiveOverlay(isActive ? nil : pane)
+        } label: {
+            Text(macLocalized(titleKey, bundle: currentLocalizationBundle))
+                .font(EnterCalcFont.appFont(size: 11))
+                .foregroundStyle((isActive ? palette.accent : primaryForeground).opacity(opacity))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 1)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4)
+                        .strokeBorder(
+                            (isActive ? palette.accent : palette.textSecondary).opacity(opacity * 0.7),
+                            lineWidth: 1
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isActive ? [.isSelected] : [])
+    }
+
     private func roundingOverlay() -> some View {
         MacRoundingPanel(
             palette: palette,
@@ -1558,9 +1674,19 @@ struct CalculatorWindowView: View {
             closeRoundingOverlay()
         case .settings:
             closeSettingsOverlay()
+        case .vat, .tip:
+            setActiveOverlay(nil)
         case nil:
             break
         }
+    }
+
+    /// Leaving currency mode takes its tools with it, so a panel is never left
+    /// open over a calculator that is no longer in the mode.
+    private func dismissCurrencyToolsIfNeeded() {
+        guard viewModel.activeCurrencySymbol == nil else { return }
+        guard activeOverlay == .vat || activeOverlay == .tip else { return }
+        setActiveOverlay(nil)
     }
 
     // Routes a hardware-keyboard event to a calculator action. Returns true when

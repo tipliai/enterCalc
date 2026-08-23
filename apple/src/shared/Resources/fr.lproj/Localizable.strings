@@ -68,3 +68,27 @@
 "functionKey.chooser.title" = "Choisir une fonction";
 "functionKey.change" = "Changer de fonction";
 "functionKey.hint" = "Maintenez appuyé pour changer cette touche";
+
+/* Outils du mode devise : TVA et pourboire (ticket #92) */
+"currency.vat.title" = "TVA";
+"currency.vat.add" = "Ajouter la TVA";
+"currency.vat.remove" = "Retirer la TVA";
+"currency.vat.rate" = "Taux";
+"currency.vat.rate.decrease" = "Diminuer le taux";
+"currency.vat.rate.increase" = "Augmenter le taux";
+"currency.vat.net" = "Hors TVA";
+"currency.vat.amount" = "TVA";
+"currency.vat.gross" = "TTC";
+"currency.tip.title" = "Pourboire";
+"currency.tip.bill" = "Addition";
+"currency.tip.rate" = "Pourboire";
+"currency.tip.rate.decrease" = "Diminuer le pourboire";
+"currency.tip.rate.increase" = "Augmenter le pourboire";
+"currency.tip.split" = "Partager";
+"currency.tip.split.decrease" = "Moins de personnes";
+"currency.tip.split.increase" = "Plus de personnes";
+"currency.tip.amount" = "Pourboire";
+"currency.tip.total" = "Total";
+"currency.tip.perPerson" = "Par personne";
+"currency.tool.use" = "Utiliser le résultat";
+"currency.tool.close" = "Fermer";
