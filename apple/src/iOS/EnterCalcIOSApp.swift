@@ -3367,19 +3367,23 @@ private struct IOSSettingsSheet: View {
                     }
 
                     Section(localized("settings.credits")) {
+                        // Plain system font, not the app font: the only bundled
+                        // non-thin weight is SemiBold, which reads as bold for
+                        // standing text and does not match the setting rows
+                        // above. This is supporting copy, not emphasis.
                         Text(creditAttributedString())
-                            .font(EnterCalcFont.appFont(size: settingsAboutTextSize))
-                        // Version and the rating link share a row: both are
+                            .font(.system(size: settingsAboutTextSize))
+                        // Version and the feedback link share a row: both are
                         // "about this app", and it keeps the section to two rows.
                         HStack(spacing: 12) {
                             Text(String(format: localized("settings.credits.version"), versionString))
-                                .font(EnterCalcFont.appFont(size: settingsAboutTextSize))
+                                .font(.system(size: settingsAboutTextSize))
                                 .foregroundStyle(.secondary)
 
                             Spacer(minLength: 0)
 
                             Link(localized("settings.feedback"), destination: SupportLinks.supportURL)
-                                .font(EnterCalcFont.appFont(size: settingsAboutTextSize))
+                                .font(.system(size: settingsAboutTextSize))
                         }
                     }
                 }
