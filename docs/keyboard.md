@@ -24,6 +24,8 @@ Sources:
 | Right Arrow | Move display caret right (activates direct edit if possible) | Move display caret right | Increase rounding precision step | Suppressed |
 | Down Arrow | Open rounding overlay | Open rounding overlay | No-op (consumed) | Suppressed |
 | Up Arrow | No mapped action | No mapped action | Close rounding overlay | Suppressed |
+| Shift + Up Arrow | Increase display size (20pt) | Increase display size | Increase display size | Increase display size |
+| Shift + Down Arrow | Decrease display size (20pt) | Decrease display size | Decrease display size | Decrease display size |
 | Escape | Clear all | Exit direct edit | Remove rounding and close overlay | Close overlay |
 | End | Clear all | Exit direct edit | Close overlay | Close overlay |
 | Backspace | Delete one char/digit via model backspace | Delete one char/digit before caret | Remove rounding and close overlay | Close overlay |
@@ -53,6 +55,14 @@ Which symbol the key applies is chosen in Settings. It defaults to the device re
 	- macOS accepts keyCode `114`, plus function-character `U+F727`.
 - macOS additionally maps physical keypad keyCodes for digits/operators/decimal/evaluate. iOS receives these through hardware key events and characters.
 - Control-modified keys are not handled by EnterCalc keyboard routing and return not-handled.
+
+### Resizing the display (macOS)
+
+The split between the display and the keypad can be dragged, which leaves it unreachable without a pointer. **Shift + Up/Down Arrow** moves it in 20-point steps, within the same limits the drag handle respects, and stops at either end rather than wrapping.
+
+These are menu commands under **View → Increase / Decrease Display Size**, not just key bindings, so they are discoverable and reachable by VoiceOver. The menu owns the shortcut: the app's key monitor deliberately ignores Shift + Up/Down so a single press applies a single step, and so Shift + Down does not open the rounding overlay the way a bare Down Arrow does.
+
+The step is not animated — it lands immediately, matching how dragging behaves.
 
 ### Command Shortcuts
 
