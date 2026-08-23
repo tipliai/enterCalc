@@ -708,14 +708,19 @@ struct EnterCalcIOSView: View {
         if function != nil { triggerActionFeedback() }
     }
 
-    /// Releasing over an option commits it; releasing anywhere else cancels.
+    /// Lifting a finger that is already over an option commits it. Lifting
+    /// anywhere else leaves the chooser on screen so the option can be tapped
+    /// instead — the hold does not have to become a drag.
     func releaseFunctionChooser() {
         guard let session = functionChooser else { return }
         if let function = session.highlighted {
             commitFunctionChooser(function)
-        } else {
-            dismissFunctionChooser()
+            return
         }
+
+        // No longer a drag, so the panel stops tracking a finger and waits.
+        functionChooser?.dragLocation = nil
+        functionChooser?.highlighted = nil
     }
 
     func commitFunctionChooser(_ function: CalculatorFunctionKey) {

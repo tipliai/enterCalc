@@ -67,4 +67,4 @@
 "function.percent" = "Pourcentage";
 "functionKey.chooser.title" = "Choisir une fonction";
 "functionKey.change" = "Changer de fonction";
-"functionKey.hint" = "Maintenez appuyé, puis faites glisser pour changer cette touche";
+"functionKey.hint" = "Maintenez appuyé pour changer cette touche";

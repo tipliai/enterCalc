@@ -258,13 +258,19 @@ public struct FunctionKeyGlyph: View {
 
 // MARK: - Hold-and-drag gesture
 
-/// Turns a key into a configurable one: press and hold opens the chooser, the
-/// same unbroken drag moves over the options, and releasing commits.
+/// Turns a key into a configurable one on touch: press and hold opens the
+/// chooser, which then stays on screen so the option can simply be tapped.
+/// Dragging straight onto an option without lifting works too and commits on
+/// release, but lifting anywhere else leaves the chooser open rather than
+/// cancelling.
 ///
 /// The hold is tracked manually rather than with `LongPressGesture.sequenced`
 /// because the drag has to keep reporting *global* locations after the press
 /// succeeds — the chooser is a sibling overlay, not a child of the key — and a
 /// sequenced gesture reports locations relative to the key instead.
+///
+/// macOS uses `secondaryClickToOpenFunctionChooser` instead; holding a mouse
+/// button down is not how a desktop opens a contextual chooser.
 public struct FunctionKeyHoldModifier: ViewModifier {
     /// How long the finger has to stay down before the chooser appears.
     public static let holdDuration: TimeInterval = 0.4
@@ -431,3 +437,78 @@ public struct OptionalFunctionKeyHold: ViewModifier {
         }
     }
 }
+
+#if os(macOS)
+import AppKit
+
+/// Opens the function chooser on a secondary click — right-click, or
+/// Control-click, which macOS treats the same way.
+///
+/// SwiftUI has no secondary-click gesture, and `.contextMenu` would draw an
+/// AppKit menu rather than the chooser panel. The capture view therefore
+/// hit-tests itself *only* for secondary-click events, so ordinary left clicks
+/// pass straight through to the button underneath and keep working.
+private struct SecondaryClickCatcher: NSViewRepresentable {
+    let onSecondaryClick: () -> Void
+
+    final class CatcherView: NSView {
+        var onSecondaryClick: (() -> Void)?
+
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            guard let event = NSApp.currentEvent else { return nil }
+
+            switch event.type {
+            case .rightMouseDown, .rightMouseUp, .rightMouseDragged:
+                return super.hitTest(point)
+            case .leftMouseDown, .leftMouseUp, .leftMouseDragged:
+                // Control-click is a secondary click on macOS.
+                return event.modifierFlags.contains(.control) ? super.hitTest(point) : nil
+            default:
+                return nil
+            }
+        }
+
+        override func rightMouseDown(with event: NSEvent) {
+            onSecondaryClick?()
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            guard event.modifierFlags.contains(.control) else {
+                super.mouseDown(with: event)
+                return
+            }
+
+            onSecondaryClick?()
+        }
+    }
+
+    func makeNSView(context: Context) -> CatcherView {
+        let view = CatcherView()
+        view.onSecondaryClick = onSecondaryClick
+        return view
+    }
+
+    func updateNSView(_ nsView: CatcherView, context: Context) {
+        nsView.onSecondaryClick = onSecondaryClick
+    }
+}
+
+extension View {
+    /// Makes this key reassignable by right-clicking (or Control-clicking) it.
+    /// The key's frame is not derived from AppKit here: the caller already
+    /// tracks it through SwiftUI's own `.global` space, which is the space the
+    /// chooser positions itself in. Converting an `NSView` frame instead would
+    /// mean matching AppKit's flipped origin to SwiftUI's by hand.
+    @ViewBuilder
+    public func secondaryClickToOpenFunctionChooser(
+        slot: CalculatorFunctionSlot?,
+        onOpen: @escaping (CalculatorFunctionSlot) -> Void
+    ) -> some View {
+        if let slot {
+            overlay(SecondaryClickCatcher { onOpen(slot) })
+        } else {
+            self
+        }
+    }
+}
+#endif
