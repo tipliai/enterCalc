@@ -435,6 +435,7 @@ struct CalculatorWindowView: View {
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
+            .accessibilityLabel(Text(macLocalized("settings.title", bundle: currentLocalizationBundle)))
             .fixedSize()
             .buttonStyle(.plain)
             .contentShape(Rectangle())
@@ -464,6 +465,7 @@ struct CalculatorWindowView: View {
                 hovering ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
             }
             .help(macLocalized("history.toggle", bundle: currentLocalizationBundle))
+            .accessibilityLabel(Text(macLocalized("history.toggle", bundle: currentLocalizationBundle)))
 
             Button {
                 storeWindowSize()
@@ -486,6 +488,7 @@ struct CalculatorWindowView: View {
                 hovering ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
             }
             .help(macLocalized("window.new", bundle: currentLocalizationBundle))
+            .accessibilityLabel(Text(macLocalized("window.new", bundle: currentLocalizationBundle)))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
