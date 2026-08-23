@@ -40,6 +40,8 @@
 "rounding.toggle" = "丸めパネルを表示/非表示";
 "display.grow" = "表示を大きくする";
 "display.shrink" = "表示を小さくする";
+"keypad.resize.label" = "キーパッドのサイズ変更";
+"keypad.resize.hint" = "ドラッグするか、Shift と上下矢印キーで表示サイズを変更します";
 "rounding.title" = "結果を丸める";
 "rounding.remove" = "丸めを解除";
 "copy" = "コピー";
