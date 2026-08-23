@@ -54,6 +54,9 @@ apple/.build/
 apple/.swiftpm/
 apple/Package.resolved
 
+# Local QA driver build output
+.qa-build/
+
 # Temporary and editor files
 *.moved-aside
 *.swp
