@@ -5,7 +5,7 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/macos/build-installer-dmg.sh --app /path/to/EnterCalc.app [--out-dir dist/macOS] [--output /custom/path/EnterCalc-v1.0.0.dmg] [--volume-name "EnterCalc Installer"] [--background docs/images/dmg-background.png] [--manual-layout]
+  scripts/macos/build-installer-dmg.sh --app /path/to/EnterCalc.app [--out-dir dist/macOS] [--output /custom/path/EnterCalc-v1.1.0.dmg] [--volume-name "EnterCalc Installer"] [--background docs/images/dmg-background.png] [--manual-layout]
 
 Description:
   Builds a drag-and-drop DMG that contains EnterCalc.app and an Applications symlink.

@@ -1,4 +1,6 @@
 import SwiftUI
+// Provides the requestReview environment action used for the in-app prompt.
+import StoreKit
 #if canImport(UIKit)
 import UIKit
 #if canImport(CoreHaptics)
@@ -25,6 +27,10 @@ private enum IOSActionHaptics {
         true
 #endif
     }()
+    // `prepare()` warms the Taptic Engine, which takes time the system does not
+    // have if it is called in the same breath as the feedback. Preparing after
+    // firing warms the engine for the *next* press instead of adding work to
+    // this one, which is what the API is for.
     static func performKeyPress(isEnterKey: Bool = false) {
         guard supportsHaptics else {
             if !isEnterKey {
@@ -33,19 +39,19 @@ private enum IOSActionHaptics {
             return
         }
 
-        keyPressImpact.prepare()
         keyPressImpact.impactOccurred(intensity: 1.0)
+        keyPressImpact.prepare()
     }
 
     static func perform(emphasized: Bool) {
         if emphasized {
-            mediumImpact.prepare()
             mediumImpact.impactOccurred(intensity: 1)
-            successNotification.prepare()
             successNotification.notificationOccurred(.success)
+            mediumImpact.prepare()
+            successNotification.prepare()
         } else {
-            lightImpact.prepare()
             lightImpact.impactOccurred(intensity: 1.0)
+            lightImpact.prepare()
         }
     }
 
@@ -63,6 +69,121 @@ import EnterCalcCore
 extension Notification.Name {
     static let enterCalcIOSToggleHistoryPanel = Notification.Name("EnterCalc.iOS.ToggleHistoryPanel")
     static let enterCalcIOSToggleRoundingPanel = Notification.Name("EnterCalc.iOS.ToggleRoundingPanel")
+}
+
+// Tracks the usage the review prompt is gated on, and remembers which release
+// already asked.
+//
+// Days are stored as a rolling set of day stamps rather than a counter so that
+// repeated use on one day counts once, which is the whole point of the gate.
+@MainActor
+final class ReviewPromptTracker {
+    static let shared = ReviewPromptTracker()
+
+    private static let daysUsedKey = "review.daysUsed"
+    private static let lastPromptedVersionKey = "review.lastPromptedVersion"
+
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    /// Records that the app was used today. Cheap and idempotent within a day.
+    func recordUsageToday(now: Date = Date(), calendar: Calendar = .current) {
+        let today = Self.dayStamp(for: now, calendar: calendar)
+        var days = defaults.stringArray(forKey: Self.daysUsedKey) ?? []
+        guard !days.contains(today) else { return }
+
+        days.append(today)
+        // Only the count matters, so keep this from growing without bound.
+        let trimmed: [String] = Array(days.suffix(30))
+        defaults.set(trimmed, forKey: Self.daysUsedKey)
+    }
+
+    var distinctDaysUsed: Int {
+        defaults.stringArray(forKey: Self.daysUsedKey)?.count ?? 0
+    }
+
+    func shouldRequestReview(completedCalculations: Int) -> Bool {
+        ReviewPromptPolicy.shouldRequestReview(
+            completedCalculations: completedCalculations,
+            distinctDaysUsed: distinctDaysUsed,
+            lastPromptedVersion: defaults.string(forKey: Self.lastPromptedVersionKey),
+            currentVersion: Self.currentVersion
+        )
+    }
+
+    /// Called once the prompt has been asked for, so this release does not ask
+    /// again. Recorded even though the system may choose not to show anything —
+    /// we have spent our one ask for this version either way.
+    func recordPromptShown() {
+        defaults.set(Self.currentVersion, forKey: Self.lastPromptedVersionKey)
+    }
+
+    private static func dayStamp(for date: Date, calendar: Calendar) -> String {
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        return "\(parts.year ?? 0)-\(parts.month ?? 0)-\(parts.day ?? 0)"
+    }
+
+    private static var currentVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+    }
+}
+
+// Caches whether haptics are switched off, so the key-press path does not touch
+// UserDefaults on every tap. The stored value is only changed from Settings, and
+// UserDefaults posts a notification when it does.
+@MainActor
+final class IOSHapticsPreference {
+    static let shared = IOSHapticsPreference()
+
+    private static let key = "settings.haptics.disabled"
+    private static let legacyKey = "settings.haptics.actions"
+
+    private(set) var isDisabled: Bool
+    private var observer: NSObjectProtocol?
+
+    private init() {
+        isDisabled = Self.readFromDefaults()
+        // Covers changes made inside the app. Changes made in the Settings app
+        // are a separate process and do not post here, which is why the scene
+        // also refreshes this on becoming active.
+        observer = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: UserDefaults.standard,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.refresh()
+            }
+        }
+    }
+
+    deinit {
+        if let observer {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    func refresh() {
+        isDisabled = Self.readFromDefaults()
+    }
+
+    private static func readFromDefaults() -> Bool {
+        let defaults = UserDefaults.standard
+
+        if defaults.object(forKey: key) != nil {
+            return defaults.bool(forKey: key)
+        }
+
+        // Older builds stored the inverse under a different key.
+        if let legacyUsesActionHaptics = defaults.object(forKey: legacyKey) as? Bool {
+            return !legacyUsesActionHaptics
+        }
+
+        return false
+    }
 }
 
 // Snapshot of a hardware-keyboard press, decoupled from UIKit so the SwiftUI
@@ -276,7 +397,6 @@ struct EnterCalcIOSView: View {
             usesScientificNotation: true,
             numberFormatStyleRawValue: NumberFormatStyle.detected().rawValue,
             usesAlternativeKeypad: false,
-            usesEnterKeySymbol: true,
             disablesSwipeDownToRound: false,
             disablesButtonSound: false,
             keypadHeightMultiplier: 1.0
@@ -286,6 +406,7 @@ struct EnterCalcIOSView: View {
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.requestReview) private var requestReview
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotionEnabled
     @ScaledMetric(relativeTo: .largeTitle) private var displayDynamicTypeScale: CGFloat = 1.0
     @State private var activeOverlay: IOSOverlayPane? = nil
@@ -322,7 +443,6 @@ struct EnterCalcIOSView: View {
     @AppStorage("settings.numberFormat.scientific") private var preferredScientificNotation: Bool = true
     @AppStorage("settings.numberFormat.style") private var preferredNumberFormatRaw: String = NumberFormatStyle.detected().rawValue
     @AppStorage("settings.keypad.alternative") private var preferredUsesAlternativeKeypad: Bool = false
-    @AppStorage("settings.equals.enterKeySymbol") private var preferredUsesEnterKeySymbol: Bool = true
     @AppStorage("settings.rounding.disableSwipeDown") private var preferredDisablesSwipeDownToRound: Bool = false
     @AppStorage("settings.keypadHeightMultiplier") private var preferredKeypadHeightMultiplier: Double = 1.0
     @AppStorage("settings.reduceMotion.enabled") private var preferredReduceMotionEnabled: Bool = false
@@ -347,7 +467,6 @@ struct EnterCalcIOSView: View {
             usesScientificNotation: preferredScientificNotation,
             numberFormatStyleRawValue: preferredNumberFormatRaw,
             usesAlternativeKeypad: preferredUsesAlternativeKeypad,
-            usesEnterKeySymbol: preferredUsesEnterKeySymbol,
             disablesSwipeDownToRound: preferredDisablesSwipeDownToRound,
             disablesButtonSound: false,
             keypadHeightMultiplier: keypadHeightMultiplier
@@ -355,7 +474,10 @@ struct EnterCalcIOSView: View {
     }
 
     private var equalsButtonTitle: String {
-        activeScreen.settings.usesEnterKeySymbol ? localized("key.enter") : "="
+        EqualsKeyLabel.usesEnterWord(
+            usesAlternativeKeypad: activeScreen.settings.usesAlternativeKeypad,
+            resolvedLocalizationCode: resolvedLocalizationCode(for: activeScreen.settings.languageCode)
+        ) ? localized("key.enter") : EqualsKeyLabel.symbol
     }
 
     private var clearButtonTitle: String {
@@ -540,6 +662,7 @@ struct EnterCalcIOSView: View {
             }
             .onAppear {
                 syncSystemSettingsMetadata()
+                ReviewPromptTracker.shared.recordUsageToday()
                 normalizePreferredLanguageIfNeeded()
                 syncHomeScreenFromStoredSettings()
                 applyActiveScreenConfiguration()
@@ -560,6 +683,10 @@ struct EnterCalcIOSView: View {
                 }
 
                 syncSystemSettingsMetadata()
+                // The haptics preference lives in the Settings bundle, so it is
+                // changed by the Settings app rather than in this process and no
+                // change notification arrives. Re-read it on the way back in.
+                IOSHapticsPreference.shared.refresh()
                 if isDefaultLocalizationSelection(activeScreen.settings.languageCode) {
                     applyActiveScreenConfiguration()
                 }
@@ -628,7 +755,6 @@ struct EnterCalcIOSView: View {
                     selectedNumberFormat: activeNumberFormatBinding,
                     selectedCurrencySymbol: activeCurrencySymbolBinding,
                     usesAlternativeKeypad: activeAlternativeKeypadBinding,
-                    usesEnterKeySymbol: activeEnterKeySymbolBinding,
                     disablesSwipeDownToRound: activeDisableSwipeDownToRoundBinding,
                     availableLanguages: availableLanguageOptions(),
                     counterRotatesForUpsideDownPortrait: counterRotatesForUpsideDownPortrait
@@ -714,15 +840,6 @@ private extension EnterCalcIOSView {
             get: { activeScreen.settings.usesAlternativeKeypad },
             set: { newValue in
                 updateActiveScreenSettings { $0.usesAlternativeKeypad = newValue }
-            }
-        )
-    }
-
-    var activeEnterKeySymbolBinding: Binding<Bool> {
-        Binding(
-            get: { activeScreen.settings.usesEnterKeySymbol },
-            set: { newValue in
-                updateActiveScreenSettings { $0.usesEnterKeySymbol = newValue }
             }
         )
     }
@@ -974,7 +1091,6 @@ private extension EnterCalcIOSView {
             preferredScientificNotation = updated.usesScientificNotation
             preferredNumberFormatRaw = updated.numberFormatStyleRawValue
             preferredUsesAlternativeKeypad = updated.usesAlternativeKeypad
-            preferredUsesEnterKeySymbol = updated.usesEnterKeySymbol
             preferredDisablesSwipeDownToRound = updated.disablesSwipeDownToRound
             preferredKeypadHeightMultiplier = updated.keypadHeightMultiplier
             screenStore.syncHomeScreenSettings(updated)
@@ -2690,6 +2806,22 @@ private extension EnterCalcIOSView {
         CalculatorButtonSound.playEnterClick()
     }
 
+    // Asks for a review only after a completed calculation, so the prompt lands
+    // on a finished task rather than interrupting one. The work is deferred so
+    // it stays off the press-to-display path, and the gate is a couple of
+    // integer comparisons before that.
+    func requestReviewIfEarned(for screen: CalculatorScreenSession) {
+        let completed = screen.viewModel.completedCalculationCount
+        guard ReviewPromptTracker.shared.shouldRequestReview(completedCalculations: completed) else {
+            return
+        }
+
+        ReviewPromptTracker.shared.recordPromptShown()
+        DispatchQueue.main.async {
+            requestReview()
+        }
+    }
+
     func prepareActionFeedbackGenerators() {
 #if canImport(UIKit)
         IOSActionHaptics.keyPressImpact.prepare()
@@ -2791,6 +2923,7 @@ private extension EnterCalcIOSView {
                                         if isLandscapeMode {
                                             resetLandscapeDisplayScroll(for: screen)
                                         }
+                                        requestReviewIfEarned(for: screen)
                                     },
                                     reduceMotionEnabled: reduceMotionEnabled,
                                     operatorRevealProgress: operatorRevealProgress,
@@ -3198,7 +3331,6 @@ private struct IOSSettingsSheet: View {
     @Binding var selectedNumberFormat: String
     @Binding var selectedCurrencySymbol: String
     @Binding var usesAlternativeKeypad: Bool
-    @Binding var usesEnterKeySymbol: Bool
     @Binding var disablesSwipeDownToRound: Bool
     let availableLanguages: [LanguageOption]
     let counterRotatesForUpsideDownPortrait: Bool
@@ -3208,7 +3340,6 @@ private struct IOSSettingsSheet: View {
     @State private var draftNumberFormat: NumberFormatStyle
     @State private var draftCurrencySymbol: String
     @State private var draftUsesAlternativeKeypad: Bool
-    @State private var draftUsesEnterKeySymbol: Bool
     @State private var draftDisablesSwipeDownToRound: Bool
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -3224,7 +3355,6 @@ private struct IOSSettingsSheet: View {
         selectedNumberFormat: Binding<String>,
         selectedCurrencySymbol: Binding<String>,
         usesAlternativeKeypad: Binding<Bool>,
-        usesEnterKeySymbol: Binding<Bool>,
         disablesSwipeDownToRound: Binding<Bool>,
         availableLanguages: [LanguageOption],
         counterRotatesForUpsideDownPortrait: Bool
@@ -3237,7 +3367,6 @@ private struct IOSSettingsSheet: View {
         self._selectedNumberFormat = selectedNumberFormat
         self._selectedCurrencySymbol = selectedCurrencySymbol
         self._usesAlternativeKeypad = usesAlternativeKeypad
-        self._usesEnterKeySymbol = usesEnterKeySymbol
         self._disablesSwipeDownToRound = disablesSwipeDownToRound
         self.availableLanguages = availableLanguages
         self.counterRotatesForUpsideDownPortrait = counterRotatesForUpsideDownPortrait
@@ -3247,7 +3376,6 @@ private struct IOSSettingsSheet: View {
         _draftNumberFormat = State(initialValue: NumberFormatStyle(rawValue: selectedNumberFormat.wrappedValue) ?? NumberFormatStyle.detected())
         _draftCurrencySymbol = State(initialValue: selectedCurrencySymbol.wrappedValue)
         _draftUsesAlternativeKeypad = State(initialValue: usesAlternativeKeypad.wrappedValue)
-        _draftUsesEnterKeySymbol = State(initialValue: usesEnterKeySymbol.wrappedValue)
         _draftDisablesSwipeDownToRound = State(initialValue: disablesSwipeDownToRound.wrappedValue)
     }
 
@@ -3276,7 +3404,6 @@ private struct IOSSettingsSheet: View {
         selectedNumberFormat = draftNumberFormat.rawValue
         selectedCurrencySymbol = draftCurrencySymbol
         usesAlternativeKeypad = draftUsesAlternativeKeypad
-        usesEnterKeySymbol = draftUsesEnterKeySymbol
         disablesSwipeDownToRound = draftDisablesSwipeDownToRound
     }
 
@@ -3345,22 +3472,28 @@ private struct IOSSettingsSheet: View {
                         }
                         Toggle(localized("settings.numberFormat.scientific"), isOn: $draftScientificNotation)
                         Toggle(localized("settings.percent.classicBehavior"), isOn: $draftUsesAlternativeKeypad)
-                        Toggle(
-                            localized("settings.equals.enterKeySymbol"),
-                            isOn: Binding(
-                                get: { !draftUsesEnterKeySymbol },
-                                set: { draftUsesEnterKeySymbol = !$0 }
-                            )
-                        )
                         Toggle(localized("settings.rounding.disableSwipeDown"), isOn: $draftDisablesSwipeDownToRound)
                     }
 
                     Section(localized("settings.credits")) {
+                        // Plain system font, not the app font: the only bundled
+                        // non-thin weight is SemiBold, which reads as bold for
+                        // standing text and does not match the setting rows
+                        // above. This is supporting copy, not emphasis.
                         Text(creditAttributedString())
-                            .font(EnterCalcFont.appFont(size: settingsAboutTextSize))
-                        Text(String(format: localized("settings.credits.version"), versionString))
-                            .font(EnterCalcFont.appFont(size: settingsAboutTextSize))
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: settingsAboutTextSize))
+                        // Version and the feedback link share a row: both are
+                        // "about this app", and it keeps the section to two rows.
+                        HStack(spacing: 12) {
+                            Text(String(format: localized("settings.credits.version"), versionString))
+                                .font(.system(size: settingsAboutTextSize))
+                                .foregroundStyle(.secondary)
+
+                            Spacer(minLength: 0)
+
+                            Link(localized("settings.feedback"), destination: SupportLinks.supportURL)
+                                .font(.system(size: settingsAboutTextSize))
+                        }
                     }
                 }
                 .scrollContentBackground(.hidden)
@@ -4577,19 +4710,12 @@ private extension EnterCalcIOSView {
         defaults.set(systemSettingsVersionString(), forKey: "settings.about.version")
     }
 
+    // Read once and cached: this is consulted on every key press, and it was
+    // re-registering a defaults domain and doing several dictionary lookups
+    // each time. The value only changes from Settings, which posts a change
+    // notification, so there is nothing to poll for.
     func actionHapticsDisabled() -> Bool {
-        let defaults = UserDefaults.standard
-        defaults.register(defaults: ["settings.haptics.disabled": false])
-
-        if defaults.object(forKey: "settings.haptics.disabled") != nil {
-            return defaults.bool(forKey: "settings.haptics.disabled")
-        }
-
-        if let legacyUsesActionHaptics = defaults.object(forKey: "settings.haptics.actions") as? Bool {
-            return !legacyUsesActionHaptics
-        }
-
-        return false
+        IOSHapticsPreference.shared.isDisabled
     }
 
     func systemSettingsVersionString() -> String {
@@ -4771,8 +4897,9 @@ private struct IOSCompactActionButton: View {
 
     var body: some View {
         Button {
-            pressFeedback()
+            // Result first, feedback second — see IOSKeypadButton.handleTap.
             action()
+            pressFeedback()
         } label: {
             Image(systemName: button.symbol)
                 .font(EnterCalcFont.appFont(size: boundedIconFontSize))
@@ -5013,8 +5140,11 @@ private struct IOSKeypadButton: View {
     }
 
     private func handleTap() {
-        pressFeedback(button.kind)
+        // The calculation runs first so the display updates as early as
+        // possible; feedback is what the press *confirms*, not what it does, so
+        // it must not sit in front of the result.
         action()
+        pressFeedback(button.kind)
         guard !reduceMotionEnabled else {
             shimmerVisible = false
             return
