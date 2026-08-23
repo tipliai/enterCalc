@@ -83,6 +83,32 @@ final class CurrencyModeTests: XCTestCase {
         XCTAssertEqual(viewModel.activeCurrencySymbol, "$")
     }
 
+    // Currency mode is a mode the user switched on, not part of the calculation,
+    // so clearing the entry must not silently drop it.
+    func testCurrencyModeSurvivesAllClear() {
+        let viewModel = CalculatorViewModel()
+        enter("40", into: viewModel)
+        viewModel.toggleCurrencySymbol("$")
+
+        viewModel.clearAll()
+
+        XCTAssertEqual(viewModel.activeCurrencySymbol, "$")
+        enter("7", into: viewModel)
+        XCTAssertTrue(viewModel.display.contains("$"), "expected currency in \(viewModel.display)")
+    }
+
+    // The key stays the only way out, so it must still work after a clear.
+    func testCurrencyModeCanBeTurnedOffAfterAllClear() {
+        let viewModel = CalculatorViewModel()
+        enter("40", into: viewModel)
+        viewModel.toggleCurrencySymbol("$")
+        viewModel.clearAll()
+
+        viewModel.toggleCurrencySymbol("$")
+
+        XCTAssertNil(viewModel.activeCurrencySymbol)
+    }
+
     func testCurrencyModeSurvivesArithmetic() {
         let viewModel = CalculatorViewModel()
         enter("10", into: viewModel)

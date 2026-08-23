@@ -3330,17 +3330,17 @@ private struct IOSSettingsSheet: View {
                                 Text(language.displayName).tag(language.code)
                             }
                         }
+                        Picker(localized("settings.currency.symbol"), selection: $draftCurrencySymbol) {
+                            ForEach(CurrencyCatalog.all) { option in
+                                Text(option.symbol).tag(option.symbol)
+                            }
+                        }
                     }
 
                     Section(localized("settings.userInterface")) {
                         Picker(localized("settings.numberFormat.style"), selection: numberFormatSelection) {
                             ForEach(NumberFormatStyle.allCases, id: \.self) { style in
                                 Text(style.example).tag(style)
-                            }
-                        }
-                        Picker(localized("settings.currency.symbol"), selection: $draftCurrencySymbol) {
-                            ForEach(CurrencyCatalog.all) { option in
-                                Text(option.symbol).tag(option.symbol)
                             }
                         }
                         Toggle(localized("settings.numberFormat.scientific"), isOn: $draftScientificNotation)
