@@ -135,6 +135,7 @@ public final class CalculatorViewModel: ObservableObject {
         let activeCurrencySymbol: String?
         let isPendingEntryClearedByClearButton: Bool
         let shouldPreserveTypedCurrencyInput: Bool
+        let resultUsesPercentToken: Bool
         let displayEditCursorIndex: Int?
     }
 
@@ -174,6 +175,9 @@ public final class CalculatorViewModel: ObservableObject {
     private var roundingInteractionInitialEnabled: Bool?
     private var roundingInteractionInitialPrecision: Int?
     private var shouldPreserveTypedCurrencyInput = false
+    // Set when an evaluation produced a percentage of a percentage (9% + 9%), so
+    // the result line renders "18%" over the stored decimal 0.18.
+    private var resultUsesPercentToken = false
 
     public init(numberFormatStyle: NumberFormatStyle = .western, usesScientificNotation: Bool = true) {
         self.numberFormatStyle = numberFormatStyle
@@ -531,7 +535,13 @@ public final class CalculatorViewModel: ObservableObject {
         let snapshot = beginUndoableChange()
         finishDirectDisplayEditingIfNeeded()
         isPendingEntryClearedByClearButton = false
-        let operandToken = currentToken
+        // A percent-of-percent result displays as "18%" over a stored 0.18.
+        // Applying % again works from that value, not the token, so the result
+        // is 0.18% rather than a doubled-up "18%%".
+        let operandToken = resultUsesPercentToken
+            ? displayString(for: currentInput, useActiveCurrency: false)
+            : currentToken
+        resultUsesPercentToken = false
         let percentOperandToken = activeCurrencySymbol == nil
             ? operandToken
             : displayString(for: currentInput, useActiveCurrency: false)
@@ -612,6 +622,7 @@ public final class CalculatorViewModel: ObservableObject {
         lastOperand = nil
         lastResultSummary = ""
         expression = ""
+        resultUsesPercentToken = false
         shouldResetInputOnNextDigit = false
         justEvaluated = false
         isErrorState = false
@@ -907,9 +918,6 @@ public final class CalculatorViewModel: ObservableObject {
                 // No right-hand operand was entered after the operator; finalize
                 // the existing accumulated value without duplicating the operand.
                 evaluateTrailingPendingOperatorAsStandaloneResult()
-            } else if shouldFinalizeCurrencyPendingPercentAsStandaloneResult {
-                finalizeCurrencyPendingPercentAsStandaloneResult()
-                updateDisplay()
             } else if evaluatePendingExpressionWithDisplayedPrecedence() {
                 // handled inside helper
             } else {
@@ -2021,10 +2029,13 @@ public final class CalculatorViewModel: ObservableObject {
             return
         }
         let resultText = format(result)
+        let percentResultToken = operationYieldsPercentResult(pending: pending, lhsToken: lhsToken, rhsToken: rhsToken)
+            ? percentTokenString(forStoredValue: result)
+            : nil
 
         if addToHistory {
             let exp = completedPendingExpression(lhsToken: lhsToken, pending: pending, rhsToken: rhsToken)
-            appendHistory(expression: exp, result: resultText)
+            appendHistory(expression: exp, result: resultText, displayResultOverride: percentResultToken)
             lastResultSummary = exp + " ="
             expression = ""
             pendingOperator = nil
@@ -2046,14 +2057,22 @@ public final class CalculatorViewModel: ObservableObject {
 
         currentInput = resultText
         accumulator = result
-        accumulatorToken = displayString(for: resultText, useActiveCurrency: false)
-        currentToken = displayString(for: resultText, useActiveCurrency: false)
+        // The percent form is a display token only: `currentInput` keeps the
+        // decimal so anything calculated from this result stays correct.
+        accumulatorToken = percentResultToken ?? displayString(for: resultText, useActiveCurrency: false)
+        currentToken = accumulatorToken ?? displayString(for: resultText, useActiveCurrency: false)
+        resultUsesPercentToken = percentResultToken != nil
         if refreshDisplay {
             updateDisplay()
         }
     }
 
-    private func appendHistory(expression: String, result: String, displayExpressionOverride: String? = nil) {
+    private func appendHistory(
+        expression: String,
+        result: String,
+        displayExpressionOverride: String? = nil,
+        displayResultOverride: String? = nil
+    ) {
         let historyExpression: String
         let historyResult: String
         let displayResult: String
@@ -2077,7 +2096,7 @@ public final class CalculatorViewModel: ObservableObject {
         } else {
             historyExpression = expression
             historyResult = storedHistoryResultString(from: result)
-            displayResult = displayString(for: historyResult, useActiveCurrency: false)
+            displayResult = displayResultOverride ?? displayString(for: historyResult, useActiveCurrency: false)
             displayExpression = displayExpressionOverride ?? completedOperationDisplayExpression(expression)
         }
 
@@ -2195,6 +2214,7 @@ public final class CalculatorViewModel: ObservableObject {
             activeCurrencySymbol: activeCurrencySymbol,
             isPendingEntryClearedByClearButton: isPendingEntryClearedByClearButton,
             shouldPreserveTypedCurrencyInput: shouldPreserveTypedCurrencyInput,
+            resultUsesPercentToken: resultUsesPercentToken,
             displayEditCursorIndex: displayEditCursorIndex
         )
     }
@@ -2226,6 +2246,7 @@ public final class CalculatorViewModel: ObservableObject {
         activeCurrencySymbol = snapshot.activeCurrencySymbol
         isPendingEntryClearedByClearButton = snapshot.isPendingEntryClearedByClearButton
         shouldPreserveTypedCurrencyInput = snapshot.shouldPreserveTypedCurrencyInput
+        resultUsesPercentToken = snapshot.resultUsesPercentToken
         displayEditCursorIndex = snapshot.displayEditCursorIndex
         trimToNewestEntries(&history, maxCount: Limits.maxStoredHistoryEntries)
         trimToNewestEntries(&memoryEntries, maxCount: Limits.maxStoredMemoryEntries)
@@ -2916,6 +2937,7 @@ public final class CalculatorViewModel: ObservableObject {
         expression = ""
         currentInput = "0"
         currentToken = "0"
+        resultUsesPercentToken = false
         shouldResetInputOnNextDigit = false
         justEvaluated = false
         isErrorState = false
@@ -3192,22 +3214,6 @@ public final class CalculatorViewModel: ObservableObject {
         pendingOperator != nil && accumulatorUsesStandalonePercentToken
     }
 
-    private var shouldFinalizeCurrencyPendingPercentAsStandaloneResult: Bool {
-        guard activeCurrencySymbol != nil,
-              let pendingOperator,
-              currentToken.hasSuffix("%"),
-              !shouldResetInputOnNextDigit else {
-            return false
-        }
-
-        switch pendingOperator {
-        case .add, .subtract:
-            return true
-        case .multiply, .divide:
-            return false
-        }
-    }
-
     private var pendingOperatorShouldKeepPercentToken: Bool {
         pendingOperator != nil
     }
@@ -3217,6 +3223,12 @@ public final class CalculatorViewModel: ObservableObject {
             return false
         }
 
+        // A percent-of-percent result has no pending operator left, so it needs
+        // its own reason to keep showing the token rather than the raw decimal.
+        if resultUsesPercentToken {
+            return true
+        }
+
         if isExpressionMode && !shouldResetInputOnNextDigit {
             return true
         }
@@ -3224,31 +3236,26 @@ public final class CalculatorViewModel: ObservableObject {
         return pendingOperator != nil
     }
 
-    private var accumulatorUsesStandalonePercentToken: Bool {
-        accumulatorToken?.hasSuffix("%") == true
+    // True when both sides of the operation were themselves standalone percent
+    // tokens: 9% + 9% is 18%, not 0.18. Restricted to + and − because × and ÷
+    // combine the percentages instead of accumulating them (9% × 9% is 0.81%).
+    private func operationYieldsPercentResult(pending: BinaryOperator, lhsToken: String, rhsToken: String) -> Bool {
+        guard lhsToken.hasSuffix("%"), rhsToken.hasSuffix("%") else { return false }
+
+        switch pending {
+        case .add, .subtract:
+            return true
+        case .multiply, .divide:
+            return false
+        }
     }
 
-    private func finalizeCurrencyPendingPercentAsStandaloneResult() {
-        guard let pending = pendingOperator else { return }
+    private func percentTokenString(forStoredValue value: Decimal) -> String {
+        "\(format(value * 100))%"
+    }
 
-        let lhsToken = accumulatorToken ?? currentToken
-        let rhsToken = currentToken
-        let resultText = format(parseStoredNumber(currentInput) ?? 0)
-        let expressionText = "\(lhsToken) \(pending.symbol) \(rhsToken)"
-
-        appendHistory(expression: expressionText, result: resultText)
-        lastResultSummary = expressionText + " ="
-        currentInput = resultText
-        currentToken = displayString(for: resultText, useActiveCurrency: false)
-        accumulator = parseStoredNumber(resultText)
-        accumulatorToken = currentToken
-        pendingOperator = nil
-        lastOperator = nil
-        lastOperand = nil
-        lastOperandToken = nil
-        expression = ""
-        shouldResetInputOnNextDigit = true
-        justEvaluated = true
+    private var accumulatorUsesStandalonePercentToken: Bool {
+        accumulatorToken?.hasSuffix("%") == true
     }
 
     private func resolvedPercentValue() -> Decimal {
