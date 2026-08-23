@@ -20,6 +20,7 @@
 "settings.percent.classicBehavior" = "代替キーパッドを使用";
 "settings.buttonSound.disabled" = "ボタン音を無効にする";
 "settings.credits" = "このアプリについて";
+"settings.feedback" = "フィードバック";
 "settings.credits.version" = "バージョン %@";
 "mac.about.windowTitle" = "%@について";
 "settings.credit.part1" = "© 2026 Tipli AI, LLC. EnterCalc はオープンソースで、MIT ライセンスのもとで公開されています。プロジェクトへの貢献は ";

@@ -1,4 +1,6 @@
 import SwiftUI
+// Provides the requestReview environment action used for the in-app prompt.
+import StoreKit
 #if canImport(UIKit)
 import UIKit
 #if canImport(CoreHaptics)
@@ -67,6 +69,66 @@ import EnterCalcCore
 extension Notification.Name {
     static let enterCalcIOSToggleHistoryPanel = Notification.Name("EnterCalc.iOS.ToggleHistoryPanel")
     static let enterCalcIOSToggleRoundingPanel = Notification.Name("EnterCalc.iOS.ToggleRoundingPanel")
+}
+
+// Tracks the usage the review prompt is gated on, and remembers which release
+// already asked.
+//
+// Days are stored as a rolling set of day stamps rather than a counter so that
+// repeated use on one day counts once, which is the whole point of the gate.
+@MainActor
+final class ReviewPromptTracker {
+    static let shared = ReviewPromptTracker()
+
+    private static let daysUsedKey = "review.daysUsed"
+    private static let lastPromptedVersionKey = "review.lastPromptedVersion"
+
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    /// Records that the app was used today. Cheap and idempotent within a day.
+    func recordUsageToday(now: Date = Date(), calendar: Calendar = .current) {
+        let today = Self.dayStamp(for: now, calendar: calendar)
+        var days = defaults.stringArray(forKey: Self.daysUsedKey) ?? []
+        guard !days.contains(today) else { return }
+
+        days.append(today)
+        // Only the count matters, so keep this from growing without bound.
+        let trimmed: [String] = Array(days.suffix(30))
+        defaults.set(trimmed, forKey: Self.daysUsedKey)
+    }
+
+    var distinctDaysUsed: Int {
+        defaults.stringArray(forKey: Self.daysUsedKey)?.count ?? 0
+    }
+
+    func shouldRequestReview(completedCalculations: Int) -> Bool {
+        ReviewPromptPolicy.shouldRequestReview(
+            completedCalculations: completedCalculations,
+            distinctDaysUsed: distinctDaysUsed,
+            lastPromptedVersion: defaults.string(forKey: Self.lastPromptedVersionKey),
+            currentVersion: Self.currentVersion
+        )
+    }
+
+    /// Called once the prompt has been asked for, so this release does not ask
+    /// again. Recorded even though the system may choose not to show anything —
+    /// we have spent our one ask for this version either way.
+    func recordPromptShown() {
+        defaults.set(Self.currentVersion, forKey: Self.lastPromptedVersionKey)
+    }
+
+    private static func dayStamp(for date: Date, calendar: Calendar) -> String {
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        return "\(parts.year ?? 0)-\(parts.month ?? 0)-\(parts.day ?? 0)"
+    }
+
+    private static var currentVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+    }
 }
 
 // Caches whether haptics are switched off, so the key-press path does not touch
@@ -344,6 +406,7 @@ struct EnterCalcIOSView: View {
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.requestReview) private var requestReview
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotionEnabled
     @ScaledMetric(relativeTo: .largeTitle) private var displayDynamicTypeScale: CGFloat = 1.0
     @State private var activeOverlay: IOSOverlayPane? = nil
@@ -599,6 +662,7 @@ struct EnterCalcIOSView: View {
             }
             .onAppear {
                 syncSystemSettingsMetadata()
+                ReviewPromptTracker.shared.recordUsageToday()
                 normalizePreferredLanguageIfNeeded()
                 syncHomeScreenFromStoredSettings()
                 applyActiveScreenConfiguration()
@@ -2683,6 +2747,22 @@ private extension EnterCalcIOSView {
         CalculatorButtonSound.playEnterClick()
     }
 
+    // Asks for a review only after a completed calculation, so the prompt lands
+    // on a finished task rather than interrupting one. The work is deferred so
+    // it stays off the press-to-display path, and the gate is a couple of
+    // integer comparisons before that.
+    func requestReviewIfEarned(for screen: CalculatorScreenSession) {
+        let completed = screen.viewModel.completedCalculationCount
+        guard ReviewPromptTracker.shared.shouldRequestReview(completedCalculations: completed) else {
+            return
+        }
+
+        ReviewPromptTracker.shared.recordPromptShown()
+        DispatchQueue.main.async {
+            requestReview()
+        }
+    }
+
     func prepareActionFeedbackGenerators() {
 #if canImport(UIKit)
         IOSActionHaptics.keyPressImpact.prepare()
@@ -2784,6 +2864,7 @@ private extension EnterCalcIOSView {
                                         if isLandscapeMode {
                                             resetLandscapeDisplayScroll(for: screen)
                                         }
+                                        requestReviewIfEarned(for: screen)
                                     },
                                     reduceMotionEnabled: reduceMotionEnabled,
                                     operatorRevealProgress: operatorRevealProgress,
@@ -3325,11 +3406,24 @@ private struct IOSSettingsSheet: View {
                     }
 
                     Section(localized("settings.credits")) {
+                        // Plain system font, not the app font: the only bundled
+                        // non-thin weight is SemiBold, which reads as bold for
+                        // standing text and does not match the setting rows
+                        // above. This is supporting copy, not emphasis.
                         Text(creditAttributedString())
-                            .font(EnterCalcFont.appFont(size: settingsAboutTextSize))
-                        Text(String(format: localized("settings.credits.version"), versionString))
-                            .font(EnterCalcFont.appFont(size: settingsAboutTextSize))
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: settingsAboutTextSize))
+                        // Version and the feedback link share a row: both are
+                        // "about this app", and it keeps the section to two rows.
+                        HStack(spacing: 12) {
+                            Text(String(format: localized("settings.credits.version"), versionString))
+                                .font(.system(size: settingsAboutTextSize))
+                                .foregroundStyle(.secondary)
+
+                            Spacer(minLength: 0)
+
+                            Link(localized("settings.feedback"), destination: SupportLinks.supportURL)
+                                .font(.system(size: settingsAboutTextSize))
+                        }
                     }
                 }
                 .scrollContentBackground(.hidden)

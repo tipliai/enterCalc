@@ -154,6 +154,11 @@ public final class CalculatorViewModel: ObservableObject {
     @Published public private(set) var isResultRoundingEnabled: Bool = false
     @Published public private(set) var resultRoundingPrecision: Int = 4
     @Published public private(set) var activeCurrencySymbol: String?
+    /// Monotonic count of calculations carried through to a result, used to
+    /// judge whether the app is genuinely in use. Deliberately outside the undo
+    /// snapshot and unaffected by clearing history: it records what the person
+    /// did, not what the calculator currently shows.
+    public private(set) var completedCalculationCount: Int = 0
     @Published public private(set) var displayEditCursorIndex: Int?
     private var currentErrorKey: String? = nil
 
@@ -2099,6 +2104,8 @@ public final class CalculatorViewModel: ObservableObject {
             displayResult = displayResultOverride ?? displayString(for: historyResult, useActiveCurrency: false)
             displayExpression = displayExpressionOverride ?? completedOperationDisplayExpression(expression)
         }
+
+        completedCalculationCount += 1
 
         let boundedExpression = String(historyExpression.prefix(Limits.maxHistoryExpressionCharacters))
         let boundedResult = String(historyResult.prefix(Limits.maxHistoryResultCharacters))
