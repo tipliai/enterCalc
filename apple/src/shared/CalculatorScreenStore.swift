@@ -10,7 +10,6 @@ public struct CalculatorScreenSettings: Equatable {
     public var usesScientificNotation: Bool
     public var numberFormatStyleRawValue: String
     public var usesAlternativeKeypad: Bool
-    public var usesEnterKeySymbol: Bool
     public var disablesSwipeDownToRound: Bool
     public var disablesButtonSound: Bool
     public var keypadHeightMultiplier: Double
@@ -21,7 +20,6 @@ public struct CalculatorScreenSettings: Equatable {
         usesScientificNotation: Bool,
         numberFormatStyleRawValue: String,
         usesAlternativeKeypad: Bool,
-        usesEnterKeySymbol: Bool = true,
         disablesSwipeDownToRound: Bool = false,
         disablesButtonSound: Bool = false,
         keypadHeightMultiplier: Double = 1.0
@@ -31,7 +29,6 @@ public struct CalculatorScreenSettings: Equatable {
         self.usesScientificNotation = usesScientificNotation
         self.numberFormatStyleRawValue = numberFormatStyleRawValue
         self.usesAlternativeKeypad = usesAlternativeKeypad
-        self.usesEnterKeySymbol = usesEnterKeySymbol
         self.disablesSwipeDownToRound = disablesSwipeDownToRound
         self.disablesButtonSound = disablesButtonSound
         self.keypadHeightMultiplier = keypadHeightMultiplier
