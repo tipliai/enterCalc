@@ -431,6 +431,15 @@ struct EnterCalcIOSView: View {
     @ScaledMetric(relativeTo: .largeTitle) private var displayDynamicTypeScale: CGFloat = 1.0
     @State private var activeOverlay: IOSOverlayPane? = nil
     @State private var showSettingsSheet: Bool = false
+    /// Live hold-and-drag reassignment of a configurable key, if one is running.
+    @State private var functionChooser: FunctionKeyChooserSession? = nil
+    // Currency-mode tool settings (#92). Session state rather than a stored
+    // preference: they belong to the calculation in progress, the same way the
+    // currency symbol itself does.
+    @State private var vatRate: Decimal = 20
+    @State private var vatRemovesTax: Bool = false
+    @State private var tipRate: Decimal = 18
+    @State private var tipSplitCount: Int = TipBreakdown.defaultSplitCount
     @State private var counterRotatesForUpsideDownPortrait: Bool = false
     @State private var flashCopy: Bool = false
     @State private var showCopyToast: Bool = false
@@ -470,6 +479,8 @@ struct EnterCalcIOSView: View {
     @AppStorage("settings.rounding.disableSwipeDown") private var preferredDisablesSwipeDownToRound: Bool = false
     @AppStorage("settings.keypadHeightMultiplier") private var preferredKeypadHeightMultiplier: Double = 1.0
     @AppStorage("settings.reduceMotion.enabled") private var preferredReduceMotionEnabled: Bool = false
+    @AppStorage("settings.currency.symbol") private var preferredCurrencySymbol: String = CurrencyCatalog.detected().symbol
+    @AppStorage("settings.functionKeys.assignments") private var preferredFunctionKeyAssignmentsRaw: String = ""
 
     private var activeScreen: CalculatorScreenSession {
         screenStore.activeScreen
@@ -493,7 +504,9 @@ struct EnterCalcIOSView: View {
             usesAlternativeKeypad: preferredUsesAlternativeKeypad,
             disablesSwipeDownToRound: preferredDisablesSwipeDownToRound,
             disablesButtonSound: false,
-            keypadHeightMultiplier: keypadHeightMultiplier
+            keypadHeightMultiplier: keypadHeightMultiplier,
+            currencySymbol: preferredCurrencySymbol,
+            functionKeyAssignments: CalculatorFunctionKeyAssignments(serialized: preferredFunctionKeyAssignmentsRaw)
         )
     }
 
@@ -555,6 +568,8 @@ struct EnterCalcIOSView: View {
         isResizingKeypadHeight || liveHistoryOverlayHeight != nil
     }
 
+    // The alternative keypad has no configurable keys, so unlike `basicRows`
+    // it needs nothing from the screen.
     private var legacyRows: [[IOSCalcButton]] {
         [
             [
@@ -587,12 +602,12 @@ struct EnterCalcIOSView: View {
         ]
     }
 
-    private var basicRows: [[IOSCalcButton]] {
+    private func basicRows(for screen: CalculatorScreenSession) -> [[IOSCalcButton]] {
         [
             [
                 .function(clearButtonTitle, action: { _ in self.handleContextualClear() }),
-                .function("( )", action: { $0.inputParentheses() }),
-                .function("%", action: { $0.applyPercent() }),
+                configurableKeypadButton(for: .parenthesesKey, screen: screen),
+                configurableKeypadButton(for: .percentKey, screen: screen),
                 .operation("÷", action: { $0.setOperator(.divide) })
             ],
             [
@@ -612,23 +627,154 @@ struct EnterCalcIOSView: View {
         ]
     }
 
-    private var mainRows: [[IOSCalcButton]] {
-        usesAlternativeKeypad ? legacyRows : basicRows
+    private func mainRows(for screen: CalculatorScreenSession) -> [[IOSCalcButton]] {
+        screen.settings.usesAlternativeKeypad ? legacyRows : basicRows(for: screen)
     }
 
-    private var actionRowButtons: [IOSActionRowButton] {
-        guard !usesAlternativeKeypad else { return [] }
-        return [
-            IOSActionRowButton(symbol: "arrow.uturn.backward", accessibilityLabelKey: "undo", action: { $0.viewModel.undo() }),
-            IOSActionRowButton(symbol: "arrow.uturn.forward", accessibilityLabelKey: "redo", action: { $0.viewModel.redo() }),
-            IOSActionRowButton(symbol: "plusminus", accessibilityLabelKey: "toggleSign", action: { $0.viewModel.toggleSign() }),
-            IOSActionRowButton(symbol: "slider.horizontal.below.rectangle", accessibilityLabelKey: "rounding.toggle", action: { _ in toggleOverlay(.rounding) }),
-            IOSActionRowButton(symbol: "delete.left", accessibilityLabelKey: "backspace", action: { $0.viewModel.backspace() })
-        ]
+    // MARK: - Configurable function keys (#67)
+
+    /// Which functions the page currently shows. Per page, so two pages can be
+    /// set up for different work.
+    func functionKeyAssignments(for screen: CalculatorScreenSession) -> CalculatorFunctionKeyAssignments {
+        screen.settings.functionKeyAssignments
     }
 
-    private var flattenedMainButtons: [IOSCalcButton] {
-        mainRows.flatMap { $0 }
+    /// The active page's layout, for the chooser overlay — which only ever
+    /// belongs to the page the user is interacting with.
+    var functionKeyAssignments: CalculatorFunctionKeyAssignments {
+        functionKeyAssignments(for: activeScreen)
+    }
+
+    /// Only the default keypad has configurable keys. The alternative keypad
+    /// has no action row and already carries fixed 1/x, x² and √x keys, so
+    /// reassigning its two large keys could put the same function on screen
+    /// twice.
+    func supportsConfigurableFunctionKeys(for screen: CalculatorScreenSession) -> Bool {
+        !screen.settings.usesAlternativeKeypad
+    }
+
+    var supportsConfigurableFunctionKeys: Bool {
+        supportsConfigurableFunctionKeys(for: activeScreen)
+    }
+
+    private func actionRowSlots(for screen: CalculatorScreenSession) -> [CalculatorFunctionSlot] {
+        supportsConfigurableFunctionKeys(for: screen) ? CalculatorFunctionSlot.actionRowSlots : []
+    }
+
+    func functionKeyLabel(_ function: CalculatorFunctionKey) -> String {
+        localized(function.accessibilityLabelKey)
+    }
+
+    func performFunction(_ function: CalculatorFunctionKey, on screen: CalculatorScreenSession) {
+        switch function {
+        case .undo: screen.viewModel.undo()
+        case .redo: screen.viewModel.redo()
+        case .toggleSign: screen.viewModel.toggleSign()
+        case .currency: screen.viewModel.toggleCurrencySymbol(screen.settings.currencySymbol)
+        case .rounding: toggleOverlay(.rounding)
+        case .backspace: screen.viewModel.backspace()
+        case .squareRoot: screen.viewModel.squareRoot()
+        case .square: screen.viewModel.square()
+        case .reciprocal: screen.viewModel.reciprocal()
+        case .parentheses: screen.viewModel.inputParentheses()
+        case .percent: screen.viewModel.applyPercent()
+        }
+    }
+
+    private func configurableKeypadButton(for slot: CalculatorFunctionSlot, screen: CalculatorScreenSession) -> IOSCalcButton {
+        let function = functionKeyAssignments(for: screen)[slot]
+        return .configurable(
+            slot: slot,
+            function: function,
+            currencySymbol: screen.settings.currencySymbol,
+            accessibilityLabel: functionKeyLabel(function)
+        )
+    }
+
+    func openFunctionChooser(for slot: CalculatorFunctionSlot, anchor: CGRect, dragging: Bool) {
+        guard supportsConfigurableFunctionKeys else { return }
+        DebugLog.emit("functionKeys", "chooser opened for \(slot.rawValue)")
+        animateIfAllowed(.easeOut(duration: 0.14)) {
+            functionChooser = FunctionKeyChooserSession(
+                slot: slot,
+                anchor: anchor,
+                dragLocation: dragging ? CGPoint(x: anchor.midX, y: anchor.midY) : nil
+            )
+        }
+        triggerActionFeedback()
+    }
+
+    func updateFunctionChooserDrag(_ location: CGPoint) {
+        guard functionChooser != nil else { return }
+        functionChooser?.dragLocation = location
+    }
+
+    func highlightFunctionChooserOption(_ function: CalculatorFunctionKey?) {
+        guard functionChooser?.highlighted != function else { return }
+        functionChooser?.highlighted = function
+        if function != nil { triggerActionFeedback() }
+    }
+
+    /// Lifting a finger that is already over an option commits it. Lifting
+    /// anywhere else leaves the chooser on screen so the option can be tapped
+    /// instead — the hold does not have to become a drag.
+    func releaseFunctionChooser() {
+        guard let session = functionChooser else { return }
+        if let function = session.highlighted {
+            commitFunctionChooser(function)
+            return
+        }
+
+        // No longer a drag, so the panel stops tracking a finger and waits.
+        functionChooser?.dragLocation = nil
+        functionChooser?.highlighted = nil
+    }
+
+    func commitFunctionChooser(_ function: CalculatorFunctionKey) {
+        guard let session = functionChooser else { return }
+        updateActiveScreenSettings { $0.functionKeyAssignments.assign(function, to: session.slot) }
+        triggerActionFeedback(emphasized: true)
+        DebugLog.emit("functionKeys", "\(session.slot.rawValue) = \(function.rawValue); layout = \(describeFunctionKeyLayout())")
+        dismissFunctionChooser()
+    }
+
+    func describeFunctionKeyLayout() -> String {
+        let assignments = functionKeyAssignments
+        return CalculatorFunctionSlot.allCases
+            .map { "\($0.rawValue):\(assignments[$0].rawValue)" }
+            .joined(separator: " ")
+    }
+
+    func dismissFunctionChooser() {
+        animateIfAllowed(.easeOut(duration: 0.14)) {
+            functionChooser = nil
+        }
+    }
+
+    @ViewBuilder
+    func functionChooserOverlay() -> some View {
+        if let session = functionChooser {
+            ZStack {
+                // Catches the tap that dismisses a chooser opened without a
+                // drag (VoiceOver's "Change function" action).
+                Color.black.opacity(0.001)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { dismissFunctionChooser() }
+
+                CalculatorFunctionKeyChooser(
+                    session: session,
+                    assignments: functionKeyAssignments,
+                    palette: palette,
+                    currencySymbol: activeScreen.settings.currencySymbol,
+                    title: localized("functionKey.chooser.title"),
+                    label: { functionKeyLabel($0) },
+                    onHighlight: { highlightFunctionChooserOption($0) },
+                    onCommit: { commitFunctionChooser($0) }
+                )
+            }
+            .transition(.opacity)
+        }
     }
 
     var body: some View {
@@ -658,6 +804,10 @@ struct EnterCalcIOSView: View {
 
                 overlayPanels(metrics: metrics, containerSize: geometry.size, safeAreaInsets: geometry.safeAreaInsets)
                     .rotationEffect(.degrees(counterRotatesForUpsideDownPortrait ? 180 : 0))
+
+                functionChooserOverlay()
+                    .rotationEffect(.degrees(counterRotatesForUpsideDownPortrait ? 180 : 0))
+                    .zIndex(3)
 
                 if showCopyToast && !(metrics.mode == .phonePortrait && counterRotatesForUpsideDownPortrait) {
                     copyToastOverlay(metrics: metrics, safeAreaInsets: geometry.safeAreaInsets)
@@ -699,6 +849,11 @@ struct EnterCalcIOSView: View {
             .onDisappear {
                 stopDisplayShimmerParallaxMotion()
                 stopDeviceOrientationObservation()
+            }
+            // Leaving currency mode takes its tools with it, so a panel is
+            // never left open over a calculator that is no longer in the mode.
+            .onValueChange(of: activeScreen.viewModel.activeCurrencySymbol) { _ in
+                dismissCurrencyToolsIfNeeded()
             }
             .onValueChange(of: scenePhase) { newPhase in
                 guard newPhase == .active else {
@@ -1123,6 +1278,8 @@ private extension EnterCalcIOSView {
             preferredUsesAlternativeKeypad = updated.usesAlternativeKeypad
             preferredDisablesSwipeDownToRound = updated.disablesSwipeDownToRound
             preferredKeypadHeightMultiplier = updated.keypadHeightMultiplier
+            preferredCurrencySymbol = updated.currencySymbol
+            preferredFunctionKeyAssignmentsRaw = updated.functionKeyAssignments.serialized
             screenStore.syncHomeScreenSettings(updated)
         } else {
             activeScreen.replaceSettings(updated)
@@ -1221,6 +1378,48 @@ private extension EnterCalcIOSView {
                         onCopyEntry: { entry in copyHistoryEntryResultToPasteboard(entry, from: activeScreen.viewModel) },
                         onCopyOperationEntry: { entry in copyHistoryEntryOperationToPasteboard(entry, from: activeScreen.viewModel) }
                     )
+                }
+            } else if activeOverlay == .vat {
+                roundingOverlayPanel(metrics: metrics) {
+                    CurrencyVATPanel(
+                        value: activeScreen.viewModel.currentValue,
+                        rate: vatRate,
+                        isRemoving: vatRemovesTax,
+                        palette: palette,
+                        localized: { localized($0) },
+                        format: { activeScreen.viewModel.formattedValue($0) },
+                        formatRate: { activeScreen.viewModel.formattedValue($0, includingCurrency: false) },
+                        onRateChange: { vatRate = $0; triggerActionFeedback() },
+                        onDirectionChange: { vatRemovesTax = $0; triggerActionFeedback() },
+                        onApply: { result in
+                            activeScreen.viewModel.applyToolResult(result, describedBy: vatSummary())
+                            triggerActionFeedback(emphasized: true)
+                            dismissActiveOverlay()
+                        },
+                        onDismiss: { dismissActiveOverlay() }
+                    )
+                    .padding(.bottom, roundingPanelBottomInset(mode: metrics.mode, isUpsideDown: counterRotatesForUpsideDownPortrait, safeAreaBottom: safeAreaInsets.bottom))
+                }
+            } else if activeOverlay == .tip {
+                roundingOverlayPanel(metrics: metrics) {
+                    CurrencyTipPanel(
+                        bill: activeScreen.viewModel.currentValue,
+                        rate: tipRate,
+                        splitCount: tipSplitCount,
+                        palette: palette,
+                        localized: { localized($0) },
+                        format: { activeScreen.viewModel.formattedValue($0) },
+                        formatRate: { activeScreen.viewModel.formattedValue($0, includingCurrency: false) },
+                        onRateChange: { tipRate = $0; triggerActionFeedback() },
+                        onSplitChange: { tipSplitCount = clampedSplitCount($0); triggerActionFeedback() },
+                        onApply: { result in
+                            activeScreen.viewModel.applyToolResult(result, describedBy: tipSummary())
+                            triggerActionFeedback(emphasized: true)
+                            dismissActiveOverlay()
+                        },
+                        onDismiss: { dismissActiveOverlay() }
+                    )
+                    .padding(.bottom, roundingPanelBottomInset(mode: metrics.mode, isUpsideDown: counterRotatesForUpsideDownPortrait, safeAreaBottom: safeAreaInsets.bottom))
                 }
             } else if activeOverlay == .rounding {
                 roundingOverlayPanel(metrics: metrics) {
@@ -2582,10 +2781,12 @@ private extension EnterCalcIOSView {
                     )
                     .opacity(isBasicSpaceInUse ? 0 : 1)
                     .animation(reduceMotionEnabled ? nil : .easeInOut(duration: 0.5), value: isBasicSpaceInUse)
-                    // The row carries the currency key, so it has to take taps;
-                    // the label inside opts out individually so tapping the
-                    // display still copies. A fully faded row is not tappable.
-                    .allowsHitTesting(!isBasicSpaceInUse)
+                    // The row carries the VAT and TIP buttons in currency
+                    // mode, so it has to take taps then; the label inside opts
+                    // out individually so tapping the display still copies. In
+                    // Basic mode there is nothing to hit, and a fully faded row
+                    // is never tappable.
+                    .allowsHitTesting(activeScreen.viewModel.activeCurrencySymbol != nil && !isBasicSpaceInUse)
                 }
             }
             .overlay(alignment: .top) {
@@ -2614,19 +2815,17 @@ private extension EnterCalcIOSView {
         activeScreen.viewModel.activeCurrencySymbol == nil ? "calculator.mode.basic" : "calculator.mode.currency"
     }
 
-    // Outlined text control, deliberately unlike a keypad key: it changes how
-    // the value is labelled rather than entering anything.
-    func currencyToggleButton(metrics: IOSLayoutMetrics, opacity: Double) -> some View {
-        let isActive = activeScreen.viewModel.activeCurrencySymbol != nil
-        let symbol = activeScreen.settings.currencySymbol
+    /// Compact outlined pill, deliberately unlike a keypad key: it opens a tool
+    /// rather than entering anything.
+    func currencyToolButton(metrics: IOSLayoutMetrics, titleKey: String, pane: IOSOverlayPane, opacity: Double) -> some View {
+        let isActive = activeOverlay == pane
         return Button {
-            activeScreen.viewModel.toggleCurrencySymbol(symbol)
+            toggleOverlay(pane)
         } label: {
-            Text(symbol)
+            Text(localized(titleKey))
                 .font(EnterCalcFont.appFont(size: metrics.memoryFontSize))
                 .foregroundStyle((isActive ? palette.accent : palette.textPrimary).opacity(opacity))
-                .frame(minWidth: 22)
-                .padding(.horizontal, 6)
+                .padding(.horizontal, 7)
                 .padding(.vertical, 2)
                 .overlay(
                     RoundedRectangle(cornerRadius: 5)
@@ -2637,11 +2836,36 @@ private extension EnterCalcIOSView {
                 )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(Text(localized("calculator.currency.toggle")))
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 
+    func clampedSplitCount(_ count: Int) -> Int {
+        min(max(count, TipBreakdown.splitCountRange.lowerBound), TipBreakdown.splitCountRange.upperBound)
+    }
+
+    /// The operation line left behind after a tool writes its result, so the
+    /// display says where the number came from.
+    func vatSummary() -> String {
+        let rate = activeScreen.viewModel.formattedValue(vatRate, includingCurrency: false)
+        let action = localized(vatRemovesTax ? "currency.vat.remove" : "currency.vat.add")
+        return "\(action) \(rate)% ="
+    }
+
+    func tipSummary() -> String {
+        let rate = activeScreen.viewModel.formattedValue(tipRate, includingCurrency: false)
+        return "\(localized("currency.tip.title")) \(rate)% ="
+    }
+
+    /// Leaving currency mode takes the tools with it, so a panel is never left
+    /// open over a calculator that is no longer in currency mode.
+    func dismissCurrencyToolsIfNeeded() {
+        guard activeScreen.viewModel.activeCurrencySymbol == nil else { return }
+        guard activeOverlay == .vat || activeOverlay == .tip else { return }
+        dismissActiveOverlay()
+    }
+
     func memoryControls(metrics: IOSLayoutMetrics, opacity: Double) -> some View {
+        let showsCurrencyTools = activeScreen.viewModel.activeCurrencySymbol != nil
         return HStack(spacing: 8) {
             Text(localized(currentModeLabelKey))
                 .font(EnterCalcFont.appFont(size: metrics.memoryFontSize))
@@ -2652,7 +2876,10 @@ private extension EnterCalcIOSView {
 
             Spacer(minLength: 4)
 
-            currencyToggleButton(metrics: metrics, opacity: opacity)
+            if showsCurrencyTools {
+                currencyToolButton(metrics: metrics, titleKey: "currency.vat.title", pane: .vat, opacity: opacity)
+                currencyToolButton(metrics: metrics, titleKey: "currency.tip.title", pane: .tip, opacity: opacity)
+            }
         }
             .frame(maxWidth: .infinity, minHeight: metrics.memoryHeight, maxHeight: metrics.memoryHeight, alignment: .leading)
             .padding(.horizontal, metrics.displayHorizontalPadding)
@@ -2903,28 +3130,40 @@ private extension EnterCalcIOSView {
     }
 
     func keypad(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, buttonHeight: CGFloat) -> some View {
-        let actionColumns = Array(repeating: GridItem(.flexible(), spacing: metrics.gridSpacing), count: 5)
+        let slots = actionRowSlots(for: screen)
+        let actionColumns = Array(repeating: GridItem(.flexible(), spacing: metrics.gridSpacing), count: max(slots.count, 1))
         let isLandscapeMode = metrics.mode == .phoneLandscape || metrics.mode == .padWide
         let compactActionHeight = max(18, buttonHeight / 3)
-        let showsCompactActionRow = !screen.settings.usesAlternativeKeypad
+        let showsCompactActionRow = !slots.isEmpty
+        let assignments = functionKeyAssignments(for: screen)
 
         return VStack(spacing: metrics.gridSpacing) {
             if showsCompactActionRow {
                 LazyVGrid(columns: actionColumns, spacing: metrics.gridSpacing) {
-                    ForEach(Array(actionRowButtons.enumerated()), id: \.offset) { _, button in
+                    ForEach(slots) { slot in
+                        let function = assignments[slot]
                         IOSCompactActionButton(
-                            button: button,
-                            accessibilityLabel: localized(button.accessibilityLabelKey),
+                            button: IOSActionRowButton(slot: slot, function: function),
+                            accessibilityLabel: functionKeyLabel(function),
+                            currencySymbol: screen.settings.currencySymbol,
+                            changeActionName: localized("functionKey.change"),
+                            holdHint: localized("functionKey.hint"),
                             palette: palette,
                             height: compactActionHeight,
                             reduceMotionEnabled: reduceMotionEnabled,
+                            isConfigurable: supportsConfigurableFunctionKeys(for: screen),
                             pressFeedback: triggerActionFeedback,
                             action: {
-                                button.action(screen)
+                                performFunction(function, on: screen)
                                 if isLandscapeMode {
                                     resetLandscapeDisplayScroll(for: screen)
                                 }
-                            }
+                            },
+                            onChooserOpen: { slot, anchor, dragging in
+                                openFunctionChooser(for: slot, anchor: anchor, dragging: dragging)
+                            },
+                            onChooserDrag: { updateFunctionChooserDrag($0) },
+                            onChooserRelease: { releaseFunctionChooser() }
                         )
                     }
                 }
@@ -2934,7 +3173,7 @@ private extension EnterCalcIOSView {
             GeometryReader { keypadGeometry in
                 let spacing = metrics.gridSpacing
                 let cellWidth = max(0, (keypadGeometry.size.width - spacing * 3) / 4)
-                let rows = mainRows
+                let rows = mainRows(for: screen)
 
                 VStack(spacing: spacing) {
                     ForEach(rows.indices, id: \.self) { rowIndex in
@@ -2949,13 +3188,25 @@ private extension EnterCalcIOSView {
                                     buttonHeight: buttonHeight,
                                     pressFeedback: triggerKeyPressFeedback,
                                     action: {
-                                        button.action(screen.viewModel)
+                                        if let function = button.function {
+                                            performFunction(function, on: screen)
+                                        } else {
+                                            button.action(screen.viewModel)
+                                        }
                                         if isLandscapeMode {
                                             resetLandscapeDisplayScroll(for: screen)
                                         }
                                         requestReviewIfEarned(for: screen)
                                     },
                                     reduceMotionEnabled: reduceMotionEnabled,
+                                    isConfigurable: supportsConfigurableFunctionKeys(for: screen) && button.slot != nil,
+                                    changeActionName: localized("functionKey.change"),
+                                    holdHint: localized("functionKey.hint"),
+                                    onChooserOpen: { slot, anchor, dragging in
+                                        openFunctionChooser(for: slot, anchor: anchor, dragging: dragging)
+                                    },
+                                    onChooserDrag: { updateFunctionChooserDrag($0) },
+                                    onChooserRelease: { releaseFunctionChooser() },
                                     operatorRevealProgress: operatorRevealProgress,
                                     operatorAnimFadeOpacity: operatorAnimFadeOpacity
                                 )
@@ -4413,6 +4664,8 @@ private enum AppTheme: String, CaseIterable {
 private enum IOSOverlayPane {
     case history
     case rounding
+    case vat
+    case tip
 }
 
 // Coarse layout buckets that drive metric selection below.
@@ -4876,6 +5129,15 @@ private struct IOSCalcButton {
     let kind: Kind
     let action: (CalculatorViewModel) -> Void
     let columnSpan: Int
+    /// Drawn instead of `title` when the assigned function is an SF Symbol.
+    var symbolName: String? = nil
+    /// Set when the user can reassign this key by pressing and holding it.
+    var slot: CalculatorFunctionSlot? = nil
+    /// The function this key runs, when it comes from a slot.
+    var function: CalculatorFunctionKey? = nil
+    /// Overrides the title as the VoiceOver label, so a reassigned key
+    /// announces the function's name rather than its glyph.
+    var accessibilityLabel: String? = nil
 
     static func digit(_ title: String) -> IOSCalcButton {
         IOSCalcButton(title: title, kind: .digit, action: { $0.inputDigit(title) }, columnSpan: 1)
@@ -4895,6 +5157,42 @@ private struct IOSCalcButton {
 
     static func equals(title: String = "⏎", columnSpan: Int = 1) -> IOSCalcButton {
         IOSCalcButton(title: title, kind: .equals, action: { $0.evaluate() }, columnSpan: max(1, columnSpan))
+    }
+
+    /// A keypad key whose function the user chose. `action` is unused — the
+    /// keypad routes these through the view's function dispatcher, because
+    /// some functions (rounding) need more than the view model.
+    static func configurable(
+        slot: CalculatorFunctionSlot,
+        function: CalculatorFunctionKey,
+        currencySymbol: String,
+        accessibilityLabel: String
+    ) -> IOSCalcButton {
+        var title: String
+        var symbolName: String?
+
+        switch function.presentation {
+        case .symbol(let name):
+            title = ""
+            symbolName = name
+        case .text(let glyph):
+            title = glyph
+            symbolName = nil
+        case .currencySymbol:
+            title = currencySymbol
+            symbolName = nil
+        }
+
+        return IOSCalcButton(
+            title: title,
+            kind: .function,
+            action: { _ in },
+            columnSpan: 1,
+            symbolName: symbolName,
+            slot: slot,
+            function: function,
+            accessibilityLabel: accessibilityLabel
+        )
     }
 
     private static let highlightedTitles: Set<String> = []
@@ -4925,11 +5223,11 @@ private struct IOSCalcButton {
     }
 }
 
-// Model for a button in the secondary action row (copy, undo, history, etc.).
+// Model for a button in the secondary action row. Which function it runs is
+// the user's choice (#67), so it carries the slot as well as the function.
 private struct IOSActionRowButton {
-    let symbol: String
-    let accessibilityLabelKey: String
-    let action: (CalculatorScreenSession) -> Void
+    let slot: CalculatorFunctionSlot
+    let function: CalculatorFunctionKey
 }
 
 // Compact icon button for the action row. Plays a brief scale "pop" on press
@@ -4937,12 +5235,21 @@ private struct IOSActionRowButton {
 private struct IOSCompactActionButton: View {
     let button: IOSActionRowButton
     let accessibilityLabel: String
+    let currencySymbol: String
+    let changeActionName: String
+    let holdHint: String
     let palette: Palette
     let height: CGFloat
     let reduceMotionEnabled: Bool
+    let isConfigurable: Bool
     let pressFeedback: () -> Void
     let action: () -> Void
+    let onChooserOpen: (CalculatorFunctionSlot, CGRect, Bool) -> Void
+    let onChooserDrag: (CGPoint) -> Void
+    let onChooserRelease: () -> Void
     @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
+    @State private var suppressesTap: Bool = false
+    @State private var globalFrame: CGRect = .zero
     @State private var pressPopScale: CGFloat = 1.0
     @State private var pointerIsDown: Bool = false
     @State private var pressPopGeneration: Int = 0
@@ -4953,21 +5260,39 @@ private struct IOSCompactActionButton: View {
 
     var body: some View {
         Button {
+            // The same press that opened the chooser must not also run the
+            // function it is about to replace.
+            guard !suppressesTap else { return }
             // Result first, feedback second — see IOSKeypadButton.handleTap.
             action()
             pressFeedback()
         } label: {
-            Image(systemName: button.symbol)
-                .font(EnterCalcFont.appFont(size: boundedIconFontSize))
-                .foregroundStyle(palette.textPrimary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .contentShape(Rectangle())
-                .scaleEffect(reduceMotionEnabled ? 1.0 : pressPopScale)
+            FunctionKeyGlyph(
+                function: button.function,
+                currencySymbol: currencySymbol,
+                fontSize: boundedIconFontSize,
+                color: palette.textPrimary
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .scaleEffect(reduceMotionEnabled ? 1.0 : pressPopScale)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text(accessibilityLabel))
+        .accessibilityHint(isConfigurable ? Text(holdHint) : Text(""))
+        .accessibilityAction(named: Text(changeActionName)) {
+            guard isConfigurable else { return }
+            onChooserOpen(button.slot, globalFrame, false)
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
+        .background(
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { globalFrame = proxy.frame(in: .global) }
+                    .onChange(of: proxy.frame(in: .global)) { _, updated in globalFrame = updated }
+            }
+        )
         .simultaneousGesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in
@@ -4979,6 +5304,14 @@ private struct IOSCompactActionButton: View {
                 .onEnded { _ in
                     pointerIsDown = false
                 }
+        )
+        .functionKeyHold(
+            slot: button.slot,
+            isEnabled: isConfigurable,
+            suppressesTap: $suppressesTap,
+            onOpen: { slot, anchor in onChooserOpen(slot, anchor, true) },
+            onDrag: onChooserDrag,
+            onRelease: onChooserRelease
         )
         .background(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
@@ -5027,6 +5360,12 @@ private struct IOSKeypadButton: View {
     let pressFeedback: (IOSCalcButton.Kind) -> Void
     let action: () -> Void
     let reduceMotionEnabled: Bool
+    var isConfigurable: Bool = false
+    var changeActionName: String = ""
+    var holdHint: String = ""
+    var onChooserOpen: ((CalculatorFunctionSlot, CGRect, Bool) -> Void)? = nil
+    var onChooserDrag: ((CGPoint) -> Void)? = nil
+    var onChooserRelease: (() -> Void)? = nil
     @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
     var operatorRevealProgress: Double = 0.0
     var operatorAnimFadeOpacity: Double = 1.0
@@ -5036,6 +5375,8 @@ private struct IOSKeypadButton: View {
     @State private var shimmerVisible: Bool = false
     @State private var pressPopScale: CGFloat = 1.0
     @State private var pressPopGeneration: Int = 0
+    @State private var suppressesTap: Bool = false
+    @State private var globalFrame: CGRect = .zero
     private static let popGrowDuration: TimeInterval = 0.05
     private static let popSpringResponse: Double = 0.18
     private static let popSpringDamping: Double = 0.62
@@ -5088,14 +5429,40 @@ private struct IOSKeypadButton: View {
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .contentShape(RoundedRectangle(cornerRadius: scaledCornerRadius, style: .continuous))
                 .gesture(pressGesture(in: geometry.size))
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear
+                            .onAppear { globalFrame = proxy.frame(in: .global) }
+                            .onChange(of: proxy.frame(in: .global)) { _, updated in globalFrame = updated }
+                    }
+                )
+                .modifier(
+                    OptionalFunctionKeyHold(
+                        slot: configurableSlot,
+                        suppressesTap: $suppressesTap,
+                        onOpen: { slot, anchor in onChooserOpen?(slot, anchor, true) },
+                        onDrag: { onChooserDrag?($0) },
+                        onRelease: { onChooserRelease?() }
+                    )
+                )
                 .accessibilityElement()
-                .accessibilityLabel(Text(button.title))
+                .accessibilityLabel(Text(button.accessibilityLabel ?? button.title))
                 .accessibilityAddTraits(.isButton)
+                .accessibilityHint(configurableSlot == nil ? Text("") : Text(holdHint))
                 .accessibilityAction {
                     handleTap()
                 }
+                .accessibilityAction(named: Text(changeActionName)) {
+                    guard let slot = configurableSlot else { return }
+                    onChooserOpen?(slot, globalFrame, false)
+                }
         }
         .frame(height: buttonHeight)
+    }
+
+    /// The slot this key occupies, when reassignment is available here.
+    private var configurableSlot: CalculatorFunctionSlot? {
+        isConfigurable ? button.slot : nil
     }
 
     private var buttonSurface: some View {
@@ -5162,7 +5529,7 @@ private struct IOSKeypadButton: View {
 
         let isInsideButton = contains(location: value.location, in: size)
         let isTapEligible = isTapEligible(translation: value.translation)
-        let shouldBePressed = isInsideButton && isTapEligible && !touchCancelledBySwipe
+        let shouldBePressed = isInsideButton && isTapEligible && !touchCancelledBySwipe && !suppressesTap
         if shouldBePressed && !isPressed {
             triggerPressPopAnimation()
         }
@@ -5173,6 +5540,7 @@ private struct IOSKeypadButton: View {
         let shouldCommit = contains(location: value.location, in: size)
             && isTapEligible(translation: value.translation)
             && !touchCancelledBySwipe
+            && !suppressesTap
 
         isPressed = false
         touchCancelledBySwipe = false
@@ -5259,8 +5627,22 @@ private struct IOSKeypadButton: View {
         }
     }
 
+    // A key whose assigned function is an SF Symbol draws the symbol; every
+    // other key keeps the glyph rendering it has always had.
     @ViewBuilder
     private var labelView: some View {
+        if let symbolName = button.symbolName {
+            // Sized like the text glyphs rather than like the vector assets,
+            // which carry their own padding and so need the larger box.
+            Image(systemName: symbolName)
+                .font(EnterCalcFont.thinAppFont(size: symbolBaseSize))
+        } else {
+            glyphLabelView
+        }
+    }
+
+    @ViewBuilder
+    private var glyphLabelView: some View {
         switch button.title {
         case "1/x":
             let iconWidth = boundedIconSquareSize
@@ -5298,7 +5680,7 @@ private struct IOSKeypadButton: View {
                 .frame(width: iconFrameWidth, height: iconFrameHeight)
                 .scaleEffect(x: iconScaleX, y: iconScaleY)
                 .offset(x: iconOffsetX, y: iconOffsetY)
-        case "²√x":
+        case "²√x", "√x":
             let iconWidth = boundedIconSquareSize
             let iconHeight = boundedIconSquareSize
             let iconFrameWidth = iconWidth

@@ -364,7 +364,9 @@ public final class CalculatorViewModel: ObservableObject {
         return f
     }()
 
-    private var currentValue: Decimal {
+    /// The value currently on screen. Public so tools that operate on it —
+    /// the VAT and tip panels — read exactly what the display shows.
+    public var currentValue: Decimal {
         parseStoredNumber(currentInput) ?? 0
     }
 
@@ -1317,6 +1319,36 @@ public final class CalculatorViewModel: ObservableObject {
             isResultRoundingEnabled = false
             lastResultSummary = "\(entry.expression) ="
         }
+        accumulator = nil
+        pendingOperator = nil
+        lastOperator = nil
+        lastOperand = nil
+        expression = ""
+        currentToken = displayString(for: currentInput, useActiveCurrency: false)
+        accumulatorToken = nil
+        lastOperandToken = nil
+        shouldResetInputOnNextDigit = true
+        justEvaluated = true
+        isErrorState = false
+        currentErrorKey = nil
+        isPendingEntryClearedByClearButton = false
+        updateDisplay()
+        completeUndoableChange(from: snapshot)
+    }
+
+    /// Replaces what is on screen with a figure produced by one of the
+    /// Currency-mode tools (#92).
+    ///
+    /// Modelled on `reuse(_:)`: the value lands as a completed result, so the
+    /// next digit starts a fresh entry rather than appending to it, and the
+    /// whole thing is a single undo step. The currency symbol is left alone —
+    /// a VAT or tip figure is still money.
+    public func applyToolResult(_ value: Decimal, describedBy summary: String) {
+        let snapshot = beginUndoableChange()
+        currentInput = decimalNumberString(from: value)
+        shouldPreserveTypedCurrencyInput = false
+        isResultRoundingEnabled = false
+        lastResultSummary = summary
         accumulator = nil
         pendingOperator = nil
         lastOperator = nil
@@ -2944,6 +2976,19 @@ public final class CalculatorViewModel: ObservableObject {
         while index < raw.endIndex, raw[index].isWhitespace {
             index = raw.index(after: index)
         }
+    }
+
+    /// Formats a value the way the display would, so numbers produced outside
+    /// the keypad — a VAT split, a tip share — cannot drift from the ones the
+    /// calculator shows. Honours the current number format style, and prefixes
+    /// the active currency symbol unless asked not to.
+    public func formattedValue(_ value: Decimal, includingCurrency: Bool = true) -> String {
+        let formatted = format(value)
+        guard includingCurrency, let symbol = activeCurrencySymbol else { return formatted }
+
+        return formatted.hasPrefix("-")
+            ? "-\(symbol)\(formatted.dropFirst())"
+            : "\(symbol)\(formatted)"
     }
 
     private func format(_ value: Decimal) -> String {

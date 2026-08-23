@@ -58,3 +58,37 @@
 "screen.pageStatus" = "Pantalla %1$@ de %2$@";
 "window.new" = "Abrir nueva ventana";
 "history.toggle" = "Mostrar/ocultar historial";
+
+/* Teclas de función configurables (incidencia #67) */
+"function.squareRoot" = "Raíz cuadrada";
+"function.square" = "Cuadrado";
+"function.reciprocal" = "Inverso";
+"function.parentheses" = "Paréntesis";
+"function.percent" = "Porcentaje";
+"functionKey.chooser.title" = "Elegir función";
+"functionKey.change" = "Cambiar función";
+"functionKey.hint" = "Mantén pulsado para cambiar esta tecla";
+
+/* Herramientas del modo moneda: IVA y propina (incidencia #92) */
+"currency.vat.title" = "IVA";
+"currency.vat.add" = "Añadir IVA";
+"currency.vat.remove" = "Quitar IVA";
+"currency.vat.rate" = "Tipo";
+"currency.vat.rate.decrease" = "Reducir tipo";
+"currency.vat.rate.increase" = "Aumentar tipo";
+"currency.vat.net" = "Sin IVA";
+"currency.vat.amount" = "IVA";
+"currency.vat.gross" = "Con IVA";
+"currency.tip.title" = "Propina";
+"currency.tip.bill" = "Cuenta";
+"currency.tip.rate" = "Propina";
+"currency.tip.rate.decrease" = "Reducir propina";
+"currency.tip.rate.increase" = "Aumentar propina";
+"currency.tip.split" = "Dividir";
+"currency.tip.split.decrease" = "Menos personas";
+"currency.tip.split.increase" = "Más personas";
+"currency.tip.amount" = "Propina";
+"currency.tip.total" = "Total";
+"currency.tip.perPerson" = "Por persona";
+"currency.tool.use" = "Usar resultado";
+"currency.tool.close" = "Cerrar";

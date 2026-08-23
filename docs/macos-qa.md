@@ -15,6 +15,14 @@ System Settings → Privacy & Security → Accessibility
 
 It deliberately does *not* use screenshots, which would additionally require Screen Recording permission.
 
+**The screen has to be awake and unlocked.** With the display asleep or the Mac locked, the app still launches and its window still exists in the window server, but it never becomes key and the accessibility tree reports **zero windows** — so `state`, `tree` and everything built on them come back empty or fail with `Can't get window ... (-1719)`. Nothing in the output says why, and it looks exactly like a broken build. If the driver suddenly sees no windows, check this first:
+
+```bash
+swift -e 'import CoreGraphics; var n: UInt32 = 0; CGGetActiveDisplayList(0, nil, &n); print("active displays:", n)'
+```
+
+`0` means the display is asleep or the screen is locked. Wake it and the driver works again.
+
 ## Usage
 
 ```bash
