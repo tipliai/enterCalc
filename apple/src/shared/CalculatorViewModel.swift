@@ -654,7 +654,10 @@ public final class CalculatorViewModel: ObservableObject {
         shouldPreserveTypedCurrencyInput = false
         isResultRoundingEnabled = false
         resultRoundingPrecision = 4
-        activeCurrencySymbol = nil
+        // Currency mode deliberately survives All Clear. It is a mode the user
+        // switched on, not part of the calculation being cleared, so clearing
+        // the entry should not silently drop it. The currency key is the way
+        // out of it.
         displayEditCursorIndex = nil
     }
 

@@ -2485,17 +2485,17 @@ private struct SettingsSheet: View {
                         .pickerStyle(.menu)
                         .font(.system(size: settingsBodySize))
 
-                        Picker(macLocalized("settings.numberFormat.style", bundle: localizationBundle), selection: $selectedNumberFormat) {
-                            ForEach(NumberFormatStyle.allCases, id: \.self) { style in
-                                Text(style.example).tag(style)
+                        Picker(macLocalized("settings.currency.symbol", bundle: localizationBundle), selection: $selectedCurrencySymbol) {
+                            ForEach(CurrencyCatalog.all) { option in
+                                Text(option.symbol).tag(option.symbol)
                             }
                         }
                         .pickerStyle(.menu)
                         .font(.system(size: settingsBodySize))
 
-                        Picker(macLocalized("settings.currency.symbol", bundle: localizationBundle), selection: $selectedCurrencySymbol) {
-                            ForEach(CurrencyCatalog.all) { option in
-                                Text(option.symbol).tag(option.symbol)
+                        Picker(macLocalized("settings.numberFormat.style", bundle: localizationBundle), selection: $selectedNumberFormat) {
+                            ForEach(NumberFormatStyle.allCases, id: \.self) { style in
+                                Text(style.example).tag(style)
                             }
                         }
                         .pickerStyle(.menu)
