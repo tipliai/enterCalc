@@ -27,6 +27,10 @@ private enum IOSActionHaptics {
         true
 #endif
     }()
+    // `prepare()` warms the Taptic Engine, which takes time the system does not
+    // have if it is called in the same breath as the feedback. Preparing after
+    // firing warms the engine for the *next* press instead of adding work to
+    // this one, which is what the API is for.
     static func performKeyPress(isEnterKey: Bool = false) {
         guard supportsHaptics else {
             if !isEnterKey {
@@ -35,19 +39,19 @@ private enum IOSActionHaptics {
             return
         }
 
-        keyPressImpact.prepare()
         keyPressImpact.impactOccurred(intensity: 1.0)
+        keyPressImpact.prepare()
     }
 
     static func perform(emphasized: Bool) {
         if emphasized {
-            mediumImpact.prepare()
             mediumImpact.impactOccurred(intensity: 1)
-            successNotification.prepare()
             successNotification.notificationOccurred(.success)
+            mediumImpact.prepare()
+            successNotification.prepare()
         } else {
-            lightImpact.prepare()
             lightImpact.impactOccurred(intensity: 1.0)
+            lightImpact.prepare()
         }
     }
 
@@ -124,6 +128,61 @@ final class ReviewPromptTracker {
 
     private static var currentVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+    }
+}
+
+// Caches whether haptics are switched off, so the key-press path does not touch
+// UserDefaults on every tap. The stored value is only changed from Settings, and
+// UserDefaults posts a notification when it does.
+@MainActor
+final class IOSHapticsPreference {
+    static let shared = IOSHapticsPreference()
+
+    private static let key = "settings.haptics.disabled"
+    private static let legacyKey = "settings.haptics.actions"
+
+    private(set) var isDisabled: Bool
+    private var observer: NSObjectProtocol?
+
+    private init() {
+        isDisabled = Self.readFromDefaults()
+        // Covers changes made inside the app. Changes made in the Settings app
+        // are a separate process and do not post here, which is why the scene
+        // also refreshes this on becoming active.
+        observer = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: UserDefaults.standard,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.refresh()
+            }
+        }
+    }
+
+    deinit {
+        if let observer {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    func refresh() {
+        isDisabled = Self.readFromDefaults()
+    }
+
+    private static func readFromDefaults() -> Bool {
+        let defaults = UserDefaults.standard
+
+        if defaults.object(forKey: key) != nil {
+            return defaults.bool(forKey: key)
+        }
+
+        // Older builds stored the inverse under a different key.
+        if let legacyUsesActionHaptics = defaults.object(forKey: legacyKey) as? Bool {
+            return !legacyUsesActionHaptics
+        }
+
+        return false
     }
 }
 
@@ -338,7 +397,6 @@ struct EnterCalcIOSView: View {
             usesScientificNotation: true,
             numberFormatStyleRawValue: NumberFormatStyle.detected().rawValue,
             usesAlternativeKeypad: false,
-            usesEnterKeySymbol: true,
             disablesSwipeDownToRound: false,
             disablesButtonSound: false,
             keypadHeightMultiplier: 1.0
@@ -385,7 +443,6 @@ struct EnterCalcIOSView: View {
     @AppStorage("settings.numberFormat.scientific") private var preferredScientificNotation: Bool = true
     @AppStorage("settings.numberFormat.style") private var preferredNumberFormatRaw: String = NumberFormatStyle.detected().rawValue
     @AppStorage("settings.keypad.alternative") private var preferredUsesAlternativeKeypad: Bool = false
-    @AppStorage("settings.equals.enterKeySymbol") private var preferredUsesEnterKeySymbol: Bool = true
     @AppStorage("settings.rounding.disableSwipeDown") private var preferredDisablesSwipeDownToRound: Bool = false
     @AppStorage("settings.keypadHeightMultiplier") private var preferredKeypadHeightMultiplier: Double = 1.0
     @AppStorage("settings.reduceMotion.enabled") private var preferredReduceMotionEnabled: Bool = false
@@ -410,7 +467,6 @@ struct EnterCalcIOSView: View {
             usesScientificNotation: preferredScientificNotation,
             numberFormatStyleRawValue: preferredNumberFormatRaw,
             usesAlternativeKeypad: preferredUsesAlternativeKeypad,
-            usesEnterKeySymbol: preferredUsesEnterKeySymbol,
             disablesSwipeDownToRound: preferredDisablesSwipeDownToRound,
             disablesButtonSound: false,
             keypadHeightMultiplier: keypadHeightMultiplier
@@ -418,7 +474,10 @@ struct EnterCalcIOSView: View {
     }
 
     private var equalsButtonTitle: String {
-        activeScreen.settings.usesEnterKeySymbol ? localized("key.enter") : "="
+        EqualsKeyLabel.usesEnterWord(
+            usesAlternativeKeypad: activeScreen.settings.usesAlternativeKeypad,
+            resolvedLocalizationCode: resolvedLocalizationCode(for: activeScreen.settings.languageCode)
+        ) ? localized("key.enter") : EqualsKeyLabel.symbol
     }
 
     private var clearButtonTitle: String {
@@ -624,6 +683,10 @@ struct EnterCalcIOSView: View {
                 }
 
                 syncSystemSettingsMetadata()
+                // The haptics preference lives in the Settings bundle, so it is
+                // changed by the Settings app rather than in this process and no
+                // change notification arrives. Re-read it on the way back in.
+                IOSHapticsPreference.shared.refresh()
                 if isDefaultLocalizationSelection(activeScreen.settings.languageCode) {
                     applyActiveScreenConfiguration()
                 }
@@ -691,7 +754,6 @@ struct EnterCalcIOSView: View {
                     usesScientificNotation: activeScientificNotationBinding,
                     selectedNumberFormat: activeNumberFormatBinding,
                     usesAlternativeKeypad: activeAlternativeKeypadBinding,
-                    usesEnterKeySymbol: activeEnterKeySymbolBinding,
                     disablesSwipeDownToRound: activeDisableSwipeDownToRoundBinding,
                     availableLanguages: availableLanguageOptions(),
                     counterRotatesForUpsideDownPortrait: counterRotatesForUpsideDownPortrait
@@ -763,15 +825,6 @@ private extension EnterCalcIOSView {
             get: { activeScreen.settings.usesAlternativeKeypad },
             set: { newValue in
                 updateActiveScreenSettings { $0.usesAlternativeKeypad = newValue }
-            }
-        )
-    }
-
-    var activeEnterKeySymbolBinding: Binding<Bool> {
-        Binding(
-            get: { activeScreen.settings.usesEnterKeySymbol },
-            set: { newValue in
-                updateActiveScreenSettings { $0.usesEnterKeySymbol = newValue }
             }
         )
     }
@@ -1023,7 +1076,6 @@ private extension EnterCalcIOSView {
             preferredScientificNotation = updated.usesScientificNotation
             preferredNumberFormatRaw = updated.numberFormatStyleRawValue
             preferredUsesAlternativeKeypad = updated.usesAlternativeKeypad
-            preferredUsesEnterKeySymbol = updated.usesEnterKeySymbol
             preferredDisablesSwipeDownToRound = updated.disablesSwipeDownToRound
             preferredKeypadHeightMultiplier = updated.keypadHeightMultiplier
             screenStore.syncHomeScreenSettings(updated)
@@ -3219,7 +3271,6 @@ private struct IOSSettingsSheet: View {
     @Binding var usesScientificNotation: Bool
     @Binding var selectedNumberFormat: String
     @Binding var usesAlternativeKeypad: Bool
-    @Binding var usesEnterKeySymbol: Bool
     @Binding var disablesSwipeDownToRound: Bool
     let availableLanguages: [LanguageOption]
     let counterRotatesForUpsideDownPortrait: Bool
@@ -3228,7 +3279,6 @@ private struct IOSSettingsSheet: View {
     @State private var draftScientificNotation: Bool
     @State private var draftNumberFormat: NumberFormatStyle
     @State private var draftUsesAlternativeKeypad: Bool
-    @State private var draftUsesEnterKeySymbol: Bool
     @State private var draftDisablesSwipeDownToRound: Bool
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -3243,7 +3293,6 @@ private struct IOSSettingsSheet: View {
         usesScientificNotation: Binding<Bool>,
         selectedNumberFormat: Binding<String>,
         usesAlternativeKeypad: Binding<Bool>,
-        usesEnterKeySymbol: Binding<Bool>,
         disablesSwipeDownToRound: Binding<Bool>,
         availableLanguages: [LanguageOption],
         counterRotatesForUpsideDownPortrait: Bool
@@ -3255,7 +3304,6 @@ private struct IOSSettingsSheet: View {
         self._usesScientificNotation = usesScientificNotation
         self._selectedNumberFormat = selectedNumberFormat
         self._usesAlternativeKeypad = usesAlternativeKeypad
-        self._usesEnterKeySymbol = usesEnterKeySymbol
         self._disablesSwipeDownToRound = disablesSwipeDownToRound
         self.availableLanguages = availableLanguages
         self.counterRotatesForUpsideDownPortrait = counterRotatesForUpsideDownPortrait
@@ -3264,7 +3312,6 @@ private struct IOSSettingsSheet: View {
         _draftScientificNotation = State(initialValue: usesScientificNotation.wrappedValue)
         _draftNumberFormat = State(initialValue: NumberFormatStyle(rawValue: selectedNumberFormat.wrappedValue) ?? NumberFormatStyle.detected())
         _draftUsesAlternativeKeypad = State(initialValue: usesAlternativeKeypad.wrappedValue)
-        _draftUsesEnterKeySymbol = State(initialValue: usesEnterKeySymbol.wrappedValue)
         _draftDisablesSwipeDownToRound = State(initialValue: disablesSwipeDownToRound.wrappedValue)
     }
 
@@ -3292,7 +3339,6 @@ private struct IOSSettingsSheet: View {
         usesScientificNotation = draftScientificNotation
         selectedNumberFormat = draftNumberFormat.rawValue
         usesAlternativeKeypad = draftUsesAlternativeKeypad
-        usesEnterKeySymbol = draftUsesEnterKeySymbol
         disablesSwipeDownToRound = draftDisablesSwipeDownToRound
     }
 
@@ -3356,13 +3402,6 @@ private struct IOSSettingsSheet: View {
                         }
                         Toggle(localized("settings.numberFormat.scientific"), isOn: $draftScientificNotation)
                         Toggle(localized("settings.percent.classicBehavior"), isOn: $draftUsesAlternativeKeypad)
-                        Toggle(
-                            localized("settings.equals.enterKeySymbol"),
-                            isOn: Binding(
-                                get: { !draftUsesEnterKeySymbol },
-                                set: { draftUsesEnterKeySymbol = !$0 }
-                            )
-                        )
                         Toggle(localized("settings.rounding.disableSwipeDown"), isOn: $draftDisablesSwipeDownToRound)
                     }
 
@@ -4601,19 +4640,12 @@ private extension EnterCalcIOSView {
         defaults.set(systemSettingsVersionString(), forKey: "settings.about.version")
     }
 
+    // Read once and cached: this is consulted on every key press, and it was
+    // re-registering a defaults domain and doing several dictionary lookups
+    // each time. The value only changes from Settings, which posts a change
+    // notification, so there is nothing to poll for.
     func actionHapticsDisabled() -> Bool {
-        let defaults = UserDefaults.standard
-        defaults.register(defaults: ["settings.haptics.disabled": false])
-
-        if defaults.object(forKey: "settings.haptics.disabled") != nil {
-            return defaults.bool(forKey: "settings.haptics.disabled")
-        }
-
-        if let legacyUsesActionHaptics = defaults.object(forKey: "settings.haptics.actions") as? Bool {
-            return !legacyUsesActionHaptics
-        }
-
-        return false
+        IOSHapticsPreference.shared.isDisabled
     }
 
     func systemSettingsVersionString() -> String {
@@ -4795,8 +4827,9 @@ private struct IOSCompactActionButton: View {
 
     var body: some View {
         Button {
-            pressFeedback()
+            // Result first, feedback second — see IOSKeypadButton.handleTap.
             action()
+            pressFeedback()
         } label: {
             Image(systemName: button.symbol)
                 .font(EnterCalcFont.appFont(size: boundedIconFontSize))
@@ -5037,8 +5070,11 @@ private struct IOSKeypadButton: View {
     }
 
     private func handleTap() {
-        pressFeedback(button.kind)
+        // The calculation runs first so the display updates as early as
+        // possible; feedback is what the press *confirms*, not what it does, so
+        // it must not sit in front of the result.
         action()
+        pressFeedback(button.kind)
         guard !reduceMotionEnabled else {
             shimmerVisible = false
             return

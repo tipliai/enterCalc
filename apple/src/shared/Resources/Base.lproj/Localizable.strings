@@ -19,7 +19,6 @@
 "settings.numberFormat.scientific" = "Use scientific notation";
 "settings.percent.classicBehavior" = "Use alternative keypad";
 "settings.rounding.disableSwipeDown" = "Disable swipe down to round";
-"settings.equals.enterKeySymbol" = "Use equals button";
 "settings.buttonSound.disabled" = "Disable button sound";
 "settings.credits" = "About";
 "settings.feedback" = "Feedback";
