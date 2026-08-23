@@ -16,6 +16,7 @@
 "settings.language.defaultOption" = "デフォルト（%@）";
 "settings.userInterface" = "ユーザーインターフェース";
 "settings.numberFormat.style" = "数値スタイル";
+"settings.currency.symbol" = "通貨記号";
 "settings.numberFormat.scientific" = "科学表記を使用";
 "settings.percent.classicBehavior" = "代替キーパッドを使用";
 "settings.buttonSound.disabled" = "ボタン音を無効にする";
@@ -27,6 +28,8 @@
 "settings.credit.linkText" = "GitHub";
 "settings.credit.middle" = " からお願いします。";
 "calculator.mode.basic" = "基本";
+"calculator.mode.currency" = "通貨";
+"calculator.currency.toggle" = "通貨を切り替え";
 "history.title" = "履歴";
 "history.empty" = "まだ履歴はありません";
 "history.emptyAfterClear" = "";

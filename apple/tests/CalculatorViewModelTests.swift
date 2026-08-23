@@ -2297,7 +2297,7 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isErrorState)
     }
 
-    func testLeadingCurrencyPasteKeepsCurrencyActiveUntilAllClear() {
+    func testLeadingCurrencyPasteKeepsCurrencyActiveAcrossAllClear() {
         let viewModel = CalculatorViewModel()
 
         pasteString("$12.3", into: viewModel)
@@ -2313,8 +2313,11 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.history.first?.displayExpression, "12.3 + 1")
         XCTAssertEqual(viewModel.history.first?.displayResult, "$13.3")
 
+        // All Clear resets the calculation but not the mode: currency was
+        // switched on, so it stays on and the cleared value is shown as $0.
         viewModel.clearAll()
-        XCTAssertEqual(viewModel.display, "0")
+        XCTAssertEqual(viewModel.display, "$0")
+        XCTAssertEqual(viewModel.activeCurrencySymbol, "$")
     }
 
     func testCurrencyReuseRestoresCurrencyAwareState() throws {

@@ -753,6 +753,7 @@ struct EnterCalcIOSView: View {
                     selectedLanguage: activeLanguageBinding,
                     usesScientificNotation: activeScientificNotationBinding,
                     selectedNumberFormat: activeNumberFormatBinding,
+                    selectedCurrencySymbol: activeCurrencySymbolBinding,
                     usesAlternativeKeypad: activeAlternativeKeypadBinding,
                     disablesSwipeDownToRound: activeDisableSwipeDownToRoundBinding,
                     availableLanguages: availableLanguageOptions(),
@@ -816,6 +817,20 @@ private extension EnterCalcIOSView {
             get: { activeScreen.settings.numberFormatStyleRawValue },
             set: { newValue in
                 updateActiveScreenSettings { $0.numberFormatStyleRawValue = newValue }
+            }
+        )
+    }
+
+    var activeCurrencySymbolBinding: Binding<String> {
+        Binding(
+            get: { activeScreen.settings.currencySymbol },
+            set: { newValue in
+                updateActiveScreenSettings { $0.currencySymbol = newValue }
+                // Re-label a value already on screen so the change is visible
+                // immediately rather than only on the next entry.
+                if activeScreen.viewModel.activeCurrencySymbol != nil {
+                    activeScreen.viewModel.inputCurrencySymbol(newValue)
+                }
             }
         )
     }
@@ -2537,7 +2552,10 @@ private extension EnterCalcIOSView {
                     )
                     .opacity(isBasicSpaceInUse ? 0 : 1)
                     .animation(reduceMotionEnabled ? nil : .easeInOut(duration: 0.5), value: isBasicSpaceInUse)
-                    .allowsHitTesting(false)
+                    // The row carries the currency key, so it has to take taps;
+                    // the label inside opts out individually so tapping the
+                    // display still copies. A fully faded row is not tappable.
+                    .allowsHitTesting(!isBasicSpaceInUse)
                 }
             }
             .overlay(alignment: .top) {
@@ -2560,13 +2578,54 @@ private extension EnterCalcIOSView {
         }
     }
 
+    // Currency mode is derived state, not a separate selection: the calculator
+    // is in it exactly when a currency symbol is showing.
+    var currentModeLabelKey: String {
+        activeScreen.viewModel.activeCurrencySymbol == nil ? "calculator.mode.basic" : "calculator.mode.currency"
+    }
+
+    // Outlined text control, deliberately unlike a keypad key: it changes how
+    // the value is labelled rather than entering anything.
+    func currencyToggleButton(metrics: IOSLayoutMetrics, opacity: Double) -> some View {
+        let isActive = activeScreen.viewModel.activeCurrencySymbol != nil
+        let symbol = activeScreen.settings.currencySymbol
+        return Button {
+            activeScreen.viewModel.toggleCurrencySymbol(symbol)
+        } label: {
+            Text(symbol)
+                .font(EnterCalcFont.appFont(size: metrics.memoryFontSize))
+                .foregroundStyle((isActive ? palette.accent : palette.textPrimary).opacity(opacity))
+                .frame(minWidth: 22)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5)
+                        .strokeBorder(
+                            (isActive ? palette.accent : palette.textSecondary).opacity(opacity * 0.7),
+                            lineWidth: 1
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(localized("calculator.currency.toggle")))
+        .accessibilityAddTraits(isActive ? [.isSelected] : [])
+    }
+
     func memoryControls(metrics: IOSLayoutMetrics, opacity: Double) -> some View {
-        return Text(localized("calculator.mode.basic"))
-            .font(EnterCalcFont.appFont(size: metrics.memoryFontSize))
-            .foregroundStyle(palette.textPrimary.opacity(opacity))
+        return HStack(spacing: 8) {
+            Text(localized(currentModeLabelKey))
+                .font(EnterCalcFont.appFont(size: metrics.memoryFontSize))
+                .foregroundStyle(palette.textPrimary.opacity(opacity))
+                .lineLimit(1)
+                // Keeps tapping the display area a copy action, as before.
+                .allowsHitTesting(false)
+
+            Spacer(minLength: 4)
+
+            currencyToggleButton(metrics: metrics, opacity: opacity)
+        }
             .frame(maxWidth: .infinity, minHeight: metrics.memoryHeight, maxHeight: metrics.memoryHeight, alignment: .leading)
             .padding(.horizontal, metrics.displayHorizontalPadding)
-            .lineLimit(1)
             .clipped()
     }
 
@@ -3270,6 +3329,7 @@ private struct IOSSettingsSheet: View {
     @Binding var selectedLanguage: String
     @Binding var usesScientificNotation: Bool
     @Binding var selectedNumberFormat: String
+    @Binding var selectedCurrencySymbol: String
     @Binding var usesAlternativeKeypad: Bool
     @Binding var disablesSwipeDownToRound: Bool
     let availableLanguages: [LanguageOption]
@@ -3278,6 +3338,7 @@ private struct IOSSettingsSheet: View {
     @State private var draftLanguage: String
     @State private var draftScientificNotation: Bool
     @State private var draftNumberFormat: NumberFormatStyle
+    @State private var draftCurrencySymbol: String
     @State private var draftUsesAlternativeKeypad: Bool
     @State private var draftDisablesSwipeDownToRound: Bool
     @Environment(\.colorScheme) private var colorScheme
@@ -3292,6 +3353,7 @@ private struct IOSSettingsSheet: View {
         selectedLanguage: Binding<String>,
         usesScientificNotation: Binding<Bool>,
         selectedNumberFormat: Binding<String>,
+        selectedCurrencySymbol: Binding<String>,
         usesAlternativeKeypad: Binding<Bool>,
         disablesSwipeDownToRound: Binding<Bool>,
         availableLanguages: [LanguageOption],
@@ -3303,6 +3365,7 @@ private struct IOSSettingsSheet: View {
         self._selectedLanguage = selectedLanguage
         self._usesScientificNotation = usesScientificNotation
         self._selectedNumberFormat = selectedNumberFormat
+        self._selectedCurrencySymbol = selectedCurrencySymbol
         self._usesAlternativeKeypad = usesAlternativeKeypad
         self._disablesSwipeDownToRound = disablesSwipeDownToRound
         self.availableLanguages = availableLanguages
@@ -3311,6 +3374,7 @@ private struct IOSSettingsSheet: View {
         _draftLanguage = State(initialValue: selectedLanguage.wrappedValue)
         _draftScientificNotation = State(initialValue: usesScientificNotation.wrappedValue)
         _draftNumberFormat = State(initialValue: NumberFormatStyle(rawValue: selectedNumberFormat.wrappedValue) ?? NumberFormatStyle.detected())
+        _draftCurrencySymbol = State(initialValue: selectedCurrencySymbol.wrappedValue)
         _draftUsesAlternativeKeypad = State(initialValue: usesAlternativeKeypad.wrappedValue)
         _draftDisablesSwipeDownToRound = State(initialValue: disablesSwipeDownToRound.wrappedValue)
     }
@@ -3338,6 +3402,7 @@ private struct IOSSettingsSheet: View {
         selectedLanguage = draftLanguage
         usesScientificNotation = draftScientificNotation
         selectedNumberFormat = draftNumberFormat.rawValue
+        selectedCurrencySymbol = draftCurrencySymbol
         usesAlternativeKeypad = draftUsesAlternativeKeypad
         disablesSwipeDownToRound = draftDisablesSwipeDownToRound
     }
@@ -3390,6 +3455,11 @@ private struct IOSSettingsSheet: View {
                         Picker(localized("settings.language.label"), selection: $draftLanguage) {
                             ForEach(availableLanguages, id: \.code) { language in
                                 Text(language.displayName).tag(language.code)
+                            }
+                        }
+                        Picker(localized("settings.currency.symbol"), selection: $draftCurrencySymbol) {
+                            ForEach(CurrencyCatalog.all) { option in
+                                Text(option.symbol).tag(option.symbol)
                             }
                         }
                     }

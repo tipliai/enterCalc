@@ -15,7 +15,12 @@ Current verification status on macOS:
 
 ### Other suites
 
-`apple/tests/SystemAppearanceTests.swift` covers `SystemAppearance.colorScheme(forInterfaceStyle:)`, which maps the macOS global-domain `AppleInterfaceStyle` value to a color scheme for the `system` theme. macOS only writes that key while Dark Mode is on, so the absent case must resolve to light, and accent variants such as `DarkAqua` must resolve to dark.
+- `apple/tests/SystemAppearanceTests.swift` — maps the macOS global-domain `AppleInterfaceStyle` value to a color scheme for the `system` theme. macOS only writes that key while Dark Mode is on, so the absent case must resolve to light, and accent variants such as `DarkAqua` must resolve to dark.
+- `apple/tests/CurrencyCatalogTests.swift` — region-to-symbol detection for the default currency (en-GB gives £, en-US gives $, de-DE gives €), the fallback for regions whose currency the catalog does not carry, and invariants that keep the catalog usable: symbols unique, currency codes not shared between symbols, and every offered symbol actually accepted by the calculator engine.
+- `apple/tests/CurrencyModeTests.swift` — entering and leaving currency mode via the currency key, including that leaving preserves the entered value, that it clears a symbol differing from the configured one, that it survives All Clear, and that toggling is undoable.
+- `apple/tests/EqualsKeyLabelTests.swift` — whether the evaluate key shows `Enter` or `=`, derived from keypad layout and resolved language.
+- `apple/tests/ReviewPromptPolicyTests.swift` — the gates on the in-app review prompt, and the semantics of the completed-calculation counter.
+- `apple/tests/SupportLinksTests.swift` — pins the support page URL used by the Feedback link.
 
 ## UI Settings Expectations
 
@@ -166,7 +171,7 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Clipboard | With French number format (`1 234 567,89`), copy `8,333` | Pasteboard preserves the localized decimal separator and ungrouped value (`8,333`) | `testCopyToPasteboardUsesLocalizedDecimalSeparatorForFrenchStyle` |
 | Clipboard | Copy operation `12 + 3 = 15`, then paste into a fresh view model | Pasted display is `15`; history stays empty; no error state | `testCopyOperationThenPasteReplaysTheOperation` |
 | Clipboard | Paste `$1,234.50` from the pasteboard | Display normalizes to `$1,234.5`; no error state | `testPasteFromPasteboardNormalizesFormattedNumericContent` |
-| Currency | Paste `$12.3`, continue with `+ 1 =`, then clear all | Currency mode stays active for results (`$12.3 -> $13.3`), while the operation line remains currency-free (`12.3 + 1`) until all-clear resets the session | `testLeadingCurrencyPasteKeepsCurrencyActiveUntilAllClear` |
+| Currency | Paste `$12.3`, continue with `+ 1 =`, then clear all | Currency mode stays active for results (`$12.3 -> $13.3`) while the operation line remains currency-free (`12.3 + 1`); all-clear resets the calculation but keeps currency mode, showing `$0` | `testLeadingCurrencyPasteKeepsCurrencyActiveAcrossAllClear` |
 | Currency | Evaluate `€12.34 + 1 =`, reuse the saved history entry | Reuse restores the currency-formatted result, while the restored operation line remains currency-free (`12.34 + 1 =`) | `testCurrencyReuseRestoresCurrencyAwareState` |
 | Currency | Evaluate `$12.34 + 1 =`, copy the operation, then paste into a fresh view model | Replayed operation restores a currency-free operation line (`12.34 + 1 =`) and keeps currency mode active on the pasted result session | `testCurrencyOperationCopyThenPasteReplaysAndRestoresCurrencyMode` |
 | Currency | Type `$`, then enter `1.2 + 2 =` | Leading currency symbol activates currency formatting immediately and arithmetic stays in currency mode without forced padding (`$1.2 -> $3.2`) | `testTypingCurrencySymbolActivatesCurrencyFormatting` |
