@@ -22,7 +22,7 @@
 "settings.equals.enterKeySymbol" = "Use equals button";
 "settings.buttonSound.disabled" = "Disable button sound";
 "settings.credits" = "About";
-"settings.rateApp" = "Rate EnterCalc";
+"settings.feedback" = "Feedback";
 "settings.credits.version" = "Version %@";
 "mac.about.windowTitle" = "About %@";
 "settings.credit.part1" = "© 2026 Tipli AI, LLC. EnterCalc is open source and released under the MIT License. Help contribute to the project on ";
