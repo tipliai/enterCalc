@@ -227,6 +227,17 @@ final class CurrencyModeTests: XCTestCase {
         XCTAssertEqual(caretRendering(of: euros), "€|1,234")
     }
 
+    // Symbols accepted from a hardware keyboard go beyond the Settings
+    // picker's catalog, and must be stepped over just the same.
+    func testSymbolsOutsideTheCatalogAlsoKeepTheCaretAfterThem() {
+        for symbol in ["₿", "₤"] {
+            XCTAssertNil(CurrencyCatalog.option(forSymbol: symbol), "\(symbol) is in the catalog now; pick another")
+            let viewModel = currencyViewModel("120", symbol: symbol)
+            viewModel.setDisplayEditCursor(displayBoundaryIndex: 0)
+            XCTAssertEqual(caretRendering(of: viewModel), "\(symbol)|120")
+        }
+    }
+
     func testTappingJustAfterTheSymbolPutsTheCaretAfterIt() {
         let viewModel = currencyViewModel("120", symbol: "£")
         viewModel.setDisplayEditCursor(displayBoundaryIndex: 1)
