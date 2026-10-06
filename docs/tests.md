@@ -12,7 +12,7 @@ Current verification status on macOS:
 - `swift test list` discovers `190` `CalculatorViewModelTests` methods.
 - This matrix documents the same `190` methods with no missing or extra entries.
 - The current macOS run includes the AppKit-only clipboard tests guarded by `canImport(AppKit)`.
-- A full `swift test` run executes `257` tests across every suite, of which `13` fail. Those 13 failures span 4 methods, all in `CalculatorViewModelTests`, and reproduce identically on an untouched checkout — they pre-date the 1.1.0 work and are not regressions.
+- A full `swift test` run executes `280` tests across every suite, of which `13` fail. Those 13 failures span 4 methods, all in `CalculatorViewModelTests`, and reproduce identically on an untouched checkout — they pre-date the 1.1.0 work and are not regressions.
 
 ### Other suites
 
@@ -22,6 +22,7 @@ Current verification status on macOS:
 - `apple/tests/EqualsKeyLabelTests.swift` — whether the evaluate key shows `Enter` or `=`, derived from keypad layout and resolved language.
 - `apple/tests/ReviewPromptPolicyTests.swift` — the gates on the in-app review prompt, and the semantics of the completed-calculation counter.
 - `apple/tests/SupportLinksTests.swift` — pins the support page URL used by the Feedback link.
+- `apple/tests/CalculatorFunctionKeyTests.swift` — the configurable function keys (#67): the shipped default layout and that no two slots share a default; that the chooser offers every function; that assigning a function which already sits elsewhere **swaps** the two rather than duplicating or losing one; that only non-default slots are stored, so a later change to a default still reaches users who never customised it; that a stored value written by a newer build, or a corrupted one naming a function twice, still loads without producing a keypad with two identical keys; that the raw values used as the persistence format have not drifted; and that every function's name, the chooser title and the hold hint exist and are translated in all seven bundles.
 - `apple/tests/PercentageCalculationTests.swift` — the percentage and VAT maths behind #25. Percentage mode keeps the percentage *amount* beside the result (`100 + 10%` is `10` and `110`), with the amount unsigned in both directions so a discount reads as its size rather than as a negative. VAT is covered in both directions, including the reverse case the issue names (120 including 20% VAT is 100 net and 20 VAT), a round trip through every preset rate, and the property an accountant checks: `net + vat == gross` exactly, for awkward prices like `0.01` and `999999.99` where the division does not come out even. Rates at or below −100% are refused rather than dividing by zero. Three tests cross-check the results against what typing the same thing on the keypad produces, so the new maths cannot drift from the engine.
 
 ## UI Settings Expectations
