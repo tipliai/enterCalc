@@ -56,8 +56,8 @@ The swipe-intent change was driven on the iPad simulator: a 12pt horizontal drif
 
 **The keyboard shortcuts were not driven.** Sending hardware keys to the simulator needs the Mac's display awake, and it was asleep for this pass — the same limitation that blocked the macOS driver.
 
-1. **iPad with a hardware keyboard:** Shift + Left moves to the page on the **right**, Shift + Right to the page on the **left**. This looks inverted; it is deliberate — the arrow points the way the pages move, matching the swipe. Confirm it feels right, and say so if it does not, because it is one line to flip.
-2. Shift + Left on the last page opens a new page, the same as swiping. Shift + Right on the first page does nothing rather than wrapping.
+1. **iPad with a hardware keyboard:** Shift + Right moves to the page on the **right**, Shift + Left to the page on the **left**. (The first build had these the other way round, following the swipe's finger direction; QA found that inverted, so it was flipped.)
+2. Shift + Right on the last page opens a new page, the same as swiping. Shift + Left on the first page does nothing rather than wrapping.
    - Repeat both while editing the display (press Insert first, so plain Left/Right move the caret) and with the rounding panel open. Shift + Left/Right must still switch pages rather than moving the caret or the rounding selection, and Shift + Down must shrink the display rather than open the rounding panel. Each press should move exactly **one** page.
 3. Both appear under **View** in the menu bar, translated, and are reachable by VoiceOver.
 4. **⇧⌘C copies the operation** on both platforms, while ⌘C still copies the result. Worth checking carefully: both platforms intercept keyboard events before the menus see them, so this needed handling in two places, not just the menu item. Without that it would have silently copied the result instead.
