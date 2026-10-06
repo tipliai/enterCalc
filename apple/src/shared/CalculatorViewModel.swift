@@ -3284,15 +3284,12 @@ public final class CalculatorViewModel: ObservableObject {
         let displayCharacters = Array(display)
         while boundary < displayCharacters.count,
               mapping[boundary + 1] == normalized,
-              Self.currencySymbolCharacters.contains(displayCharacters[boundary]) {
+              Self.supportedCurrencySymbolCharacters.contains(displayCharacters[boundary]) {
             boundary += 1
         }
         return boundary
     }
 
-    private static let currencySymbolCharacters: Set<Character> = Set(
-        CurrencyCatalog.all.flatMap { Array($0.symbol) } + Array(CurrencyCatalog.fallback.symbol)
-    )
 
     private func displayCharacterMatchesRawCharacter(_ displayCharacter: Character, rawCharacter: Character) -> Bool {
         if displayCharacter == rawCharacter {
