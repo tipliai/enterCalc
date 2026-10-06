@@ -59,6 +59,10 @@
 "window.new" = "新しいウィンドウを開く";
 "history.toggle" = "履歴パネルを表示/非表示";
 
+/* Page switching shortcuts (issue #83) */
+"screen.next" = "次の画面";
+"screen.previous" = "前の画面";
+
 /* カスタマイズ可能なファンクションキー (Issue #67) */
 "function.squareRoot" = "平方根";
 "function.square" = "2乗";

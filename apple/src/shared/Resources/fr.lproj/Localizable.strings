@@ -59,6 +59,10 @@
 "window.new" = "Ouvrir une nouvelle fenêtre";
 "history.toggle" = "Afficher/Masquer l'historique";
 
+/* Page switching shortcuts (issue #83) */
+"screen.next" = "Écran suivant";
+"screen.previous" = "Écran précédent";
+
 /* Touches de fonction configurables (ticket #67) */
 "function.squareRoot" = "Racine carrée";
 "function.square" = "Carré";

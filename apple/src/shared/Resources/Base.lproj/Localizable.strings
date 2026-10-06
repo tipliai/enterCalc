@@ -59,6 +59,10 @@
 "window.new" = "Open New Window";
 "history.toggle" = "Toggle History Panel";
 
+/* Page switching shortcuts (issue #83) */
+"screen.next" = "Next Screen";
+"screen.previous" = "Previous Screen";
+
 /* Configurable function keys (issue #67) */
 "function.squareRoot" = "Square Root";
 "function.square" = "Square";
