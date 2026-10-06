@@ -5280,9 +5280,12 @@ private struct IOSCompactActionButton: View {
         .buttonStyle(.plain)
         .accessibilityLabel(Text(accessibilityLabel))
         .accessibilityHint(isConfigurable ? Text(holdHint) : Text(""))
-        .accessibilityAction(named: Text(changeActionName)) {
-            guard isConfigurable else { return }
-            onChooserOpen(button.slot, globalFrame, false)
+        .accessibilityActions {
+            // Only a configurable key offers the action, so VoiceOver never
+            // lists one that would do nothing.
+            if isConfigurable {
+                Button(changeActionName) { onChooserOpen(button.slot, globalFrame, false) }
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
@@ -5452,9 +5455,10 @@ private struct IOSKeypadButton: View {
                 .accessibilityAction {
                     handleTap()
                 }
-                .accessibilityAction(named: Text(changeActionName)) {
-                    guard let slot = configurableSlot else { return }
-                    onChooserOpen?(slot, globalFrame, false)
+                .accessibilityActions {
+                    if let slot = configurableSlot {
+                        Button(changeActionName) { onChooserOpen?(slot, globalFrame, false) }
+                    }
                 }
         }
         .frame(height: buttonHeight)
