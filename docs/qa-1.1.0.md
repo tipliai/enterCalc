@@ -64,6 +64,16 @@ Every step below was driven end to end automatically — on the iPhone simulator
 21. Run in another language and confirm the chooser title, the hint and every function name are translated.
 
 If a check fails, `ENTERCALC_DEBUG_LOGS=1` makes the app log every chooser open and every reassignment as `[functionKeys] <slot> = <function>; layout = …`, which the macOS driver's `log` command prints. The accessibility tree cannot show which function a key carries, so that log is the only readable record.
+## Percentage and VAT maths — #25
+
+Engine only: this ships the calculation behind percentage mode and reverse VAT, with no UI. The VAT and TIP controls that reach it are #92, so there is nothing to click yet and nothing here needs a manual pass — the maths is unit-tested, and the results were cross-checked against an independent implementation as well as against typing the same thing on the keypad.
+
+Worth knowing when QA'ing #92 later:
+
+1. `100 + 10%` gives an amount of `10` and a result of `110`; `100 - 10%` gives an amount of `10` and a result of `90`. The amount is unsigned in both directions, so a discount reads as its size rather than as a negative number.
+2. Reverse VAT on `120` at 20% gives `100` net and `20` VAT.
+3. Net plus VAT always equals the gross exactly, even where the division does not come out even — `100` including 20% VAT is `83.333…` net and `16.666…` VAT, and those two still add back to exactly `100`. Any rounding applied for display must preserve that.
+4. Rates at or below −100% are refused rather than dividing by zero.
 
 ## macOS theme sync — PR #97
 
