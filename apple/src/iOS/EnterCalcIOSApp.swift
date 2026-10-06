@@ -3278,10 +3278,15 @@ private extension EnterCalcIOSView {
                                     buttonHeight: buttonHeight,
                                     pressFeedback: triggerKeyPressFeedback,
                                     action: {
-                                        if let function = button.function {
-                                            performFunction(function, on: screen)
-                                        } else {
-                                            button.action(screen.viewModel)
+                                        // Only the calculation is timed, so the
+                                        // scroll reset and review gate below do
+                                        // not count towards `keypad result`.
+                                        InputLatencySignpost.measuring(InputLatencySignpost.resultInterval) {
+                                            if let function = button.function {
+                                                performFunction(function, on: screen)
+                                            } else {
+                                                button.action(screen.viewModel)
+                                            }
                                         }
                                         if isLandscapeMode {
                                             resetLandscapeDisplayScroll(for: screen)
@@ -5658,6 +5663,14 @@ private struct IOSKeypadButton: View {
     }
 
     private func handleTap() {
+        // Bracketed for #90: the outer interval is the whole press handler, from
+        // the tap being recognised to the last side effect returning. The
+        // calculation alone is bracketed inside `action` (see `keypad`). The
+        // gap between them is what confirmation and bookkeeping cost on the
+        // main thread — precisely what the issue suspects.
+        let state = InputLatencySignpost.beginPress()
+        defer { InputLatencySignpost.endPress(state) }
+
         // The calculation runs first so the display updates as early as
         // possible; feedback is what the press *confirms*, not what it does, so
         // it must not sit in front of the result.
