@@ -9,19 +9,19 @@ Manual checks for the 1.1.0 release. Each section names the PR it covers and say
 
 Automated coverage lives in [tests.md](tests.md). The macOS driver used for several of these checks is described in [macos-qa.md](macos-qa.md).
 
-## Decide these first
+## Decisions taken
 
-Three points where an implementation choice was made that is cheap to reverse now and expensive after release.
+These were open while the release was being built and are now settled. Recorded here because they change what QA should expect to see.
 
-### Currencies with no single-glyph symbol
+### Currencies with no single-glyph symbol — single-glyph only for 1.1.0
 
-The calculator engine accepts a **single character** as a currency symbol. That excludes CHF, Nordic `kr`, PLN `zł` and CZK `Kč`, so those regions currently fall back to `$` — wrong for a Swiss or Swedish user. Supporting them means letting the engine hold a multi-character symbol, which touches parsing and display. This decides what the currency picker can offer, so it is worth settling before release.
+The calculator engine accepts a **single character** as a currency symbol. That excludes CHF, Nordic `kr`, PLN `zł` and CZK `Kč`. For 1.1.0 the engine stays as it is: the Settings picker offers only the locale-mappable single-glyph currencies, and regions with no clean mapping fall back to a documented default rather than silently to `$`. Multi-character symbols are a later change.
 
-### Currency key placement
+### Currency key placement — the configurable top row
 
-The currency key sits in the mode row, bottom-right of the display, where VAT and TIP are planned to go. The UI was undecided when it was built, so confirm the placement.
+The currency key is no longer in the mode row. It ships as a default assignment in the configurable top row (see below), and the mode row is a label again, reserved for the VAT and TIP controls. Anything that used to test the mode-row currency button now applies to the top-row key.
 
-### Three documented behaviors were overturned
+### Three documented behaviors were overturned — the new behavior is canon
 
 Each had a passing test asserting the old result. They are intentional corrections, not broken tests, but they are behaviors existing users may have learned:
 
@@ -44,6 +44,70 @@ The swipe-intent change was driven on the iPad simulator: a 12pt horizontal drif
 6. **Theme fade:** set two pages to different themes — Dark and Light — and switch between them. The change should crossfade over about a quarter-second rather than cutting. Check with Reduce Motion on, where it should cut instantly instead.
 7. **macOS:** confirm Cmd + ` still cycles calculator windows and that the Window menu lists them. #83 asked whether Shift + Arrow should do this; the answer taken was no — see [keyboard.md](keyboard.md) for why.
 
+## Configurable function keys — #67
+
+Every step below was driven end to end automatically — on the iPhone simulator by synthetic touches, on macOS by synthetic mouse events — confirming the key changed, the swap moved the displaced function, and the press or click that opened the chooser did **not** also run the function it was replacing. What needs a person is how it feels and how the panel looks.
+
+**macOS — right-click**
+
+1. Right-click any key in the top row. The chooser opens next to it, above where there is room and below where there is not.
+2. Control-click one. Same result; macOS treats it as a secondary click.
+3. Click an option. The key changes immediately.
+4. Click anywhere outside the panel. It closes and nothing changes.
+5. Plain left-click still runs the key's function — the currency key should still enter and leave Currency mode.
+6. Repeat on the two large `( )` and `%` keys.
+
+**iOS — press and hold**
+
+7. Press and hold any top-row key. The chooser appears after about 0.4s and **stays open when you lift your finger**.
+8. Tap an option. The key changes immediately.
+9. Tap anywhere outside the panel. It closes and nothing changes — including no keypad key firing underneath.
+10. Without lifting, drag from the key straight onto an option and release there. That commits too, for anyone who prefers one continuous motion.
+11. Press and hold, then move off before the chooser opens. No chooser; the key behaves as a normal press or swipe.
+12. A plain quick tap still runs the key's function.
+13. Repeat 7–9 on the two large `( )` and `%` keys.
+
+**Both platforms**
+
+14. Pick a function that already sits on another key — say put `backspace` where `undo` is. The two should **trade places**, not duplicate.
+15. Pick a function that is not on the keypad at all. The displaced function simply disappears; that is intended.
+16. Reassign a key, quit and reopen. The layout should survive.
+17. **iPad:** set up page 1 and page 2 differently and swipe between them. Each page keeps its own layout. **macOS:** with two windows open, change one — the other keeps its layout until it is closed. A newly opened window starts from the most recently changed layout, the same as theme, language and every other window setting.
+18. Switch to the **alternative keypad** in Settings. Its keys are deliberately fixed — press-and-hold and right-click should both do nothing there.
+19. Check the panel in Dark and Light themes, at the smallest window width, and in landscape on iPhone.
+20. **VoiceOver:** each configurable key should announce the *function's* name — "Undo", "Square Root" — not its glyph, and offer a **Change Function** action that opens the chooser.
+21. Run in another language and confirm the chooser title, the hint and every function name are translated.
+
+If a check fails, `ENTERCALC_DEBUG_LOGS=1` makes the app log every chooser open and every reassignment as `[functionKeys] <slot> = <function>; layout = …`, which the macOS driver's `log` command prints. The accessibility tree cannot show which function a key carries, so that log is the only readable record.
+## Percentage and VAT maths — #25
+
+Engine only: this ships the calculation behind percentage mode and reverse VAT, with no UI. The VAT and TIP controls that reach it are #92, so there is nothing to click yet and nothing here needs a manual pass — the maths is unit-tested, and the results were cross-checked against an independent implementation as well as against typing the same thing on the keypad.
+
+Worth knowing when QA'ing #92 later:
+
+1. `100 + 10%` gives an amount of `10` and a result of `110`; `100 - 10%` gives an amount of `10` and a result of `90`. The amount is unsigned in both directions, so a discount reads as its size rather than as a negative number.
+2. Reverse VAT on `120` at 20% gives `100` net and `20` VAT.
+3. Net plus VAT always equals the gross exactly, even where the division does not come out even — `100` including 20% VAT is `83.333…` net and `16.666…` VAT, and those two still add back to exactly `100`. Any rounding applied for display must preserve that.
+4. Rates at or below −100% are refused rather than dividing by zero.
+
+## VAT and TIP controls — #92
+
+The pills appear in the mode row only while a currency symbol is showing, and both panels were driven end to end on the iPhone simulator: entering `$120`, opening VAT, switching to **Remove VAT** at 20% and reading back `$100` ex / `$20` VAT / `$120` inc, then **Use Result** writing `$100` to the display with the operation line reading `Remove VAT 20% =`. The Tip panel was checked the same way — `$100` bill at 18% giving `$18` tip and `$118` total, and a split of 2 adding an `Each` row of `$59`.
+
+**macOS was not driven interactively.** The Mac's display was asleep for this pass, which makes the accessibility driver report zero windows (now documented in [macos-qa.md](macos-qa.md)). The panels themselves are the same shared code the iPhone run exercised, and the macOS target builds, but the placement, the theme and the click targets need a person.
+
+1. Enter a value, press the currency key. **VAT** and **Tip** appear at the right of the mode row; leave currency mode and they disappear.
+2. Neither should crowd the mode label at the smallest window width, or in landscape on iPhone.
+3. Open **VAT**. Check **Add VAT** and **Remove VAT** both read correctly and the emphasised figure switches between Inc VAT and Ex VAT with the direction.
+4. Tap a preset rate, then use the `−`/`+` stepper to reach a rate that is not a preset — 19% or 21% — and confirm the figures follow.
+5. **Use Result** writes the right figure — the gross when adding, the net when removing — and the operation line says which.
+6. Open **Tip**. Check the bill matches what is on screen, the presets select, and the split stepper adds an **Each** row only once the split is above 1.
+7. Confirm the split cannot go below 1.
+8. Leave currency mode while a panel is open. It should close rather than hang over a Basic-mode calculator.
+9. Check both panels in Dark and Light themes, and with larger text sizes — the figures shrink to fit rather than truncating.
+10. Run in another language and confirm every label is translated, including the accessibility labels on the steppers.
+11. **VoiceOver:** each result row should read as one phrase — "Inc VAT, $120" — rather than as two separate fragments.
+
 ## macOS theme sync — PR #97
 
 The fix rests entirely on this check: the repro could not be reproduced automatically, because the macOS QA driver reads text and structure but not colors.
@@ -58,15 +122,16 @@ The fix rests entirely on this check: the repro could not be reproduced automati
 
 The toggle cycle was verified on the iOS simulator. macOS and layout were not.
 
-1. **macOS:** type `5`, press the currency key. Display becomes `$5`, label switches Basic → Currency, key takes the accent color.
+1. **macOS:** type `5`, press the currency key in the top row. Display becomes `$5` and the label switches Basic → Currency.
 2. Press it again: symbol clears, label returns to Basic, and the `5` is still there.
-3. Check the key does not crowd the mode label at the smallest window width, or in landscape on iPhone.
-4. Tap or click the display body while in currency mode — it should still copy. The mode row now takes taps for the key, so this is the regression risk.
+3. Check the six top-row keys do not crowd each other at the smallest window width, or in landscape on iPhone.
+4. Tap or click the display body while in currency mode — it should still copy. The mode row no longer holds a control, so it passes taps straight through again.
 5. Change the currency symbol in Settings while a value is on screen; the symbol should update immediately, not on the next entry.
 6. Confirm the default symbol matches your region before ever opening Settings.
 7. Type `€` on a hardware keyboard, then press the currency key. It should clear the `€`, not swap it for the configured symbol.
 8. With currency on, press **AC**. Currency mode should stay on. Verified on iOS; check macOS.
 9. Confirm the currency symbol picker sits under **Language** in Settings on both platforms.
+10. On iOS, change the symbol in Settings, then quit and reopen. It should still be your choice — this did not persist before #67.
 
 ## Percent — PR #98
 
