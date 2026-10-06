@@ -59,6 +59,10 @@
 "window.new" = "Neues Fenster öffnen";
 "history.toggle" = "Verlauf anzeigen/ausblenden";
 
+/* Page switching shortcuts (issue #83) */
+"screen.next" = "Nächster Bildschirm";
+"screen.previous" = "Vorheriger Bildschirm";
+
 /* Konfigurierbare Funktionstasten (Issue #67) */
 "function.squareRoot" = "Quadratwurzel";
 "function.square" = "Quadrat";

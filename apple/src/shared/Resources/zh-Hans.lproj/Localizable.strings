@@ -59,6 +59,10 @@
 "window.new" = "打开新窗口";
 "history.toggle" = "履歴パネルを表示/非表示";
 
+/* Page switching shortcuts (issue #83) */
+"screen.next" = "下一屏";
+"screen.previous" = "上一屏";
+
 /* 可自定义功能键 (议题 #67) */
 "function.squareRoot" = "平方根";
 "function.square" = "平方";
