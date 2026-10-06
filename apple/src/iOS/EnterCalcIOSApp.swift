@@ -408,20 +408,21 @@ struct EnterCalcIOSApp: App {
 
                 Divider()
 
-                // The arrow points the way the pages move, matching the swipe:
-                // dragging left brings the page on the right into view, so
-                // Shift + Left does too. Requested this way in #83.
-                Button {
-                    NotificationCenter.default.post(name: .enterCalcIOSGoToNextScreen, object: nil)
-                } label: {
-                    Label(localized("screen.next"), systemImage: "chevron.right")
-                }
-                .keyboardShortcut(.leftArrow, modifiers: [.shift])
-
+                // The arrow names the page to go to: Shift + Right shows the page
+                // on the right, as Ctrl + Right does for Spaces. #83 first had
+                // it follow the swipe's finger direction instead, which read as
+                // inverted on a keyboard in QA.
                 Button {
                     NotificationCenter.default.post(name: .enterCalcIOSGoToPreviousScreen, object: nil)
                 } label: {
                     Label(localized("screen.previous"), systemImage: "chevron.left")
+                }
+                .keyboardShortcut(.leftArrow, modifiers: [.shift])
+
+                Button {
+                    NotificationCenter.default.post(name: .enterCalcIOSGoToNextScreen, object: nil)
+                } label: {
+                    Label(localized("screen.next"), systemImage: "chevron.right")
                 }
                 .keyboardShortcut(.rightArrow, modifiers: [.shift])
             }
@@ -1149,10 +1150,10 @@ private extension EnterCalcIOSView {
         if event.modifierFlags.intersection([.shift, .alternate]) == .shift {
             switch event.keyCode {
             case .keyboardLeftArrow:
-                goToNextScreenFromKeyboard()
+                goToPreviousScreenFromKeyboard()
                 return true
             case .keyboardRightArrow:
-                goToPreviousScreenFromKeyboard()
+                goToNextScreenFromKeyboard()
                 return true
             case .keyboardUpArrow:
                 adjustDisplayHeightFromKeyboard(byPoints: Self.keyboardDisplayResizeStep)
@@ -1360,7 +1361,7 @@ private extension EnterCalcIOSView {
         applyLanguage(screen.settings.languageCode, refreshing: screen.viewModel)
     }
 
-    /// Shift + Left. Moving past the last page opens a new one, matching what
+    /// Shift + Right. Moving past the last page opens a new one, matching what
     /// swiping in the same direction already does — the shortcut is not a
     /// second, more limited way to get around.
     func goToNextScreenFromKeyboard() {
@@ -1373,7 +1374,7 @@ private extension EnterCalcIOSView {
         }
     }
 
-    /// Shift + Right. There is nothing before the first page, so this stops
+    /// Shift + Left. There is nothing before the first page, so this stops
     /// rather than wrapping.
     func goToPreviousScreenFromKeyboard() {
         guard !isInteractionDisabled else { return }
