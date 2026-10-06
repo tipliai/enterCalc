@@ -173,6 +173,39 @@ final class CalculatorFunctionKeyTests: XCTestCase {
         XCTAssertEqual(Set(shown).count, shown.count, "stored value produced a duplicated key")
     }
 
+    // The repair should behave like the swap the chooser would have made: the
+    // colliding slot takes the function its overrider displaced, and every
+    // other slot keeps its default rather than shifting along the row.
+    func testRepairSwapsWithTheDisplacedDefaultInsteadOfShiftingTheRow() {
+        let assignments = CalculatorFunctionKeyAssignments(serialized: "action6=undo")
+
+        XCTAssertEqual(assignments[.action6], .undo)
+        XCTAssertEqual(assignments[.action1], .backspace)
+        for slot in [CalculatorFunctionSlot.action2, .action3, .action4, .action5, .parenthesesKey, .percentKey] {
+            XCTAssertEqual(assignments[slot], slot.defaultFunction, "\(slot.rawValue) moved")
+        }
+    }
+
+    // Every stored single or paired override, however it collides with the
+    // defaults, must load with each function shown at most once.
+    func testNoStoredOverrideCombinationProducesADuplicatedKey() {
+        let slots = CalculatorFunctionSlot.allCases
+        let functions = CalculatorFunctionKey.allCases
+        var values: [String] = []
+        for slot in slots {
+            for function in functions {
+                values.append("\(slot.rawValue)=\(function.rawValue)")
+            }
+        }
+        for first in values {
+            for second in values {
+                let assignments = CalculatorFunctionKeyAssignments(serialized: "\(first);\(second)")
+                let shown = slots.map { assignments[$0] }
+                XCTAssertEqual(Set(shown).count, shown.count, "\(first);\(second) duplicated a key: \(shown)")
+            }
+        }
+    }
+
     // MARK: - Presentation
 
     // Every function needs a glyph and a translated name, or it would render

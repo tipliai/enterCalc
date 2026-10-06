@@ -57,7 +57,7 @@ Every step below was driven end to end automatically — on the iPhone simulator
 14. Pick a function that already sits on another key — say put `backspace` where `undo` is. The two should **trade places**, not duplicate.
 15. Pick a function that is not on the keypad at all. The displaced function simply disappears; that is intended.
 16. Reassign a key, quit and reopen. The layout should survive.
-17. **iPad:** set up page 1 and page 2 differently and swipe between them. Each page keeps its own layout. **macOS:** the same across two windows.
+17. **iPad:** set up page 1 and page 2 differently and swipe between them. Each page keeps its own layout. **macOS:** with two windows open, change one — the other keeps its layout until it is closed. A newly opened window starts from the most recently changed layout, the same as theme, language and every other window setting.
 18. Switch to the **alternative keypad** in Settings. Its keys are deliberately fixed — press-and-hold and right-click should both do nothing there.
 19. Check the panel in Dark and Light themes, at the smallest window width, and in landscape on iPhone.
 20. **VoiceOver:** each configurable key should announce the *function's* name — "Undo", "Square Root" — not its glyph, and offer a **Change Function** action that opens the chooser.
