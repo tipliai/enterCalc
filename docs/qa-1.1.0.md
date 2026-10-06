@@ -29,6 +29,27 @@ Each had a passing test asserting the old result. They are intentional correctio
 2. `$6 + 200%` was `$12`, now `$18` — the percent applies to the amount instead of replacing it.
 3. All Clear used to switch currency mode off; it now stays on.
 
+## Input latency — #90
+
+#104 removed work that sat between the touch and the display update, but this issue's acceptance criterion is a *number* — a median tap-to-display latency at least 20% lower — and a number needs an instrument. The press handler is now bracketed by two signposts, so the measurement is a trace rather than a research project.
+
+They time the **handler** — from the tap being recognised on release to the handler returning — not touch delivery before it or the render after it. That is exactly the part #104 changed, so it is the fair comparison, but it is not the full on-glass latency; if that figure is wanted, read the render side off the same trace's Hitches and SwiftUI tracks.
+
+**On a device, with Instruments:**
+
+1. Instruments → **Points of Interest**, targeting EnterCalc on the device.
+2. Record, then tap the keypad twenty or so times at a natural pace.
+3. Two intervals appear per press. **`keypad press`** is the whole press handler; **`keypad result`** is the calculation and view-model update alone. The difference is what confirmation — haptics, sound, press animation — and per-press bookkeeping cost on the main thread.
+4. Repeat steps 1–3 on the **baseline**: branch `perf/90-latency-baseline`, which is `main` from just before #104 (`f3e75fe^1`) with the same two signposts applied in the same places. A plain pre-#104 build emits neither interval, so it has nothing to compare against. Compare the two `keypad press` medians for the ≥20% figure.
+
+**Without Instruments**, the same signposts come out of the unified log, which is enough to see the shape:
+
+```bash
+xcrun simctl spawn booted log stream --style compact --signpost --predicate 'subsystem == "com.tipliai.entercalc"'
+```
+
+**What the simulator already shows.** Across four taps: `keypad press` median **12.5ms**, `keypad result` median **1.0ms** — so roughly 92% of the press is confirmation rather than calculation. Treat that as a direction to look in, not a result: it is the simulator, where haptics do nothing at all, the log's timestamps are only millisecond-resolution, and four taps is not a sample. The device numbers are the ones the acceptance criterion is about.
+
 ## Page switching — #83
 
 The swipe-intent change was driven on the iPad simulator: a 12pt horizontal drift starting on a digit key now enters nothing and turns no page, while a 400pt swipe pages normally and still creates a new page past the last one. There is a deliberate dead band between the two — a keypad key gives up on its tap at 8pt of horizontal travel, and paging does not engage until 18pt, so a slide in between does nothing. That is the intended fix: a slip of that size is not a clear press or a clear swipe.
