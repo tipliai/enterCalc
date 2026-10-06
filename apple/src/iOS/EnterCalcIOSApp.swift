@@ -403,24 +403,25 @@ struct EnterCalcIOSApp: App {
 
                 Divider()
 
-                // The arrow points the way the pages move, matching the swipe:
-                // dragging left brings the page on the right into view, so
-                // Shift + Left does too. Requested this way in #83.
-                Button {
-                    actionContext?.goToNextScreen?()
-                } label: {
-                    Label(localized("screen.next"), systemImage: "chevron.right")
-                }
-                .keyboardShortcut(.leftArrow, modifiers: [.shift])
-                .disabled(actionContext?.goToNextScreen == nil)
-
+                // The arrow names the page to go to: Shift + Right shows the page
+                // on the right, as Ctrl + Right does for Spaces. #83 first had
+                // it follow the swipe's finger direction instead, which read as
+                // inverted on a keyboard in QA.
                 Button {
                     actionContext?.goToPreviousScreen?()
                 } label: {
                     Label(localized("screen.previous"), systemImage: "chevron.left")
                 }
-                .keyboardShortcut(.rightArrow, modifiers: [.shift])
+                .keyboardShortcut(.leftArrow, modifiers: [.shift])
                 .disabled(actionContext?.goToPreviousScreen == nil)
+
+                Button {
+                    actionContext?.goToNextScreen?()
+                } label: {
+                    Label(localized("screen.next"), systemImage: "chevron.right")
+                }
+                .keyboardShortcut(.rightArrow, modifiers: [.shift])
+                .disabled(actionContext?.goToNextScreen == nil)
             }
         }
     }
@@ -1128,10 +1129,10 @@ private extension EnterCalcIOSView {
         if event.modifierFlags.intersection([.shift, .alternate]) == .shift {
             switch event.keyCode {
             case .keyboardLeftArrow:
-                goToNextScreenFromKeyboard()
+                goToPreviousScreenFromKeyboard()
                 return true
             case .keyboardRightArrow:
-                goToPreviousScreenFromKeyboard()
+                goToNextScreenFromKeyboard()
                 return true
             case .keyboardUpArrow:
                 adjustDisplayHeightFromKeyboard(byPoints: Self.keyboardDisplayResizeStep)
@@ -1339,7 +1340,7 @@ private extension EnterCalcIOSView {
         applyLanguage(screen.settings.languageCode, refreshing: screen.viewModel)
     }
 
-    /// Shift + Left. Moving past the last page opens a new one, matching what
+    /// Shift + Right. Moving past the last page opens a new one, matching what
     /// swiping in the same direction already does — the shortcut is not a
     /// second, more limited way to get around.
     func goToNextScreenFromKeyboard() {
@@ -1352,7 +1353,7 @@ private extension EnterCalcIOSView {
         }
     }
 
-    /// Shift + Right. There is nothing before the first page, so this stops
+    /// Shift + Left. There is nothing before the first page, so this stops
     /// rather than wrapping.
     func goToPreviousScreenFromKeyboard() {
         guard !isInteractionDisabled else { return }
@@ -3257,10 +3258,15 @@ private extension EnterCalcIOSView {
                                     buttonHeight: buttonHeight,
                                     pressFeedback: triggerKeyPressFeedback,
                                     action: {
-                                        if let function = button.function {
-                                            performFunction(function, on: screen)
-                                        } else {
-                                            button.action(screen.viewModel)
+                                        // Only the calculation is timed, so the
+                                        // scroll reset and review gate below do
+                                        // not count towards `keypad result`.
+                                        InputLatencySignpost.measuring(InputLatencySignpost.resultInterval) {
+                                            if let function = button.function {
+                                                performFunction(function, on: screen)
+                                            } else {
+                                                button.action(screen.viewModel)
+                                            }
                                         }
                                         if isLandscapeMode {
                                             resetLandscapeDisplayScroll(for: screen)
@@ -5637,6 +5643,14 @@ private struct IOSKeypadButton: View {
     }
 
     private func handleTap() {
+        // Bracketed for #90: the outer interval is the whole press handler, from
+        // the tap being recognised to the last side effect returning. The
+        // calculation alone is bracketed inside `action` (see `keypad`). The
+        // gap between them is what confirmation and bookkeeping cost on the
+        // main thread — precisely what the issue suspects.
+        let state = InputLatencySignpost.beginPress()
+        defer { InputLatencySignpost.endPress(state) }
+
         // The calculation runs first so the display updates as early as
         // possible; feedback is what the press *confirms*, not what it does, so
         // it must not sit in front of the result.
