@@ -195,4 +195,83 @@ final class CurrencyModeTests: XCTestCase {
             XCTAssertEqual(viewModel.display, "\(symbol)0", "wrong display for \(symbol)")
         }
     }
+
+    // MARK: - Editing caret (#118)
+
+    /// The display with a `|` where the caret is drawn, so a failure reads as
+    /// the misplacement itself.
+    private func caretRendering(of viewModel: CalculatorViewModel) -> String {
+        let characters = Array(viewModel.display)
+        guard let boundary = viewModel.displayEditCaretBoundaryIndex else { return viewModel.display }
+        return String(characters[..<boundary]) + "|" + String(characters[boundary...])
+    }
+
+    private func currencyViewModel(_ digits: String, symbol: String, negative: Bool = false, style: NumberFormatStyle? = nil) -> CalculatorViewModel {
+        let viewModel = CalculatorViewModel()
+        if let style { viewModel.setNumberFormatStyle(style) }
+        enter(digits, into: viewModel)
+        if negative { viewModel.toggleSign() }
+        viewModel.toggleCurrencySymbol(symbol)
+        return viewModel
+    }
+
+    // Tapping at the very start of the display must put the caret after the
+    // symbol, before the first digit: the symbol is not something you edit.
+    func testTappingTheStartOfTheDisplayPutsTheCaretAfterTheSymbol() {
+        let dollars = currencyViewModel("120", symbol: "$")
+        dollars.setDisplayEditCursor(displayBoundaryIndex: 0)
+        XCTAssertEqual(caretRendering(of: dollars), "$|120")
+
+        let euros = currencyViewModel("1234", symbol: "€", style: .western)
+        euros.setDisplayEditCursor(displayBoundaryIndex: 0)
+        XCTAssertEqual(caretRendering(of: euros), "€|1,234")
+    }
+
+    // Symbols accepted from a hardware keyboard go beyond the Settings
+    // picker's catalog, and must be stepped over just the same.
+    func testSymbolsOutsideTheCatalogAlsoKeepTheCaretAfterThem() {
+        for symbol in ["₿", "₤"] {
+            XCTAssertNil(CurrencyCatalog.option(forSymbol: symbol), "\(symbol) is in the catalog now; pick another")
+            let viewModel = currencyViewModel("120", symbol: symbol)
+            viewModel.setDisplayEditCursor(displayBoundaryIndex: 0)
+            XCTAssertEqual(caretRendering(of: viewModel), "\(symbol)|120")
+        }
+    }
+
+    func testTappingJustAfterTheSymbolPutsTheCaretAfterIt() {
+        let viewModel = currencyViewModel("120", symbol: "£")
+        viewModel.setDisplayEditCursor(displayBoundaryIndex: 1)
+        XCTAssertEqual(caretRendering(of: viewModel), "£|120")
+    }
+
+    func testMovingLeftStopsAfterTheSymbol() {
+        let viewModel = currencyViewModel("120", symbol: "$")
+        viewModel.setDisplayEditCursor(displayBoundaryIndex: Array(viewModel.display).count)
+        for _ in 0..<6 { viewModel.moveDisplayEditCursorLeft() }
+        XCTAssertEqual(caretRendering(of: viewModel), "$|120")
+    }
+
+    func testNegativeAmountPutsTheCaretAfterTheSignAndSymbol() {
+        let viewModel = currencyViewModel("120", symbol: "$", negative: true)
+        viewModel.setDisplayEditCursor(displayBoundaryIndex: 0)
+        XCTAssertEqual(caretRendering(of: viewModel), "-$|120")
+    }
+
+    // Grouping separators are still skipped the other way: the caret sits
+    // right after the digit it follows, not after the separator.
+    func testCaretStillStopsBeforeAGroupingSeparator() {
+        let viewModel = currencyViewModel("1234", symbol: "$", style: .western)
+        viewModel.setDisplayEditCursor(displayBoundaryIndex: 2)
+        XCTAssertEqual(caretRendering(of: viewModel), "$1|,234")
+    }
+
+    // A digit typed at the leftmost caret position goes in front of the
+    // first digit, behind the symbol.
+    func testTypingAtTheLeftmostCaretInsertsAfterTheSymbol() {
+        let viewModel = currencyViewModel("120", symbol: "$")
+        viewModel.setDisplayEditCursor(displayBoundaryIndex: 0)
+        viewModel.inputDigit("5")
+        XCTAssertEqual(viewModel.display, "$5,120")
+        XCTAssertEqual(caretRendering(of: viewModel), "$5|,120")
+    }
 }
