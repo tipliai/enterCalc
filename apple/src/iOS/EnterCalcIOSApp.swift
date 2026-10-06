@@ -433,6 +433,13 @@ struct EnterCalcIOSView: View {
     @State private var showSettingsSheet: Bool = false
     /// Live hold-and-drag reassignment of a configurable key, if one is running.
     @State private var functionChooser: FunctionKeyChooserSession? = nil
+    // Currency-mode tool settings (#92). Session state rather than a stored
+    // preference: they belong to the calculation in progress, the same way the
+    // currency symbol itself does.
+    @State private var vatRate: Decimal = 20
+    @State private var vatRemovesTax: Bool = false
+    @State private var tipRate: Decimal = 18
+    @State private var tipSplitCount: Int = TipBreakdown.defaultSplitCount
     @State private var counterRotatesForUpsideDownPortrait: Bool = false
     @State private var flashCopy: Bool = false
     @State private var showCopyToast: Bool = false
@@ -842,6 +849,11 @@ struct EnterCalcIOSView: View {
             .onDisappear {
                 stopDisplayShimmerParallaxMotion()
                 stopDeviceOrientationObservation()
+            }
+            // Leaving currency mode takes its tools with it, so a panel is
+            // never left open over a calculator that is no longer in the mode.
+            .onValueChange(of: activeScreen.viewModel.activeCurrencySymbol) { _ in
+                dismissCurrencyToolsIfNeeded()
             }
             .onValueChange(of: scenePhase) { newPhase in
                 guard newPhase == .active else {
@@ -1366,6 +1378,48 @@ private extension EnterCalcIOSView {
                         onCopyEntry: { entry in copyHistoryEntryResultToPasteboard(entry, from: activeScreen.viewModel) },
                         onCopyOperationEntry: { entry in copyHistoryEntryOperationToPasteboard(entry, from: activeScreen.viewModel) }
                     )
+                }
+            } else if activeOverlay == .vat {
+                roundingOverlayPanel(metrics: metrics) {
+                    CurrencyVATPanel(
+                        value: activeScreen.viewModel.currentValue,
+                        rate: vatRate,
+                        isRemoving: vatRemovesTax,
+                        palette: palette,
+                        localized: { localized($0) },
+                        format: { activeScreen.viewModel.formattedValue($0) },
+                        formatRate: { activeScreen.viewModel.formattedValue($0, includingCurrency: false) },
+                        onRateChange: { vatRate = $0; triggerActionFeedback() },
+                        onDirectionChange: { vatRemovesTax = $0; triggerActionFeedback() },
+                        onApply: { result in
+                            activeScreen.viewModel.applyToolResult(result, describedBy: vatSummary())
+                            triggerActionFeedback(emphasized: true)
+                            dismissActiveOverlay()
+                        },
+                        onDismiss: { dismissActiveOverlay() }
+                    )
+                    .padding(.bottom, roundingPanelBottomInset(mode: metrics.mode, isUpsideDown: counterRotatesForUpsideDownPortrait, safeAreaBottom: safeAreaInsets.bottom))
+                }
+            } else if activeOverlay == .tip {
+                roundingOverlayPanel(metrics: metrics) {
+                    CurrencyTipPanel(
+                        bill: activeScreen.viewModel.currentValue,
+                        rate: tipRate,
+                        splitCount: tipSplitCount,
+                        palette: palette,
+                        localized: { localized($0) },
+                        format: { activeScreen.viewModel.formattedValue($0) },
+                        formatRate: { activeScreen.viewModel.formattedValue($0, includingCurrency: false) },
+                        onRateChange: { tipRate = $0; triggerActionFeedback() },
+                        onSplitChange: { tipSplitCount = clampedSplitCount($0); triggerActionFeedback() },
+                        onApply: { result in
+                            activeScreen.viewModel.applyToolResult(result, describedBy: tipSummary())
+                            triggerActionFeedback(emphasized: true)
+                            dismissActiveOverlay()
+                        },
+                        onDismiss: { dismissActiveOverlay() }
+                    )
+                    .padding(.bottom, roundingPanelBottomInset(mode: metrics.mode, isUpsideDown: counterRotatesForUpsideDownPortrait, safeAreaBottom: safeAreaInsets.bottom))
                 }
             } else if activeOverlay == .rounding {
                 roundingOverlayPanel(metrics: metrics) {
@@ -2727,10 +2781,12 @@ private extension EnterCalcIOSView {
                     )
                     .opacity(isBasicSpaceInUse ? 0 : 1)
                     .animation(reduceMotionEnabled ? nil : .easeInOut(duration: 0.5), value: isBasicSpaceInUse)
-                    // The row is a label only — the currency key moved to the
-                    // configurable top row in #67 — so taps pass straight
-                    // through to the display's copy gesture.
-                    .allowsHitTesting(false)
+                    // The row carries the VAT and TIP buttons in currency
+                    // mode, so it has to take taps then; the label inside opts
+                    // out individually so tapping the display still copies. In
+                    // Basic mode there is nothing to hit, and a fully faded row
+                    // is never tappable.
+                    .allowsHitTesting(activeScreen.viewModel.activeCurrencySymbol != nil && !isBasicSpaceInUse)
                 }
             }
             .overlay(alignment: .top) {
@@ -2759,7 +2815,57 @@ private extension EnterCalcIOSView {
         activeScreen.viewModel.activeCurrencySymbol == nil ? "calculator.mode.basic" : "calculator.mode.currency"
     }
 
+    /// Compact outlined pill, deliberately unlike a keypad key: it opens a tool
+    /// rather than entering anything.
+    func currencyToolButton(metrics: IOSLayoutMetrics, titleKey: String, pane: IOSOverlayPane, opacity: Double) -> some View {
+        let isActive = activeOverlay == pane
+        return Button {
+            toggleOverlay(pane)
+        } label: {
+            Text(localized(titleKey))
+                .font(EnterCalcFont.appFont(size: metrics.memoryFontSize))
+                .foregroundStyle((isActive ? palette.accent : palette.textPrimary).opacity(opacity))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5)
+                        .strokeBorder(
+                            (isActive ? palette.accent : palette.textSecondary).opacity(opacity * 0.7),
+                            lineWidth: 1
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isActive ? [.isSelected] : [])
+    }
+
+    func clampedSplitCount(_ count: Int) -> Int {
+        min(max(count, TipBreakdown.splitCountRange.lowerBound), TipBreakdown.splitCountRange.upperBound)
+    }
+
+    /// The operation line left behind after a tool writes its result, so the
+    /// display says where the number came from.
+    func vatSummary() -> String {
+        let rate = activeScreen.viewModel.formattedValue(vatRate, includingCurrency: false)
+        let action = localized(vatRemovesTax ? "currency.vat.remove" : "currency.vat.add")
+        return "\(action) \(rate)% ="
+    }
+
+    func tipSummary() -> String {
+        let rate = activeScreen.viewModel.formattedValue(tipRate, includingCurrency: false)
+        return "\(localized("currency.tip.title")) \(rate)% ="
+    }
+
+    /// Leaving currency mode takes the tools with it, so a panel is never left
+    /// open over a calculator that is no longer in currency mode.
+    func dismissCurrencyToolsIfNeeded() {
+        guard activeScreen.viewModel.activeCurrencySymbol == nil else { return }
+        guard activeOverlay == .vat || activeOverlay == .tip else { return }
+        dismissActiveOverlay()
+    }
+
     func memoryControls(metrics: IOSLayoutMetrics, opacity: Double) -> some View {
+        let showsCurrencyTools = activeScreen.viewModel.activeCurrencySymbol != nil
         return HStack(spacing: 8) {
             Text(localized(currentModeLabelKey))
                 .font(EnterCalcFont.appFont(size: metrics.memoryFontSize))
@@ -2769,6 +2875,11 @@ private extension EnterCalcIOSView {
                 .allowsHitTesting(false)
 
             Spacer(minLength: 4)
+
+            if showsCurrencyTools {
+                currencyToolButton(metrics: metrics, titleKey: "currency.vat.title", pane: .vat, opacity: opacity)
+                currencyToolButton(metrics: metrics, titleKey: "currency.tip.title", pane: .tip, opacity: opacity)
+            }
         }
             .frame(maxWidth: .infinity, minHeight: metrics.memoryHeight, maxHeight: metrics.memoryHeight, alignment: .leading)
             .padding(.horizontal, metrics.displayHorizontalPadding)
@@ -4553,6 +4664,8 @@ private enum AppTheme: String, CaseIterable {
 private enum IOSOverlayPane {
     case history
     case rounding
+    case vat
+    case tip
 }
 
 // Coarse layout buckets that drive metric selection below.

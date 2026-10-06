@@ -68,3 +68,27 @@
 "functionKey.chooser.title" = "Funktion wählen";
 "functionKey.change" = "Funktion ändern";
 "functionKey.hint" = "Gedrückt halten, um diese Taste zu ändern";
+
+/* Werkzeuge im Währungsmodus: MwSt. und Trinkgeld (Issue #92) */
+"currency.vat.title" = "MwSt.";
+"currency.vat.add" = "MwSt. addieren";
+"currency.vat.remove" = "MwSt. herausrechnen";
+"currency.vat.rate" = "Satz";
+"currency.vat.rate.decrease" = "Satz verringern";
+"currency.vat.rate.increase" = "Satz erhöhen";
+"currency.vat.net" = "Netto";
+"currency.vat.amount" = "MwSt.";
+"currency.vat.gross" = "Brutto";
+"currency.tip.title" = "Trinkgeld";
+"currency.tip.bill" = "Rechnung";
+"currency.tip.rate" = "Trinkgeld";
+"currency.tip.rate.decrease" = "Trinkgeld verringern";
+"currency.tip.rate.increase" = "Trinkgeld erhöhen";
+"currency.tip.split" = "Teilen";
+"currency.tip.split.decrease" = "Weniger Personen";
+"currency.tip.split.increase" = "Mehr Personen";
+"currency.tip.amount" = "Trinkgeld";
+"currency.tip.total" = "Gesamt";
+"currency.tip.perPerson" = "Pro Person";
+"currency.tool.use" = "Ergebnis übernehmen";
+"currency.tool.close" = "Schließen";

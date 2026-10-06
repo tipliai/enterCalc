@@ -68,3 +68,27 @@
 "functionKey.chooser.title" = "选择功能";
 "functionKey.change" = "更改功能";
 "functionKey.hint" = "长按即可更改此键";
+
+/* 货币模式工具：增值税与小费 (议题 #92) */
+"currency.vat.title" = "增值税";
+"currency.vat.add" = "加上增值税";
+"currency.vat.remove" = "扣除增值税";
+"currency.vat.rate" = "税率";
+"currency.vat.rate.decrease" = "降低税率";
+"currency.vat.rate.increase" = "提高税率";
+"currency.vat.net" = "不含税";
+"currency.vat.amount" = "增值税";
+"currency.vat.gross" = "含税";
+"currency.tip.title" = "小费";
+"currency.tip.bill" = "账单";
+"currency.tip.rate" = "小费";
+"currency.tip.rate.decrease" = "减少小费";
+"currency.tip.rate.increase" = "增加小费";
+"currency.tip.split" = "分摊";
+"currency.tip.split.decrease" = "减少人数";
+"currency.tip.split.increase" = "增加人数";
+"currency.tip.amount" = "小费";
+"currency.tip.total" = "总计";
+"currency.tip.perPerson" = "每人";
+"currency.tool.use" = "使用结果";
+"currency.tool.close" = "关闭";

@@ -75,6 +75,24 @@ Worth knowing when QA'ing #92 later:
 3. Net plus VAT always equals the gross exactly, even where the division does not come out even — `100` including 20% VAT is `83.333…` net and `16.666…` VAT, and those two still add back to exactly `100`. Any rounding applied for display must preserve that.
 4. Rates at or below −100% are refused rather than dividing by zero.
 
+## VAT and TIP controls — #92
+
+The pills appear in the mode row only while a currency symbol is showing, and both panels were driven end to end on the iPhone simulator: entering `$120`, opening VAT, switching to **Remove VAT** at 20% and reading back `$100` ex / `$20` VAT / `$120` inc, then **Use Result** writing `$100` to the display with the operation line reading `Remove VAT 20% =`. The Tip panel was checked the same way — `$100` bill at 18% giving `$18` tip and `$118` total, and a split of 2 adding an `Each` row of `$59`.
+
+**macOS was not driven interactively.** The Mac's display was asleep for this pass, which makes the accessibility driver report zero windows (now documented in [macos-qa.md](macos-qa.md)). The panels themselves are the same shared code the iPhone run exercised, and the macOS target builds, but the placement, the theme and the click targets need a person.
+
+1. Enter a value, press the currency key. **VAT** and **Tip** appear at the right of the mode row; leave currency mode and they disappear.
+2. Neither should crowd the mode label at the smallest window width, or in landscape on iPhone.
+3. Open **VAT**. Check **Add VAT** and **Remove VAT** both read correctly and the emphasised figure switches between Inc VAT and Ex VAT with the direction.
+4. Tap a preset rate, then use the `−`/`+` stepper to reach a rate that is not a preset — 19% or 21% — and confirm the figures follow.
+5. **Use Result** writes the right figure — the gross when adding, the net when removing — and the operation line says which.
+6. Open **Tip**. Check the bill matches what is on screen, the presets select, and the split stepper adds an **Each** row only once the split is above 1.
+7. Confirm the split cannot go below 1.
+8. Leave currency mode while a panel is open. It should close rather than hang over a Basic-mode calculator.
+9. Check both panels in Dark and Light themes, and with larger text sizes — the figures shrink to fit rather than truncating.
+10. Run in another language and confirm every label is translated, including the accessibility labels on the steppers.
+11. **VoiceOver:** each result row should read as one phrase — "Inc VAT, $120" — rather than as two separate fragments.
+
 ## macOS theme sync — PR #97
 
 The fix rests entirely on this check: the repro could not be reproduced automatically, because the macOS QA driver reads text and structure but not colors.
