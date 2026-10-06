@@ -111,6 +111,13 @@ Worth knowing when QA'ing #92 later:
 3. Net plus VAT always equals the gross exactly, even where the division does not come out even — `100` including 20% VAT is `83.333…` net and `16.666…` VAT, and those two still add back to exactly `100`. Any rounding applied for display must preserve that.
 4. Rates at or below −100% are refused rather than dividing by zero.
 
+## Editing caret in Currency mode — #118
+
+1. Enter `120`, press the currency key, then tap or click the far left of the display, on or just before the `$`. The caret should appear **between the `$` and the `1`**, never in front of the symbol.
+2. With the caret in the number, press Left until it stops. It should stop after the symbol.
+3. Type a digit there. It goes in front of the first digit, behind the symbol (`$5,120`).
+4. Repeat with a negative amount (`±` first): the caret stops after `-$`.
+
 ## VAT and TIP controls — #92
 
 The pills appear in the mode row only while a currency symbol is showing, and both panels were driven end to end on the iPhone simulator: entering `$120`, opening VAT, switching to **Remove VAT** at 20% and reading back `$100` ex / `$20` VAT / `$120` inc, then **Use Result** writing `$100` to the display with the operation line reading `Remove VAT 20% =`. The Tip panel was checked the same way — `$100` bill at 18% giving `$18` tip and `$118` total, and a split of 2 adding an `Each` row of `$59`.
