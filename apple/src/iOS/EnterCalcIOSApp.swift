@@ -987,6 +987,29 @@ private extension EnterCalcIOSView {
             }
         }
 
+        // Shift + arrows are menu commands (page switching and display
+        // resizing). Handled here as well, for the same reason as ⇧⌘C above:
+        // otherwise the bare-arrow cases below would take them as a caret move
+        // or open the rounding overlay before the menu ever saw them.
+        if event.modifierFlags.intersection([.shift, .alternate]) == .shift {
+            switch event.keyCode {
+            case .keyboardLeftArrow:
+                goToNextScreenFromKeyboard()
+                return true
+            case .keyboardRightArrow:
+                goToPreviousScreenFromKeyboard()
+                return true
+            case .keyboardUpArrow:
+                adjustDisplayHeightFromKeyboard(byPoints: Self.keyboardDisplayResizeStep)
+                return true
+            case .keyboardDownArrow:
+                adjustDisplayHeightFromKeyboard(byPoints: -Self.keyboardDisplayResizeStep)
+                return true
+            default:
+                break
+            }
+        }
+
         if handleHistoryOverlayHardwareKey(event) {
             return true
         }
