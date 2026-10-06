@@ -227,17 +227,24 @@ extension CalculatorFunctionKeyAssignments {
         // `action1=backspace` while action6 still defaults to backspace. Push
         // the defaulted slot out of the way so the invariant "no function
         // appears twice" holds for what is actually shown.
-        for slot in CalculatorFunctionSlot.allCases where parsed[slot] == nil {
-            if claimed.contains(slot.defaultFunction) {
-                let replacement = CalculatorFunctionSlot.allCases
-                    .map(\.defaultFunction)
-                    .first { !claimed.contains($0) }
-                if let replacement {
-                    parsed[slot] = replacement
-                    claimed.insert(replacement)
-                }
-            } else {
-                claimed.insert(slot.defaultFunction)
+        //
+        // Every default still in place is claimed before any replacement is
+        // chosen, so a replacement can never take a default that a later slot
+        // is still showing — which would cascade the whole row along by one.
+        let collidingSlots = CalculatorFunctionSlot.allCases.filter { parsed[$0] == nil && claimed.contains($0.defaultFunction) }
+        for slot in CalculatorFunctionSlot.allCases where parsed[slot] == nil && !collidingSlots.contains(slot) {
+            claimed.insert(slot.defaultFunction)
+        }
+
+        // Prefer the functions the overrides displaced, which makes the repair
+        // the same swap the chooser would have made. There are always enough of
+        // them, but any unused function is a safe last resort.
+        let displaced = CalculatorFunctionSlot.allCases.filter { parsed[$0] != nil }.map(\.defaultFunction)
+        for slot in collidingSlots {
+            let replacement = (displaced + CalculatorFunctionKey.allCases).first { !claimed.contains($0) }
+            if let replacement {
+                parsed[slot] = replacement
+                claimed.insert(replacement)
             }
         }
 
