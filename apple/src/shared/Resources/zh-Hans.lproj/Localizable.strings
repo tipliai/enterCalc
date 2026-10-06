@@ -58,3 +58,13 @@
 "screen.pageStatus" = "第 %1$@ 个屏幕，共 %2$@ 个";
 "window.new" = "打开新窗口";
 "history.toggle" = "履歴パネルを表示/非表示";
+
+/* 可自定义功能键 (议题 #67) */
+"function.squareRoot" = "平方根";
+"function.square" = "平方";
+"function.reciprocal" = "倒数";
+"function.parentheses" = "括号";
+"function.percent" = "百分比";
+"functionKey.chooser.title" = "选择功能";
+"functionKey.change" = "更改功能";
+"functionKey.hint" = "长按即可更改此键";

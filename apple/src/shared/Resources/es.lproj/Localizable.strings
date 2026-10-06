@@ -58,3 +58,13 @@
 "screen.pageStatus" = "Pantalla %1$@ de %2$@";
 "window.new" = "Abrir nueva ventana";
 "history.toggle" = "Mostrar/ocultar historial";
+
+/* Teclas de función configurables (incidencia #67) */
+"function.squareRoot" = "Raíz cuadrada";
+"function.square" = "Cuadrado";
+"function.reciprocal" = "Inverso";
+"function.parentheses" = "Paréntesis";
+"function.percent" = "Porcentaje";
+"functionKey.chooser.title" = "Elegir función";
+"functionKey.change" = "Cambiar función";
+"functionKey.hint" = "Mantén pulsado para cambiar esta tecla";
