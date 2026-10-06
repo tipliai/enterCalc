@@ -3273,8 +3273,26 @@ public final class CalculatorViewModel: ObservableObject {
 
     private func displayBoundaryIndex(forRawCursorIndex rawIndex: Int) -> Int? {
         let normalized = normalizedDisplayEditCursorIndex(rawIndex)
-        return displayBoundaryToRawCursorMapping().firstIndex(of: normalized)
+        let mapping = displayBoundaryToRawCursorMapping()
+        guard var boundary = mapping.firstIndex(of: normalized) else { return nil }
+
+        // The currency symbol is display-only, so the boundaries either side of
+        // it map to the same raw index and `firstIndex` lands in front of it.
+        // Step over it: the symbol is not editable, and the caret belongs before
+        // the first digit (#118). Grouping separators are deliberately not
+        // skipped, so the caret stays right after the digit it follows.
+        let displayCharacters = Array(display)
+        while boundary < displayCharacters.count,
+              mapping[boundary + 1] == normalized,
+              Self.currencySymbolCharacters.contains(displayCharacters[boundary]) {
+            boundary += 1
+        }
+        return boundary
     }
+
+    private static let currencySymbolCharacters: Set<Character> = Set(
+        CurrencyCatalog.all.flatMap { Array($0.symbol) } + Array(CurrencyCatalog.fallback.symbol)
+    )
 
     private func displayCharacterMatchesRawCharacter(_ displayCharacter: Character, rawCharacter: Character) -> Bool {
         if displayCharacter == rawCharacter {
