@@ -29,14 +29,35 @@ Each had a passing test asserting the old result. They are intentional correctio
 2. `$6 + 200%` was `$12`, now `$18` — the percent applies to the amount instead of replacing it.
 3. All Clear used to switch currency mode off; it now stays on.
 
+## Input latency — #90
+
+#104 removed work that sat between the touch and the display update, but this issue's acceptance criterion is a *number* — a median tap-to-display latency at least 20% lower — and a number needs an instrument. The press handler is now bracketed by two signposts, so the measurement is a trace rather than a research project.
+
+They time the **handler** — from the tap being recognised on release to the handler returning — not touch delivery before it or the render after it. That is exactly the part #104 changed, so it is the fair comparison, but it is not the full on-glass latency; if that figure is wanted, read the render side off the same trace's Hitches and SwiftUI tracks.
+
+**On a device, with Instruments:**
+
+1. Instruments → **Points of Interest**, targeting EnterCalc on the device.
+2. Record, then tap the keypad twenty or so times at a natural pace.
+3. Two intervals appear per press. **`keypad press`** is the whole press handler; **`keypad result`** is the calculation and view-model update alone. The difference is what confirmation — haptics, sound, press animation — and per-press bookkeeping cost on the main thread.
+4. Repeat steps 1–3 on the **baseline**: branch `perf/90-latency-baseline`, which is `main` from just before #104 (`f3e75fe^1`) with the same two signposts applied in the same places. A plain pre-#104 build emits neither interval, so it has nothing to compare against. Compare the two `keypad press` medians for the ≥20% figure.
+
+**Without Instruments**, the same signposts come out of the unified log, which is enough to see the shape:
+
+```bash
+xcrun simctl spawn booted log stream --style compact --signpost --predicate 'subsystem == "com.tipliai.entercalc"'
+```
+
+**What the simulator already shows.** Across four taps: `keypad press` median **12.5ms**, `keypad result` median **1.0ms** — so roughly 92% of the press is confirmation rather than calculation. Treat that as a direction to look in, not a result: it is the simulator, where haptics do nothing at all, the log's timestamps are only millisecond-resolution, and four taps is not a sample. The device numbers are the ones the acceptance criterion is about.
+
 ## Page switching — #83
 
 The swipe-intent change was driven on the iPad simulator: a 12pt horizontal drift starting on a digit key now enters nothing and turns no page, while a 400pt swipe pages normally and still creates a new page past the last one. There is a deliberate dead band between the two — a keypad key gives up on its tap at 8pt of horizontal travel, and paging does not engage until 18pt, so a slide in between does nothing. That is the intended fix: a slip of that size is not a clear press or a clear swipe.
 
 **The keyboard shortcuts were not driven.** Sending hardware keys to the simulator needs the Mac's display awake, and it was asleep for this pass — the same limitation that blocked the macOS driver.
 
-1. **iPad with a hardware keyboard:** Shift + Left moves to the page on the **right**, Shift + Right to the page on the **left**. This looks inverted; it is deliberate — the arrow points the way the pages move, matching the swipe. Confirm it feels right, and say so if it does not, because it is one line to flip.
-2. Shift + Left on the last page opens a new page, the same as swiping. Shift + Right on the first page does nothing rather than wrapping.
+1. **iPad with a hardware keyboard:** Shift + Right moves to the page on the **right**, Shift + Left to the page on the **left**. (The first build had these the other way round, following the swipe's finger direction; QA found that inverted, so it was flipped.)
+2. Shift + Right on the last page opens a new page, the same as swiping. Shift + Left on the first page does nothing rather than wrapping.
    - Repeat both while editing the display (press Insert first, so plain Left/Right move the caret) and with the rounding panel open. Shift + Left/Right must still switch pages rather than moving the caret or the rounding selection, and Shift + Down must shrink the display rather than open the rounding panel. Each press should move exactly **one** page.
 3. Both appear under **View** in the menu bar, translated, and are reachable by VoiceOver.
 4. **⇧⌘C copies the operation** on both platforms, while ⌘C still copies the result. Worth checking carefully: both platforms intercept keyboard events before the menus see them, so this needed handling in two places, not just the menu item. Without that it would have silently copied the result instead.
@@ -90,6 +111,13 @@ Worth knowing when QA'ing #92 later:
 2. Reverse VAT on `120` at 20% gives `100` net and `20` VAT.
 3. Net plus VAT always equals the gross exactly, even where the division does not come out even — `100` including 20% VAT is `83.333…` net and `16.666…` VAT, and those two still add back to exactly `100`. Any rounding applied for display must preserve that.
 4. Rates at or below −100% are refused rather than dividing by zero.
+
+## Editing caret in Currency mode — #118
+
+1. Enter `120`, press the currency key, then tap or click the far left of the display, on or just before the `$`. The caret should appear **between the `$` and the `1`**, never in front of the symbol.
+2. With the caret in the number, press Left until it stops. It should stop after the symbol.
+3. Type a digit there. It goes in front of the first digit, behind the symbol (`$5,120`).
+4. Repeat with a negative amount (`±` first): the caret stops after `-$`.
 
 ## VAT and TIP controls — #92
 
