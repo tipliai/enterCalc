@@ -29,7 +29,6 @@ Each had a passing test asserting the old result. They are intentional correctio
 2. `$6 + 200%` was `$12`, now `$18` — the percent applies to the amount instead of replacing it.
 3. All Clear used to switch currency mode off; it now stays on.
 
-<<<<<<< HEAD
 ## Configurable function keys — #67
 
 Every step below was driven end to end automatically — on the iPhone simulator by synthetic touches, on macOS by synthetic mouse events — confirming the key changed, the swap moved the displaced function, and the press or click that opened the chooser did **not** also run the function it was replacing. What needs a person is how it feels and how the panel looks.
@@ -58,14 +57,24 @@ Every step below was driven end to end automatically — on the iPhone simulator
 14. Pick a function that already sits on another key — say put `backspace` where `undo` is. The two should **trade places**, not duplicate.
 15. Pick a function that is not on the keypad at all. The displaced function simply disappears; that is intended.
 16. Reassign a key, quit and reopen. The layout should survive.
-17. **iPad:** set up page 1 and page 2 differently and swipe between them. Each page keeps its own layout. **macOS:** the same across two windows.
+17. **iPad:** set up page 1 and page 2 differently and swipe between them. Each page keeps its own layout. **macOS:** with two windows open, change one — the other keeps its layout until it is closed. A newly opened window starts from the most recently changed layout, the same as theme, language and every other window setting.
 18. Switch to the **alternative keypad** in Settings. Its keys are deliberately fixed — press-and-hold and right-click should both do nothing there.
 19. Check the panel in Dark and Light themes, at the smallest window width, and in landscape on iPhone.
 20. **VoiceOver:** each configurable key should announce the *function's* name — "Undo", "Square Root" — not its glyph, and offer a **Change Function** action that opens the chooser.
 21. Run in another language and confirm the chooser title, the hint and every function name are translated.
 
 If a check fails, `ENTERCALC_DEBUG_LOGS=1` makes the app log every chooser open and every reassignment as `[functionKeys] <slot> = <function>; layout = …`, which the macOS driver's `log` command prints. The accessibility tree cannot show which function a key carries, so that log is the only readable record.
-=======
+## Percentage and VAT maths — #25
+
+Engine only: this ships the calculation behind percentage mode and reverse VAT, with no UI. The VAT and TIP controls that reach it are #92, so there is nothing to click yet and nothing here needs a manual pass — the maths is unit-tested, and the results were cross-checked against an independent implementation as well as against typing the same thing on the keypad.
+
+Worth knowing when QA'ing #92 later:
+
+1. `100 + 10%` gives an amount of `10` and a result of `110`; `100 - 10%` gives an amount of `10` and a result of `90`. The amount is unsigned in both directions, so a discount reads as its size rather than as a negative number.
+2. Reverse VAT on `120` at 20% gives `100` net and `20` VAT.
+3. Net plus VAT always equals the gross exactly, even where the division does not come out even — `100` including 20% VAT is `83.333…` net and `16.666…` VAT, and those two still add back to exactly `100`. Any rounding applied for display must preserve that.
+4. Rates at or below −100% are refused rather than dividing by zero.
+
 ## VAT and TIP controls — #92
 
 The pills appear in the mode row only while a currency symbol is showing, and both panels were driven end to end on the iPhone simulator: entering `$120`, opening VAT, switching to **Remove VAT** at 20% and reading back `$100` ex / `$20` VAT / `$120` inc, then **Use Result** writing `$100` to the display with the operation line reading `Remove VAT 20% =`. The Tip panel was checked the same way — `$100` bill at 18% giving `$18` tip and `$118` total, and a split of 2 adding an `Each` row of `$59`.
@@ -83,18 +92,6 @@ The pills appear in the mode row only while a currency symbol is showing, and bo
 9. Check both panels in Dark and Light themes, and with larger text sizes — the figures shrink to fit rather than truncating.
 10. Run in another language and confirm every label is translated, including the accessibility labels on the steppers.
 11. **VoiceOver:** each result row should read as one phrase — "Inc VAT, $120" — rather than as two separate fragments.
-
-## Percentage and VAT maths — #25
-
-Engine only: this ships the calculation behind percentage mode and reverse VAT, with no UI. The VAT and TIP controls that reach it are #92, so there is nothing to click yet and nothing here needs a manual pass — the maths is unit-tested, and the results were cross-checked against an independent implementation as well as against typing the same thing on the keypad.
-
-Worth knowing when QA'ing #92 later:
-
-1. `100 + 10%` gives an amount of `10` and a result of `110`; `100 - 10%` gives an amount of `10` and a result of `90`. The amount is unsigned in both directions, so a discount reads as its size rather than as a negative number.
-2. Reverse VAT on `120` at 20% gives `100` net and `20` VAT.
-3. Net plus VAT always equals the gross exactly, even where the division does not come out even — `100` including 20% VAT is `83.333…` net and `16.666…` VAT, and those two still add back to exactly `100`. Any rounding applied for display must preserve that.
-4. Rates at or below −100% are refused rather than dividing by zero.
->>>>>>> feat/25-percentage-reverse-vat
 
 ## macOS theme sync — PR #97
 

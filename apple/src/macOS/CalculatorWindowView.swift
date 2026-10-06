@@ -2005,8 +2005,9 @@ struct CalculatorWindowView: View {
 
     // MARK: - Configurable function keys (#67)
 
-    /// Which functions this window currently shows. Stored per window, the same
-    /// way every other window preference is.
+    /// Which functions this window currently shows. Held per window, the same
+    /// way every other window preference is: an open window keeps its own
+    /// layout, and a new window starts from the most recently persisted one.
     var functionKeyAssignments: CalculatorFunctionKeyAssignments {
         windowSettings.functionKeyAssignments
     }
@@ -2156,9 +2157,12 @@ private struct CompactActionButton: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text(accessibilityLabel))
                 .accessibilityHint(isConfigurable ? Text(holdHint) : Text(""))
-                .accessibilityAction(named: Text(changeActionName)) {
-                    guard isConfigurable else { return }
-                    onChooserOpen(slot, globalFrame, false)
+                .accessibilityActions {
+                    // Only a configurable key offers the action, so VoiceOver
+                    // never lists one that would do nothing.
+                    if isConfigurable {
+                        Button(changeActionName) { onChooserOpen(slot, globalFrame, false) }
+                    }
                 }
                 .background(
                     GeometryReader { proxy in
@@ -2259,9 +2263,10 @@ private struct CompactActionButton: View {
             .buttonStyle(PlainButtonStyle())
             .accessibilityLabel(Text(accessibilityLabelOverride ?? title))
             .accessibilityHint(slot == nil ? Text("") : Text(holdHint))
-            .accessibilityAction(named: Text(changeActionName)) {
-                guard let slot else { return }
-                onChooserOpen?(slot, globalFrame, false)
+            .accessibilityActions {
+                if let slot {
+                    Button(changeActionName) { onChooserOpen?(slot, globalFrame, false) }
+                }
             }
             .background(
                 GeometryReader { proxy in
