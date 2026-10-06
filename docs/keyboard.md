@@ -26,8 +26,8 @@ Sources:
 | Up Arrow | No mapped action | No mapped action | Close rounding overlay | Suppressed |
 | Shift + Up Arrow | Increase display size (20pt) | Increase display size | Increase display size | Increase display size |
 | Shift + Down Arrow | Decrease display size (20pt) | Decrease display size | Decrease display size | Decrease display size |
-| Shift + Left Arrow | iPad: go to the page on the **right** | Same | Same | Same |
-| Shift + Right Arrow | iPad: go to the page on the **left** | Same | Same | Same |
+| Shift + Left Arrow | iPad: go to the page on the **left** | Same | Same | Same |
+| Shift + Right Arrow | iPad: go to the page on the **right** | Same | Same | Same |
 | Escape | Clear all | Exit direct edit | Remove rounding and close overlay | Close overlay |
 | End | Clear all | Exit direct edit | Close overlay | Close overlay |
 | Backspace | Delete one char/digit via model backspace | Delete one char/digit before caret | Remove rounding and close overlay | Close overlay |
@@ -70,9 +70,9 @@ The step is not animated — it lands immediately, matching how dragging behaves
 
 **Shift + Left/Right Arrow** moves between calculator pages, as menu commands so they are discoverable and reachable by VoiceOver.
 
-The direction looks inverted at first glance and is deliberate: the arrow points the way the *pages* move, matching the swipe. Dragging left brings the page on the right into view, so Shift + Left does the same. Requested this way in #83.
+The arrow names the page to go to: Shift + Right shows the page on the right, the same convention as Ctrl + Right for Spaces and the side the page dots grow on. #83 originally had it follow the swipe's finger direction — dragging left reveals the page on the right, so Shift + Left did too — but that read as inverted on a keyboard in 1.1.0 QA, where an arrow is taken as "go this way" rather than "push the content this way".
 
-Shift + Left past the last page **opens a new page**, the same as swiping in that direction, so the shortcut is not a more limited way to get around than the gesture. Shift + Right stops at the first page rather than wrapping.
+Shift + Right past the last page **opens a new page**, the same as swiping onward from it, so the shortcut is not a more limited way to get around than the gesture. Shift + Left stops at the first page rather than wrapping.
 
 macOS has no equivalent because its pages are separate windows — see below.
 
