@@ -96,3 +96,11 @@
 "currency.tip.perPerson" = "Each";
 "currency.tool.use" = "Use Result";
 "currency.tool.close" = "Close";
+
+/* Typed rates and editable presets on the VAT and Tip panels (issue #124) */
+"currency.rate.type" = "Type a Rate";
+"currency.rate.editPreset" = "Edit Preset";
+"currency.rate.presetHint" = "Press and hold to type a new value for this preset";
+"currency.rate.done" = "Done";
+"currency.rate.restore" = "Restore Default";
+"currency.rate.delete" = "Delete";

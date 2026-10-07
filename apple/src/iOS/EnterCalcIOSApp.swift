@@ -456,9 +456,14 @@ struct EnterCalcIOSView: View {
     // Currency-mode tool settings (#92). Session state rather than a stored
     // preference: they belong to the calculation in progress, the same way the
     // currency symbol itself does.
-    @State private var vatRate: Decimal = 20
+    // Rates and edited presets are kept across launches (#124). The VAT rate
+    // starts on the region's standard rate until one is chosen.
+    @AppStorage(RateToolPreferences.vatRateKey) private var storedVATRate = ""
+    @AppStorage(RateToolPreferences.vatPresetOverridesKey) private var storedVATPresetOverrides = ""
+    @AppStorage(RateToolPreferences.tipRateKey) private var storedTipRate = ""
+    @AppStorage(RateToolPreferences.tipPresetOverridesKey) private var storedTipPresetOverrides = ""
+    @StateObject private var rateEditor = RateEditor()
     @State private var vatRemovesTax: Bool = false
-    @State private var tipRate: Decimal = 18
     @State private var tipSplitCount: Int = TipBreakdown.defaultSplitCount
     @State private var counterRotatesForUpsideDownPortrait: Bool = false
     @State private var flashCopy: Bool = false
@@ -580,6 +585,39 @@ struct EnterCalcIOSView: View {
 
     private var usesAlternativeKeypad: Bool {
         activeScreen.settings.usesAlternativeKeypad
+    }
+
+    private var vatRate: Decimal {
+        get { RateToolPreferences.rate(fromStored: storedVATRate, fallback: VATRateCatalog.defaultRate()) }
+        nonmutating set { storedVATRate = RateToolPreferences.storedText(for: newValue) }
+    }
+
+    private var tipRate: Decimal {
+        get { RateToolPreferences.rate(fromStored: storedTipRate, fallback: RateToolPreferences.defaultTipRate) }
+        nonmutating set { storedTipRate = RateToolPreferences.storedText(for: newValue) }
+    }
+
+    private func ratePresets(defaults: [Decimal], storedOverrides: String) -> RatePresets {
+        RatePresets(
+            defaults: defaults,
+            overrides: RatePresetOverrides(serialized: storedOverrides),
+            decimalSeparator: activeScreen.viewModel.numberFormatStyle.decimalSeparator
+        )
+    }
+
+    private var vatPresets: RatePresets {
+        ratePresets(defaults: VATRateCatalog.presets(), storedOverrides: storedVATPresetOverrides)
+    }
+
+    private var tipPresets: RatePresets {
+        ratePresets(defaults: TipBreakdown.presetRates, storedOverrides: storedTipPresetOverrides)
+    }
+
+    /// Saves a long-pressed preset's new value, or restores its default.
+    private func editPreset(_ slot: Int, to rate: Decimal?, in presets: RatePresets, store: (String) -> Void) {
+        var overrides = presets.overrides
+        overrides.set(rate, forSlot: slot, default: presets.defaults.indices.contains(slot) ? presets.defaults[slot] : nil)
+        store(overrides.serialized)
     }
 
     private var reduceMotionEnabled: Bool {
@@ -926,6 +964,13 @@ struct EnterCalcIOSView: View {
             .onValueChange(of: preferredScientificNotation) { _ in
                 syncHomeScreenFromStoredSettings()
             }
+            // An open rate edit belongs to the panel; closing the panel by any
+            // route (Use Result, ✕, leaving Currency mode) abandons it.
+            .onValueChange(of: activeOverlay) { overlay in
+                if overlay != .vat && overlay != .tip {
+                    rateEditor.cancel()
+                }
+            }
             .onValueChange(of: preferredNumberFormatRaw) { _ in
                 syncHomeScreenFromStoredSettings()
             }
@@ -1073,6 +1118,13 @@ private extension EnterCalcIOSView {
     }
 
     func handleHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
+        // While a VAT or Tip rate is being typed, the keyboard types into it
+        // rather than into the calculator (#124).
+        if rateEditor.isEditing, let key = rateEditorKey(for: event) {
+            rateEditor.press(key)
+            return true
+        }
+
         resetLandscapeDisplayScroll(for: activeScreen)
 
         let unsupportedModifiers = event.modifierFlags.intersection([.control])
@@ -1454,12 +1506,17 @@ private extension EnterCalcIOSView {
                     CurrencyVATPanel(
                         value: activeScreen.viewModel.currentValue,
                         rate: vatRate,
+                        presets: vatPresets,
                         isRemoving: vatRemovesTax,
                         palette: palette,
                         localized: { localized($0) },
                         format: { activeScreen.viewModel.formattedValue($0) },
                         formatRate: { activeScreen.viewModel.formattedValue($0, includingCurrency: false) },
                         onRateChange: { vatRate = $0; triggerActionFeedback() },
+                        rateEditor: rateEditor,
+                        onPresetEdited: { slot, rate in
+                            editPreset(slot, to: rate, in: vatPresets) { storedVATPresetOverrides = $0 }
+                        },
                         onDirectionChange: { vatRemovesTax = $0; triggerActionFeedback() },
                         onApply: { result in
                             activeScreen.viewModel.applyToolResult(result, describedBy: vatSummary())
@@ -1475,12 +1532,17 @@ private extension EnterCalcIOSView {
                     CurrencyTipPanel(
                         bill: activeScreen.viewModel.currentValue,
                         rate: tipRate,
+                        presets: tipPresets,
                         splitCount: tipSplitCount,
                         palette: palette,
                         localized: { localized($0) },
                         format: { activeScreen.viewModel.formattedValue($0) },
                         formatRate: { activeScreen.viewModel.formattedValue($0, includingCurrency: false) },
                         onRateChange: { tipRate = $0; triggerActionFeedback() },
+                        rateEditor: rateEditor,
+                        onPresetEdited: { slot, rate in
+                            editPreset(slot, to: rate, in: tipPresets) { storedTipPresetOverrides = $0 }
+                        },
                         onSplitChange: { tipSplitCount = clampedSplitCount($0); triggerActionFeedback() },
                         onApply: { result in
                             activeScreen.viewModel.applyToolResult(result, describedBy: tipSummary())
@@ -3436,6 +3498,20 @@ private extension EnterCalcIOSView {
 
     func dismissHistoryOverlay() {
         dismissActiveOverlay()
+    }
+
+    func rateEditorKey(for event: IOSHardwareKeyEvent) -> RateEditor.Key? {
+        guard event.modifierFlags.intersection([.command, .control, .alternate]).isEmpty else { return nil }
+        switch event.keyCode {
+        case .keyboardReturnOrEnter, .keypadEnter: return .done
+        case .keyboardEscape: return .cancel
+        case .keyboardDeleteOrBackspace: return .backspace
+        default: break
+        }
+        guard let character = (event.charactersIgnoringModifiers ?? "").first else { return nil }
+        if let digit = character.wholeNumberValue, character.isASCII { return .digit(digit) }
+        if character == "." || character == "," { return .decimalSeparator }
+        return nil
     }
 
     func dismissActiveOverlay() {

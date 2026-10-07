@@ -104,9 +104,14 @@ struct CalculatorWindowView: View {
     // Currency-mode tool settings (#92). Per window, and session state rather
     // than a stored preference: they belong to the calculation in progress, the
     // same way the currency symbol itself does.
-    @State private var vatRate: Decimal = 20
+    // Rates and edited presets are kept across launches and shared with iOS's
+    // keys (#124). The VAT rate starts on the region's standard rate.
+    @AppStorage(RateToolPreferences.vatRateKey) private var storedVATRate = ""
+    @AppStorage(RateToolPreferences.vatPresetOverridesKey) private var storedVATPresetOverrides = ""
+    @AppStorage(RateToolPreferences.tipRateKey) private var storedTipRate = ""
+    @AppStorage(RateToolPreferences.tipPresetOverridesKey) private var storedTipPresetOverrides = ""
+    @StateObject private var rateEditor = RateEditor()
     @State private var vatRemovesTax: Bool = false
-    @State private var tipRate: Decimal = 18
     @State private var tipSplitCount: Int = TipBreakdown.defaultSplitCount
     @AppStorage("window.width") private var storedWindowWidth: Double = 0
     @AppStorage("window.height") private var storedWindowHeight: Double = 0
@@ -1379,16 +1384,69 @@ struct CalculatorWindowView: View {
             .padding(.bottom, -8)
     }
 
+    private var vatRate: Decimal {
+        get { RateToolPreferences.rate(fromStored: storedVATRate, fallback: VATRateCatalog.defaultRate()) }
+        nonmutating set { storedVATRate = RateToolPreferences.storedText(for: newValue) }
+    }
+
+    private var tipRate: Decimal {
+        get { RateToolPreferences.rate(fromStored: storedTipRate, fallback: RateToolPreferences.defaultTipRate) }
+        nonmutating set { storedTipRate = RateToolPreferences.storedText(for: newValue) }
+    }
+
+    private func ratePresets(defaults: [Decimal], storedOverrides: String) -> RatePresets {
+        RatePresets(
+            defaults: defaults,
+            overrides: RatePresetOverrides(serialized: storedOverrides),
+            decimalSeparator: viewModel.numberFormatStyle.decimalSeparator
+        )
+    }
+
+    private var vatPresets: RatePresets {
+        ratePresets(defaults: VATRateCatalog.presets(), storedOverrides: storedVATPresetOverrides)
+    }
+
+    private var tipPresets: RatePresets {
+        ratePresets(defaults: TipBreakdown.presetRates, storedOverrides: storedTipPresetOverrides)
+    }
+
+    /// Saves a long-pressed preset's new value, or restores its default.
+    private func editPreset(_ slot: Int, to rate: Decimal?, in presets: RatePresets, store: (String) -> Void) {
+        var overrides = presets.overrides
+        overrides.set(rate, forSlot: slot, default: presets.defaults.indices.contains(slot) ? presets.defaults[slot] : nil)
+        store(overrides.serialized)
+    }
+
+    /// The key a rate being typed should receive, if any (#124).
+    private func rateEditorKey(for event: NSEvent) -> RateEditor.Key? {
+        guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return nil }
+        switch event.keyCode {
+        case 36, 76: return .done          // Return, keypad Enter
+        case 53: return .cancel            // Escape
+        case 51, 117: return .backspace    // Delete, Forward Delete
+        default: break
+        }
+        guard let character = (event.charactersIgnoringModifiers ?? "").first else { return nil }
+        if let digit = character.wholeNumberValue, character.isASCII { return .digit(digit) }
+        if character == "." || character == "," { return .decimalSeparator }
+        return nil
+    }
+
     private func vatOverlay() -> some View {
         CurrencyVATPanel(
             value: viewModel.currentValue,
             rate: vatRate,
+            presets: vatPresets,
             isRemoving: vatRemovesTax,
             palette: palette,
             localized: { macLocalized($0, bundle: currentLocalizationBundle) },
             format: { viewModel.formattedValue($0) },
             formatRate: { viewModel.formattedValue($0, includingCurrency: false) },
             onRateChange: { vatRate = max($0, 0) },
+            rateEditor: rateEditor,
+            onPresetEdited: { slot, rate in
+                editPreset(slot, to: rate, in: vatPresets) { storedVATPresetOverrides = $0 }
+            },
             onDirectionChange: { vatRemovesTax = $0 },
             onApply: { result in
                 viewModel.applyToolResult(result, describedBy: vatSummary())
@@ -1404,12 +1462,17 @@ struct CalculatorWindowView: View {
         CurrencyTipPanel(
             bill: viewModel.currentValue,
             rate: tipRate,
+            presets: tipPresets,
             splitCount: tipSplitCount,
             palette: palette,
             localized: { macLocalized($0, bundle: currentLocalizationBundle) },
             format: { viewModel.formattedValue($0) },
             formatRate: { viewModel.formattedValue($0, includingCurrency: false) },
             onRateChange: { tipRate = max($0, 0) },
+            rateEditor: rateEditor,
+            onPresetEdited: { slot, rate in
+                editPreset(slot, to: rate, in: tipPresets) { storedTipPresetOverrides = $0 }
+            },
             onSplitChange: { tipSplitCount = min(max($0, TipBreakdown.splitCountRange.lowerBound), TipBreakdown.splitCountRange.upperBound) },
             onApply: { result in
                 viewModel.applyToolResult(result, describedBy: tipSummary())
@@ -1485,6 +1548,10 @@ struct CalculatorWindowView: View {
     private func setActiveOverlay(_ overlay: OverlayPane?) {
         if activeOverlay == .rounding, overlay != .rounding {
             viewModel.commitResultRoundingInteraction()
+        }
+        // An open rate edit belongs to its panel; closing it abandons the edit.
+        if overlay != .vat, overlay != .tip {
+            rateEditor.cancel()
         }
 
         if reduceMotionEnabled {
@@ -1693,6 +1760,13 @@ struct CalculatorWindowView: View {
     // handled so the event is consumed. Active overlays get first refusal.
     @discardableResult
     private func handleKey(_ event: NSEvent) -> Bool {
+        // While a VAT or Tip rate is being typed, the keyboard types into it
+        // rather than into the calculator (#124).
+        if rateEditor.isEditing, let key = rateEditorKey(for: event) {
+            rateEditor.press(key)
+            return true
+        }
+
         let chars = event.charactersIgnoringModifiers ?? ""
         let inputChars = event.characters ?? chars
         let insertFunctionCharacter = Character(UnicodeScalar(NSInsertFunctionKey)!)
