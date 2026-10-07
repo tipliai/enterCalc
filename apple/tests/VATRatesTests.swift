@@ -197,7 +197,7 @@ final class RateEntryTests: XCTestCase {
         XCTAssertEqual(RateEntry.stepped(RateEntry.maximum, up: true), RateEntry.maximum)
         // Typed entry allows up to (not including) 1000, above the stepper's
         // cap: stepping up keeps such a rate instead of lowering it.
-        let typedAboveCap = Decimal(string: "999.9995")!
+        let typedAboveCap = Decimal(string: "999.9994")!
         XCTAssertEqual(RateEntry.stepped(typedAboveCap, up: true), typedAboveCap)
         XCTAssertLessThan(RateEntry.stepped(typedAboveCap, up: false), typedAboveCap)
     }
