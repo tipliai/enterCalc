@@ -344,10 +344,13 @@ public struct CurrencyVATPanel: View {
         self.onDismiss = onDismiss
     }
 
+    /// Rounded to cents: VAT is always money, so neither the figures shown nor
+    /// the result applied carry more than two decimals.
     private var breakdown: VATBreakdown? {
-        isRemoving
+        let exact = isRemoving
             ? VATCalculation.removing(rate: rate, fromGross: value)
             : VATCalculation.adding(rate: rate, toNet: value)
+        return exact?.rounded(isRemoving: isRemoving)
     }
 
     public var body: some View {

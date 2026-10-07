@@ -251,4 +251,52 @@ final class PercentageCalculationTests: XCTestCase {
             }
         }
     }
+
+    // MARK: - Currency rounding
+
+    // VAT is money: the panel shows at most two decimals. 100 including 20%
+    // VAT is 83.333… net in exact terms.
+    func testRemovingVATRoundsToCentsAndStillAddsUp() throws {
+        let rounded = try XCTUnwrap(VATCalculation.removing(rate: 20, fromGross: 100)).rounded(isRemoving: true)
+        XCTAssertEqual(rounded.net, Decimal(string: "83.33"))
+        XCTAssertEqual(rounded.vat, Decimal(string: "16.67"))
+        XCTAssertEqual(rounded.gross, 100)
+    }
+
+    func testAddingVATRoundsToCentsAndStillAddsUp() throws {
+        let rounded = try XCTUnwrap(VATCalculation.adding(rate: 19, toNet: Decimal(string: "19.99")!)).rounded(isRemoving: false)
+        XCTAssertEqual(rounded.vat, Decimal(string: "3.80"))
+        XCTAssertEqual(rounded.gross, Decimal(string: "23.79"))
+        XCTAssertEqual(rounded.net, Decimal(string: "19.99"))
+    }
+
+    // Rounding each figure independently can leave them a cent apart; the
+    // rounded breakdown must still satisfy net + vat == gross for every case.
+    func testRoundedBreakdownAlwaysAddsUpAndHasAtMostTwoDecimals() throws {
+        let prices = ["0.01", "0.05", "19.99", "33.33", "100", "123.45", "999999.99"].map { Decimal(string: $0)! }
+        let rates = ["5", "7", "8.1", "9.975", "13.5", "19", "20", "25.5"].map { Decimal(string: $0)! }
+        for price in prices {
+            for rate in rates {
+                for isRemoving in [false, true] {
+                    let exact = isRemoving
+                        ? VATCalculation.removing(rate: rate, fromGross: price)
+                        : VATCalculation.adding(rate: rate, toNet: price)
+                    let rounded = try XCTUnwrap(exact).rounded(isRemoving: isRemoving)
+                    XCTAssertEqual(rounded.net + rounded.vat, rounded.gross, "\(price) @ \(rate) removing:\(isRemoving)")
+                    for figure in [rounded.net, rounded.vat, rounded.gross] {
+                        XCTAssertEqual(figure, figure.roundedForTest(2), "\(figure) has more than two decimals")
+                    }
+                }
+            }
+        }
+    }
+}
+
+private extension Decimal {
+    func roundedForTest(_ scale: Int) -> Decimal {
+        var result = Decimal()
+        var source = self
+        NSDecimalRound(&result, &source, scale, .plain)
+        return result
+    }
 }
