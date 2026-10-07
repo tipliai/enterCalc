@@ -74,10 +74,10 @@
 "functionKey.hint" = "Gedrückt halten, um die Aktion dieser Taste zu bearbeiten";
 "functionKey.hint.mac" = "Rechtsklick und „Bearbeiten“ wählen, um die Aktion dieser Taste zu bearbeiten";
 "functionKey.edit" = "Bearbeiten";
-"functionKey.reset" = "Alle Aktionen zurücksetzen";
-"functionKey.reset.title" = "Alle Aktionen zurücksetzen?";
-"functionKey.reset.message" = "Alle bearbeitbaren Tasten erhalten wieder ihre ursprüngliche Aktion.";
-"functionKey.reset.confirm" = "Zurücksetzen";
+"functionKey.reset" = "Standardtasten wiederherstellen";
+"functionKey.reset.title" = "Standardtasten wiederherstellen?";
+"functionKey.reset.message" = "Die geänderten Tasten erhalten wieder ihre ursprünglichen Aktionen.";
+"functionKey.reset.confirm" = "Wiederherstellen";
 "functionKey.reset.cancel" = "Abbrechen";
 
 /* Werkzeuge im Währungsmodus: MwSt. und Trinkgeld (Issue #92) */

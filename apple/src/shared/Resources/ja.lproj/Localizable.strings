@@ -74,10 +74,10 @@
 "functionKey.hint" = "長押しすると、このキーのアクションを編集できます";
 "functionKey.hint.mac" = "右クリックして「編集」を選ぶと、このキーのアクションを編集できます";
 "functionKey.edit" = "編集";
-"functionKey.reset" = "すべてのアクションをリセット";
-"functionKey.reset.title" = "すべてのアクションをリセットしますか？";
-"functionKey.reset.message" = "編集可能なすべてのキーが元のアクションに戻ります。";
-"functionKey.reset.confirm" = "リセット";
+"functionKey.reset" = "デフォルトのキーに戻す";
+"functionKey.reset.title" = "デフォルトのキーに戻しますか？";
+"functionKey.reset.message" = "変更したキーが元のアクションに戻ります。";
+"functionKey.reset.confirm" = "戻す";
 "functionKey.reset.cancel" = "キャンセル";
 
 /* 通貨モードのツール: 消費税とチップ (Issue #92) */

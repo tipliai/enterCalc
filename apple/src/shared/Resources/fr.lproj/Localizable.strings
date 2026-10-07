@@ -74,10 +74,10 @@
 "functionKey.hint" = "Maintenez appuyé pour modifier l’action de cette touche";
 "functionKey.hint.mac" = "Cliquez avec le bouton droit et choisissez Modifier pour modifier l’action de cette touche";
 "functionKey.edit" = "Modifier";
-"functionKey.reset" = "Réinitialiser toutes les actions";
-"functionKey.reset.title" = "Réinitialiser toutes les actions ?";
-"functionKey.reset.message" = "Toutes les touches modifiables reprennent leur action d’origine.";
-"functionKey.reset.confirm" = "Réinitialiser";
+"functionKey.reset" = "Restaurer les touches par défaut";
+"functionKey.reset.title" = "Restaurer les touches par défaut ?";
+"functionKey.reset.message" = "Les touches que vous avez modifiées reprennent leurs actions d’origine.";
+"functionKey.reset.confirm" = "Restaurer";
 "functionKey.reset.cancel" = "Annuler";
 
 /* Outils du mode devise : TVA et pourboire (ticket #92) */
