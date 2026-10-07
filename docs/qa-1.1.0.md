@@ -153,7 +153,7 @@ The pills appear in the mode row only while a currency symbol is showing. The pa
 
 **macOS was not driven interactively.** The Mac's display was asleep for this pass, which makes the accessibility driver report zero windows (now documented in [macos-qa.md](macos-qa.md)). The panels themselves are the same shared code the iPhone run exercised, and the macOS target builds, but the placement, the theme and the click targets need a person.
 
-1. Enter a value, press the currency key. **VAT** and **Tip** appear at the right of the mode row; leave currency mode and they disappear.
+1. Enter a value, press the currency key. **VAT** and **Tip** appear at the right of the mode row, and the **currency key turns blue** (accent fill, white symbol) to show the mode is on. **AC** keeps it on and blue; pressing the currency key again leaves the mode and the key returns to its normal colour. Reassign currency onto the large ( ) or % key and check it highlights the same way, on iPhone, iPad and Mac.
 2. Neither should crowd the mode label at the smallest window width, or in landscape on iPhone.
 3. Open **VAT**. The display changes straight away. Check **Add VAT** and **Remove VAT** both read correctly, the emphasised figure switches between Inc VAT and Ex VAT with the direction, and the display shows the gross when adding and the net when removing, with an operation line saying which.
 4. Tap a preset rate, then use the `−`/`+` selector to reach a rate that is not a preset, such as 21%, and confirm the figures and the display follow.

@@ -1007,6 +1007,7 @@ struct CalculatorWindowView: View {
                                 onChooserOpen: { slot, anchor, dragging in
                                     openFunctionChooser(for: slot, anchor: anchor, dragging: dragging)
                                 },
+                                isHighlighted: button.function == .currency && viewModel.activeCurrencySymbol != nil
                             )
                         }
                     }
@@ -1040,7 +1041,9 @@ struct CalculatorWindowView: View {
                                     },
                                     operatorRevealProgress: operatorRevealProgress,
                                     operatorAnimFadeOpacity: operatorAnimFadeOpacity,
-                                    reduceMotionEnabled: reduceMotionEnabled
+                                    reduceMotionEnabled: reduceMotionEnabled,
+                                    isHighlighted: viewModel.activeCurrencySymbol != nil
+                                        && button.slot.map { functionKeyAssignments[$0] == .currency } == true
                                 )
                                     .frame(width: cellWidth * CGFloat(button.columnSpan) + spacing * CGFloat(button.columnSpan - 1))
                             }
@@ -2214,6 +2217,9 @@ private struct CompactActionButton: View {
     let palette: Palette
     let action: () -> Void
     let onChooserOpen: (CalculatorFunctionSlot, CGRect, Bool) -> Void
+    /// Shown in the accent colour while the mode it toggles is on: the
+    /// currency key in Currency mode, since All Clear does not leave it.
+    var isHighlighted: Bool = false
     @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
     @State private var hovering: Bool = false
     @State private var globalFrame: CGRect = .zero
@@ -2230,7 +2236,7 @@ private struct CompactActionButton: View {
                         function: function,
                         currencySymbol: currencySymbol,
                         fontSize: boundedIconFontSize,
-                        color: palette.textPrimary
+                        color: isHighlighted ? palette.accentText : palette.textPrimary
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .contentShape(Rectangle())
@@ -2288,7 +2294,7 @@ private struct CompactActionButton: View {
             Color.clear
         } else {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(palette.buttonOperation)
+                .fill(isHighlighted ? palette.accent : palette.buttonOperation)
         }
     }
 }
@@ -2319,6 +2325,9 @@ private struct CompactActionButton: View {
         var operatorRevealProgress: Double = 0.0
         var operatorAnimFadeOpacity: Double = 1.0
         var reduceMotionEnabled: Bool = false
+        /// Accent fill while the mode this key toggles is on (the currency key
+        /// in Currency mode).
+        var isHighlighted: Bool = false
         @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
 
         @State private var hovering: Bool = false
@@ -2476,6 +2485,7 @@ private struct CompactActionButton: View {
         }
 
         private var foregroundColor: Color {
+            if isHighlighted { return palette.accentText }
             switch kind {
             case .accent:
                 return palette.accentText
@@ -2519,7 +2529,7 @@ private struct CompactActionButton: View {
                 }
             } else {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(backgroundStyle)
+                    .fill(isHighlighted ? AnyShapeStyle(palette.accent) : backgroundStyle)
             }
         }
 

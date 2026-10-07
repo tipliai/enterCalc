@@ -3322,6 +3322,7 @@ private extension EnterCalcIOSView {
                             height: compactActionHeight,
                             reduceMotionEnabled: reduceMotionEnabled,
                             isConfigurable: supportsConfigurableFunctionKeys(for: screen),
+                            isHighlighted: function == .currency && screen.viewModel.activeCurrencySymbol != nil,
                             pressFeedback: triggerActionFeedback,
                             action: {
                                 performFunction(function, on: screen)
@@ -3383,7 +3384,8 @@ private extension EnterCalcIOSView {
                                     onChooserDrag: { updateFunctionChooserDrag($0) },
                                     onChooserRelease: { releaseFunctionChooser() },
                                     operatorRevealProgress: operatorRevealProgress,
-                                    operatorAnimFadeOpacity: operatorAnimFadeOpacity
+                                    operatorAnimFadeOpacity: operatorAnimFadeOpacity,
+                                    isHighlighted: button.function == .currency && screen.viewModel.activeCurrencySymbol != nil
                                 )
                                 .frame(width: cellWidth * CGFloat(button.columnSpan) + spacing * CGFloat(button.columnSpan - 1))
                             }
@@ -5412,6 +5414,9 @@ private struct IOSCompactActionButton: View {
     let height: CGFloat
     let reduceMotionEnabled: Bool
     let isConfigurable: Bool
+    /// Shown in the accent colour while the mode it toggles is on: the
+    /// currency key in Currency mode, since All Clear does not leave it.
+    var isHighlighted: Bool = false
     let pressFeedback: () -> Void
     let action: () -> Void
     let onChooserOpen: (CalculatorFunctionSlot, CGRect, Bool) -> Void
@@ -5441,7 +5446,7 @@ private struct IOSCompactActionButton: View {
                 function: button.function,
                 currencySymbol: currencySymbol,
                 fontSize: boundedIconFontSize,
-                color: palette.textPrimary
+                color: isHighlighted ? palette.accentText : palette.textPrimary
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
@@ -5488,8 +5493,9 @@ private struct IOSCompactActionButton: View {
         )
         .background(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(palette.buttonFunction)
+                .fill(isHighlighted ? palette.accent : palette.buttonFunction)
         )
+        .accessibilityAddTraits(isHighlighted ? [.isSelected] : [])
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .frame(height: height)
     }
@@ -5542,6 +5548,9 @@ private struct IOSKeypadButton: View {
     @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
     var operatorRevealProgress: Double = 0.0
     var operatorAnimFadeOpacity: Double = 1.0
+    /// Accent fill while the mode this key toggles is on (the currency key in
+    /// Currency mode).
+    var isHighlighted: Bool = false
     @State private var isPressed: Bool = false
     @State private var touchCancelledBySwipe: Bool = false
     @State private var shimmerProgress: CGFloat = 0
@@ -5638,7 +5647,7 @@ private struct IOSKeypadButton: View {
 
     private var buttonSurface: some View {
         labelView
-            .foregroundStyle(button.foregroundColor(palette: palette))
+            .foregroundStyle(isHighlighted ? palette.accentText : button.foregroundColor(palette: palette))
             .frame(maxWidth: .infinity, minHeight: buttonHeight, maxHeight: buttonHeight)
             .background(buttonBackground)
             .scaleEffect(reduceMotionEnabled ? 1.0 : pressPopScale)
@@ -5805,6 +5814,9 @@ private struct IOSKeypadButton: View {
                     .fill(gradColor)
                     .opacity(overlayOpacity)
             }
+        } else if isHighlighted {
+            RoundedRectangle(cornerRadius: cr, style: .continuous)
+                .fill(palette.accent)
         } else {
             RoundedRectangle(cornerRadius: cr, style: .continuous)
                 .fill(button.backgroundStyle(palette: palette))
