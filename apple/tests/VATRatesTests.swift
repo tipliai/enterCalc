@@ -10,8 +10,8 @@ final class VATRateTableTests: XCTestCase {
     private let sample = """
     { "schemaVersion": 1, "updated": "2026-10-06", "fallback": ["5", "10", "20"],
       "regions": [
-        { "region": "DE", "standard": "19", "reduced": ["7"], "effective": "2021-01-01", "source": "https://example.test/de" },
-        { "region": "CH", "standard": "8.1", "reduced": ["3.8", "2.6"], "effective": "2024-01-01", "source": "https://example.test/ch" }
+        { "region": "DE", "standard": "19", "additional": ["7"], "effective": "2021-01-01", "source": "https://example.test/de", "confidence": "H" },
+        { "region": "CH", "standard": "8.1", "additional": ["3.8", "2.6"], "effective": "2024-01-01", "source": "https://example.test/ch", "confidence": "H" }
       ] }
     """
 
@@ -24,14 +24,14 @@ final class VATRateTableTests: XCTestCase {
         for region in bundled.regions.values {
             XCTAssertFalse(region.source.isEmpty, "\(region.code) has no source")
             XCTAssertFalse(region.effective.isEmpty, "\(region.code) has no effective date")
-            XCTAssertLessThanOrEqual(region.reduced.count, 3, "\(region.code) lists too many reduced rates for the preset row")
+            XCTAssertLessThanOrEqual(region.additionalRates.count, 3, "\(region.code) lists too many additional rates")
         }
     }
 
     func testRatesParseToExactDecimals() throws {
         let parsed = try table(sample)
         XCTAssertEqual(parsed.regions["CH"]?.standard, Decimal(string: "8.1"))
-        XCTAssertEqual(parsed.regions["CH"]?.reduced, [Decimal(string: "3.8")!, Decimal(string: "2.6")!])
+        XCTAssertEqual(parsed.regions["CH"]?.additionalRates, [Decimal(string: "3.8")!, Decimal(string: "2.6")!])
     }
 
     func testPresetsPutTheStandardRateFirstThenOthersInListedOrder() throws {
@@ -95,6 +95,22 @@ final class VATRateTableTests: XCTestCase {
         let badCode = sample.replacingOccurrences(of: "\"DE\"", with: "\"deu\"")
         XCTAssertThrowsError(try table(badCode))
 
+        XCTAssertThrowsError(try table(sample.replacingOccurrences(of: "\"schemaVersion\": 1", with: "\"schemaVersion\": 2"))) {
+            XCTAssertEqual($0 as? VATRateCatalog.TableError, .unsupportedSchemaVersion(2))
+        }
+        XCTAssertThrowsError(try table(sample.replacingOccurrences(of: "\"DE\"", with: "\"ÄÖ\"")), "non-ASCII region code")
+        XCTAssertThrowsError(try table(sample.replacingOccurrences(of: "\"source\": \"https://example.test/de\"", with: "\"source\": \"\""))) {
+            XCTAssertEqual($0 as? VATRateCatalog.TableError, .missingMetadata(region: "DE", field: "source"))
+        }
+        let unknownConfidence = sample.replacingOccurrences(of: "\"confidence\": \"H\"", with: "\"confidence\": \"X\"")
+        XCTAssertNotEqual(unknownConfidence, sample)
+        XCTAssertThrowsError(try table(unknownConfidence), "unknown confidence")
+        XCTAssertThrowsError(try table(sample.replacingOccurrences(of: "[\"7\"]", with: "[\"7\", \"5\", \"4\", \"3\"]"))) {
+            XCTAssertEqual($0 as? VATRateCatalog.TableError, .tooManyAdditionalRates(region: "DE"))
+        }
+        XCTAssertThrowsError(try table(sample.replacingOccurrences(of: "[\"5\", \"10\", \"20\"]", with: "[]"))) {
+            XCTAssertEqual($0 as? VATRateCatalog.TableError, .emptyFallback)
+        }
         XCTAssertThrowsError(try table("{ not json"))
     }
 }

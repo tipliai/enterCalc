@@ -158,6 +158,9 @@ private struct RateChooser: View {
     var onPresetChosen: ((Int) -> Void)? = nil
 
     @State private var typedText = ""
+    /// The preset whose press-and-hold just opened the editor, so the release
+    /// that ends the hold isn't also taken as a tap.
+    @State private var heldSlot: Int?
     /// Shown after Done when the typed rate can't be used.
     @State private var rateError: String?
 
@@ -245,26 +248,41 @@ private struct RateChooser: View {
         }
     }
 
+    /// A real `Button`, so it can be focused and pressed from a keyboard (Tab and
+    /// Space on Mac, Full Keyboard Access on iPad) and by VoiceOver. Press and
+    /// hold opens the editor; the press that ends that hold doesn't also pick
+    /// the preset.
     private func presetButton(slot: Int, rate: Decimal) -> some View {
         let isSelected = pressedSlot.map { $0 == slot } ?? (rate == selected)
-        return Text("\(format(rate))%")
-            .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(isSelected ? palette.accentText : palette.textPrimary)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 7)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isSelected ? palette.accent : palette.buttonFunction)
-            )
-            .contentShape(Rectangle())
-            .onTapGesture { choose(slot: slot, rate: rate) }
-            .onLongPressGesture(minimumDuration: 0.45) { beginEditingPreset(slot) }
-            .accessibilityElement()
-            .accessibilityLabel(Text("\(format(rate))%"))
-            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : [.isButton])
-            .accessibilityHint(Text(labels.presetHint))
-            .accessibilityAction { choose(slot: slot, rate: rate) }
-            .accessibilityAction(named: Text(labels.editPreset)) { beginEditingPreset(slot) }
+        return Button {
+            if heldSlot == slot {
+                heldSlot = nil
+                return
+            }
+            choose(slot: slot, rate: rate)
+        } label: {
+            Text("\(format(rate))%")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(isSelected ? palette.accentText : palette.textPrimary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 7)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(isSelected ? palette.accent : palette.buttonFunction)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.45).onEnded { _ in
+                heldSlot = slot
+                beginEditingPreset(slot)
+            }
+        )
+        .accessibilityLabel(Text("\(format(rate))%"))
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .accessibilityHint(Text(labels.presetHint))
+        .accessibilityAction(named: Text(labels.editPreset)) { beginEditingPreset(slot) }
     }
 
     private func choose(slot: Int, rate: Decimal) {

@@ -10,18 +10,20 @@ import Foundation
 /// from the decoder as `8.0999…`.
 public enum VATRateCatalog {
     /// One region's rates. `standard` is offered first and selected by default;
-    /// `reduced` are the reduced rates consumers commonly meet.
+    /// `additionalRates` are the other rates consumers commonly meet. Usually
+    /// reduced rates, but not always — Argentina's 27, India's 40 and Canada's
+    /// HST rates are higher than the standard rate.
     public struct Region: Equatable, Sendable {
         public let code: String
         public let standard: Decimal
-        public let reduced: [Decimal]
+        public let additionalRates: [Decimal]
         public let effective: String
         public let source: String
 
         /// Standard rate first, then the others in the order the table lists
         /// them, so a region such as Canada can read GST 5, HST 13 / 14 / 15.
         public var presets: [Decimal] {
-            [standard] + reduced.filter { $0 != standard }
+            [standard] + additionalRates.filter { $0 != standard }
         }
     }
 
@@ -84,7 +86,20 @@ public enum VATRateCatalog {
         case rateOutOfRange(region: String, rate: Decimal)
         case duplicateRegion(String)
         case invalidRegionCode(String)
+        case unsupportedSchemaVersion(Int)
+        case missingMetadata(region: String, field: String)
+        case tooManyAdditionalRates(region: String)
+        case emptyFallback
     }
+
+    /// The table format this build reads. A table with any other version is
+    /// rejected rather than guessed at.
+    public static let supportedSchemaVersion = 1
+
+    /// The most rates a region may list besides its standard rate.
+    public static let maximumAdditionalRates = 3
+
+    private static let confidenceLevels: Set<String> = ["H", "M", "L"]
 
     private struct RawTable: Decodable {
         let schemaVersion: Int
@@ -96,9 +111,10 @@ public enum VATRateCatalog {
     private struct RawRegion: Decodable {
         let region: String
         let standard: String
-        let reduced: [String]
+        let additional: [String]
         let effective: String
         let source: String
+        let confidence: String
     }
 
     /// Parses and validates a table. Any invalid entry rejects the whole table,
@@ -107,27 +123,44 @@ public enum VATRateCatalog {
         guard let raw = try? JSONDecoder().decode(RawTable.self, from: data) else {
             throw TableError.unreadable
         }
+        guard raw.schemaVersion == supportedSchemaVersion else {
+            throw TableError.unsupportedSchemaVersion(raw.schemaVersion)
+        }
 
         var regions: [String: Region] = [:]
         for entry in raw.regions {
             let code = entry.region
-            guard code.count == 2, code == code.uppercased(), code.allSatisfy(\.isLetter) else {
+            // ISO 3166 alpha-2: exactly two ASCII capital letters.
+            guard code.count == 2, code.allSatisfy({ $0.isASCII && $0.isUppercase }) else {
                 throw TableError.invalidRegionCode(code)
             }
             guard regions[code] == nil else { throw TableError.duplicateRegion(code) }
+            guard !entry.effective.trimmingCharacters(in: .whitespaces).isEmpty else {
+                throw TableError.missingMetadata(region: code, field: "effective")
+            }
+            guard !entry.source.trimmingCharacters(in: .whitespaces).isEmpty else {
+                throw TableError.missingMetadata(region: code, field: "source")
+            }
+            guard confidenceLevels.contains(entry.confidence) else {
+                throw TableError.missingMetadata(region: code, field: "confidence")
+            }
+            guard entry.additional.count <= maximumAdditionalRates else {
+                throw TableError.tooManyAdditionalRates(region: code)
+            }
 
             let standard = try rate(entry.standard, region: code)
-            let reduced = try entry.reduced.map { try rate($0, region: code) }
+            let additionalRates = try entry.additional.map { try rate($0, region: code) }
             regions[code] = Region(
                 code: code,
                 standard: standard,
-                reduced: reduced,
+                additionalRates: additionalRates,
                 effective: entry.effective,
                 source: entry.source
             )
         }
 
         let fallback = try raw.fallback.map { try rate($0, region: "fallback") }
+        guard !fallback.isEmpty else { throw TableError.emptyFallback }
         return Table(updated: raw.updated, fallback: fallback, regions: regions)
     }
 
@@ -150,8 +183,8 @@ public enum VATRateCatalog {
 /// Keeps the entry valid at every keystroke: below `limit`, no more digits
 /// than the calculator itself accepts (`maximumDigits`), and no leading zeros.
 /// The rate keeps its full precision for the maths; only what is shown is
-/// rounded, to `displayFractionDigits`. The text is held with a `.` separator
-/// and shown with the active number format's.
+/// rounded, to `displayFractionDigits`. The text is held with a `.` decimal
+/// separator and shown with the active number format's decimal separator.
 public struct RateEntry: Equatable, Sendable {
     /// No real tax or tip exceeds 100%, but nothing forbids one, so typed rates
     /// go up to 999.999 — enough for anything plausible while keeping the

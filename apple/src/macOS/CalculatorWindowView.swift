@@ -186,13 +186,15 @@ struct CalculatorWindowView: View {
             copy: { copyCurrentResultToPasteboard() },
             copyOperation: { copyCurrentOperationToPasteboard() },
             canCopyOperation: viewModel.hasOperationToCopy,
-            paste: { viewModel.pasteFromPasteboard() },
-            undo: { viewModel.undo() },
-            redo: { viewModel.redo() },
+            // Menu commands that change the display close an open VAT/Tip pane
+            // first, the same as typing does, so the pane can't drift from it.
+            paste: { closeToolPane(); viewModel.pasteFromPasteboard() },
+            undo: { closeToolPane(); viewModel.undo() },
+            redo: { closeToolPane(); viewModel.redo() },
             canUndo: viewModel.canUndo,
             canRedo: viewModel.canRedo,
-            clear: { viewModel.clearEntry() },
-            clearAll: { viewModel.clearAll() }
+            clear: { closeToolPane(); viewModel.clearEntry() },
+            clearAll: { closeToolPane(); viewModel.clearAll() }
         )
     }
 
@@ -1511,6 +1513,14 @@ struct CalculatorWindowView: View {
 
     /// Compact outlined pill, deliberately unlike a keypad key: it opens a tool
     /// rather than entering anything.
+    /// Closes the VAT or Tip pane, if one is open, before something else
+    /// changes the display.
+    private func closeToolPane() {
+        if activeOverlay == .vat || activeOverlay == .tip {
+            setActiveOverlay(nil)
+        }
+    }
+
     /// Captures the stored default rates into this window's own state the first
     /// time a pane opens, so another window changing the default can never
     /// change, and live-apply, this window's rate.
@@ -1590,8 +1600,10 @@ struct CalculatorWindowView: View {
         if activeOverlay == .rounding, overlay != .rounding {
             viewModel.commitResultRoundingInteraction()
         }
-        // An open rate edit belongs to its panel; closing it abandons the edit.
-        if overlay != .vat, overlay != .tip {
+        // An open rate edit belongs to its panel; any overlay change abandons
+        // it, including switching straight between VAT and Tip, which share
+        // the editor.
+        if overlay != activeOverlay {
             rateEditor.cancel()
         }
 
@@ -1807,11 +1819,12 @@ struct CalculatorWindowView: View {
             return false
         }
 
-        // VAT and Tip apply live to the display, so typing on the calculator
-        // while one is open closes it first: the result stays, and the key
-        // then does what it always does. Escape just closes the pane.
-        if activeOverlay == .vat || activeOverlay == .tip, !event.modifierFlags.contains(.command) {
-            setActiveOverlay(nil)
+        // VAT and Tip apply live to the display, so any key on the calculator
+        // while one is open — typing, or a shortcut such as ⌘V, ⌘Z or
+        // ⌘Delete — closes it first: the result stays, and the key then does
+        // what it always does. Escape just closes the pane.
+        if activeOverlay == .vat || activeOverlay == .tip {
+            closeToolPane()
             if event.keyCode == 53 { return true }
         }
 
