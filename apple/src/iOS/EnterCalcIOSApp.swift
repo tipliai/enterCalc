@@ -5606,9 +5606,10 @@ private struct IOSKeypadButton: View {
         let isInsideButton = contains(location: value.location, in: size)
         let isTapEligible = isTapEligible(translation: value.translation)
         let shouldBePressed = isInsideButton && isTapEligible && !touchCancelledBySwipe && !suppressesTap
-        if shouldBePressed && !isPressed {
-            triggerPressPopAnimation()
-        }
+        // Only the pressed highlight shows while the finger is down. The pop
+        // waits for the tap to be accepted (`handleTap`): played on touch-down
+        // it ran in full under every swipe that started on a key, even though
+        // the swipe never entered the key (#122).
         isPressed = shouldBePressed
     }
 
@@ -5656,6 +5657,7 @@ private struct IOSKeypadButton: View {
         // it must not sit in front of the result.
         action()
         pressFeedback(button.kind)
+        triggerPressPopAnimation()
         guard !reduceMotionEnabled else {
             shimmerVisible = false
             return
