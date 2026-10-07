@@ -1354,6 +1354,8 @@ public final class CalculatorViewModel: ObservableObject {
         let base: Decimal
         let display: String
         let summary: String
+        /// The undo stack's depth right after the result was first applied.
+        let undoDepth: Int
     }
 
     private var toolApplication: ToolApplication?
@@ -1381,12 +1383,32 @@ public final class CalculatorViewModel: ObservableObject {
     /// back to the original amount; later adjustments replace that result in
     /// place rather than adding undo steps.
     public func applyLiveToolResult(_ value: Decimal, tool: Tool, base: Decimal, describedBy summary: String) {
-        if liveToolApplication?.tool == tool {
+        let undoDepth: Int
+        if let live = liveToolApplication, live.tool == tool {
             writeToolResult(value, describedBy: summary)
+            undoDepth = live.undoDepth
         } else {
             applyToolResult(value, describedBy: summary)
+            undoDepth = undoStack.count
         }
-        toolApplication = ToolApplication(tool: tool, base: base, display: display, summary: lastResultSummary)
+        toolApplication = ToolApplication(
+            tool: tool, base: base, display: display, summary: lastResultSummary, undoDepth: undoDepth
+        )
+    }
+
+    /// The VAT or Tip pane's trash button: takes the tool's result back off the
+    /// display, the way the rounding pane's trash removes rounding. While the
+    /// result is still the latest change this is an undo, so the display comes
+    /// back exactly as it was, operation line included; otherwise the original
+    /// amount is written back as a new step.
+    public func removeLiveToolResult(_ tool: Tool) {
+        guard let live = liveToolApplication, live.tool == tool else { return }
+        toolApplication = nil
+        if undoStack.count == live.undoDepth {
+            undo()
+        } else {
+            applyToolResult(live.base, describedBy: "")
+        }
     }
 
     public func applyToolResult(_ value: Decimal, describedBy summary: String) {

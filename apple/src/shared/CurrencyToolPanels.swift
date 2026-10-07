@@ -9,12 +9,15 @@ import SwiftUI
 private struct CurrencyToolChrome<Content: View>: View {
     let title: String
     let closeLabel: String
+    let removeLabel: String
     let palette: Palette
+    let onRemove: () -> Void
     let onDismiss: () -> Void
     @ViewBuilder var content: Content
 
     #if os(macOS)
     @State private var isCloseHovering = false
+    @State private var isTrashHovering = false
     #endif
 
     var body: some View {
@@ -28,7 +31,8 @@ private struct CurrencyToolChrome<Content: View>: View {
     }
 
     /// Laid out like the rounding pane's header: the title centred in the
-    /// secondary colour, and the close button at the trailing edge.
+    /// secondary colour, the trash (take the result back off the display and
+    /// close) at the leading edge, and the close button at the trailing edge.
     private var header: some View {
         ZStack {
             Text(title)
@@ -41,8 +45,9 @@ private struct CurrencyToolChrome<Content: View>: View {
                 .frame(maxWidth: .infinity, alignment: .center)
 
             HStack(spacing: 0) {
+                headerButton(symbol: "trash", label: removeLabel, isHovering: trashHoverBinding, action: onRemove)
                 Spacer(minLength: 0)
-                closeButton
+                headerButton(symbol: "xmark", label: closeLabel, isHovering: closeHoverBinding, action: onDismiss)
             }
         }
         #if os(macOS)
@@ -52,25 +57,33 @@ private struct CurrencyToolChrome<Content: View>: View {
         #endif
     }
 
+    #if os(macOS)
+    private var trashHoverBinding: Binding<Bool> { $isTrashHovering }
+    private var closeHoverBinding: Binding<Bool> { $isCloseHovering }
+    #else
+    private var trashHoverBinding: Binding<Bool> { .constant(false) }
+    private var closeHoverBinding: Binding<Bool> { .constant(false) }
+    #endif
+
     @ViewBuilder
-    private var closeButton: some View {
+    private func headerButton(symbol: String, label: String, isHovering: Binding<Bool>, action: @escaping () -> Void) -> some View {
         #if os(macOS)
-        Button(action: onDismiss) {
-            Image(systemName: "xmark")
+        Button(action: action) {
+            Image(systemName: symbol)
                 .frame(width: 16, height: 16, alignment: .center)
                 .padding(8)
-                .background(isCloseHovering ? palette.headerHover : Color.clear)
+                .background(isHovering.wrappedValue ? palette.headerHover : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
         .buttonStyle(.borderless)
         .foregroundStyle(palette.textSecondary)
         .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        .help(closeLabel)
-        .accessibilityLabel(Text(closeLabel))
-        .onHover { isCloseHovering = $0 }
+        .help(label)
+        .accessibilityLabel(Text(label))
+        .onHover { isHovering.wrappedValue = $0 }
         #else
-        Button(action: onDismiss) {
-            Image(systemName: "xmark")
+        Button(action: action) {
+            Image(systemName: symbol)
                 .font(EnterCalcFont.appFont(size: 18))
                 .frame(width: 28, height: 28)
                 .foregroundColor(palette.textSecondary)
@@ -78,7 +91,7 @@ private struct CurrencyToolChrome<Content: View>: View {
         .frame(width: 44, height: 44, alignment: .center)
         .contentShape(Rectangle())
         .buttonStyle(.plain)
-        .accessibilityLabel(Text(closeLabel))
+        .accessibilityLabel(Text(label))
         #endif
     }
 }
@@ -348,6 +361,7 @@ public struct CurrencyVATPanel: View {
     private let onPresetEdited: (Int, Decimal?) -> Void
     private let onDirectionChange: (Bool) -> Void
     private let onResult: (Decimal) -> Void
+    private let onRemove: () -> Void
     private let onDismiss: () -> Void
 
     public init(
@@ -365,6 +379,7 @@ public struct CurrencyVATPanel: View {
         onPresetEdited: @escaping (Int, Decimal?) -> Void,
         onDirectionChange: @escaping (Bool) -> Void,
         onResult: @escaping (Decimal) -> Void,
+        onRemove: @escaping () -> Void,
         onDismiss: @escaping () -> Void
     ) {
         self.value = value
@@ -381,6 +396,7 @@ public struct CurrencyVATPanel: View {
         self.onPresetEdited = onPresetEdited
         self.onDirectionChange = onDirectionChange
         self.onResult = onResult
+        self.onRemove = onRemove
         self.onDismiss = onDismiss
     }
 
@@ -398,7 +414,9 @@ public struct CurrencyVATPanel: View {
         CurrencyToolChrome(
             title: localized("currency.vat.title"),
             closeLabel: localized("currency.tool.close"),
+            removeLabel: localized("currency.vat.clear"),
             palette: palette,
+            onRemove: onRemove,
             onDismiss: onDismiss
         ) {
             VStack(spacing: 12) {
@@ -488,6 +506,7 @@ public struct CurrencyTipPanel: View {
     private let onPresetEdited: (Int, Decimal?) -> Void
     private let onSplitChange: (Int) -> Void
     private let onResult: (Decimal) -> Void
+    private let onRemove: () -> Void
     private let onDismiss: () -> Void
 
     public init(
@@ -504,6 +523,7 @@ public struct CurrencyTipPanel: View {
         onPresetEdited: @escaping (Int, Decimal?) -> Void,
         onSplitChange: @escaping (Int) -> Void,
         onResult: @escaping (Decimal) -> Void,
+        onRemove: @escaping () -> Void,
         onDismiss: @escaping () -> Void
     ) {
         self.bill = bill
@@ -519,6 +539,7 @@ public struct CurrencyTipPanel: View {
         self.onPresetEdited = onPresetEdited
         self.onSplitChange = onSplitChange
         self.onResult = onResult
+        self.onRemove = onRemove
         self.onDismiss = onDismiss
     }
 
@@ -530,7 +551,9 @@ public struct CurrencyTipPanel: View {
         CurrencyToolChrome(
             title: localized("currency.tip.title"),
             closeLabel: localized("currency.tool.close"),
+            removeLabel: localized("currency.tip.clear"),
             palette: palette,
+            onRemove: onRemove,
             onDismiss: onDismiss
         ) {
             VStack(spacing: 12) {

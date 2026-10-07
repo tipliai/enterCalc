@@ -102,3 +102,5 @@
 "currency.rate.done" = "OK";
 "currency.rate.cancel" = "Annuler";
 "currency.rate.range" = "Entre 0 et 100, jusqu’à 3 décimales";
+"currency.vat.clear" = "Supprimer la TVA";
+"currency.tip.clear" = "Supprimer le pourboire";

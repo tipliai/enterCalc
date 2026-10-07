@@ -1437,6 +1437,10 @@ struct CalculatorWindowView: View {
             onResult: { result in
                 viewModel.applyLiveToolResult(result, tool: .vat, base: viewModel.toolBase(for: .vat), describedBy: vatSummary())
             },
+            onRemove: {
+                viewModel.removeLiveToolResult(.vat)
+                setActiveOverlay(nil)
+            },
             onDismiss: { setActiveOverlay(nil) }
         )
         .background(memoryOverlayBackgroundColor)
@@ -1461,6 +1465,10 @@ struct CalculatorWindowView: View {
             onSplitChange: { tipSplitCount = min(max($0, TipBreakdown.splitCountRange.lowerBound), TipBreakdown.splitCountRange.upperBound) },
             onResult: { result in
                 viewModel.applyLiveToolResult(result, tool: .tip, base: viewModel.toolBase(for: .tip), describedBy: tipSummary())
+            },
+            onRemove: {
+                viewModel.removeLiveToolResult(.tip)
+                setActiveOverlay(nil)
             },
             onDismiss: { setActiveOverlay(nil) }
         )

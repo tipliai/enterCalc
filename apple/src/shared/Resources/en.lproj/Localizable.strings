@@ -102,3 +102,5 @@
 "currency.rate.done" = "Done";
 "currency.rate.cancel" = "Cancel";
 "currency.rate.range" = "Between 0 and 100, up to 3 decimal places";
+"currency.vat.clear" = "Remove";
+"currency.tip.clear" = "Remove";

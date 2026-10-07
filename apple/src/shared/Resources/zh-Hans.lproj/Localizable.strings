@@ -102,3 +102,5 @@
 "currency.rate.done" = "完成";
 "currency.rate.cancel" = "取消";
 "currency.rate.range" = "0 到 100 之间，最多 3 位小数";
+"currency.vat.clear" = "取消增值税";
+"currency.tip.clear" = "取消小费";
