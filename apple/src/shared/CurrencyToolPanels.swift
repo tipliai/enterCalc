@@ -197,15 +197,13 @@ private struct RateChooser: View {
         )
     }
 
-    /// Applies the alert's text. An empty field keeps the rate it opened on;
-    /// text that is not a valid rate leaves everything unchanged.
     /// Applies the alert's text. An empty field keeps the rate it opened on.
     /// Text that can't be used changes nothing and says why, with the
     /// calculator's own messages: Out of range at 1000% or more, Invalid input
     /// for anything that isn't a number.
     private func commitTypedText() {
         let text = typedText.trimmingCharacters(in: .whitespaces)
-        if text.isEmpty || editor.setTypedText(text, decimalSeparator: decimalSeparator) {
+        if text.isEmpty || editor.setTypedText(text, decimalSeparator: decimalSeparator, notifyingLive: false) {
             editor.press(.done)
             return
         }
@@ -272,35 +270,33 @@ private struct RateChooser: View {
 
     private func beginTypingRate() {
         typedText = ""
-        let original = selected
         editor.begin(
             .rate,
             value: selected,
-            onLive: onSelect,
+            onLive: { _ in },
             onCommit: onSelect,
-            onCancel: { onSelect(original) }
+            onCancel: {}
         )
     }
 
     private func beginEditingPreset(_ slot: Int) {
         guard rates.indices.contains(slot) else { return }
         typedText = ""
-        let original = selected
         editor.begin(
             .preset(slot),
             value: rates[slot],
-            onLive: onSelect,
+            onLive: { _ in },
             onCommit: { rate in
                 onPresetEdited(slot, rate)
                 onPresetChosen?(slot)
                 onSelect(rate)
             },
-            onCancel: { onSelect(original) }
+            onCancel: {}
         )
     }
 }
 
-/// Minus / value / plus, used for both the custom rate and the party size.
+/// Minus / value / plus, used for the VAT rate.
 private struct StepperControl: View {
     let value: String
     let decreaseLabel: String
@@ -495,8 +491,18 @@ public struct CurrencyVATPanel: View {
         }
         // Applied as soon as the panel opens, and again on every change: there
         // is no Use Result step. Reopening the panel adjusts the same result.
+        // Applied on open and whenever the rate or direction changes — not when
+        // the amount underneath changes, so the pane never re-applies over
+        // something the person has since typed. Keyed on the rate rather than
+        // the result, so a rate change that rounds to the same figure still
+        // updates the operation line.
         .onAppear(perform: sendResult)
-        .onChange(of: appliedResult) { _, _ in sendResult() }
+        .onChange(of: ApplyKey(rate: rate, isRemoving: isRemoving)) { _, _ in sendResult() }
+    }
+
+    private struct ApplyKey: Equatable {
+        let rate: Decimal
+        let isRemoving: Bool
     }
 
     /// The figure written to the display: the gross when adding VAT, the net
@@ -642,7 +648,9 @@ public struct CurrencyTipPanel: View {
                 TipRateSlider(
                     rate: rate,
                     label: localized("currency.tip.rate"),
+                    offLabel: localized("currency.tip.off"),
                     palette: palette,
+                    formatRate: formatRate,
                     onChange: { newRate in
                         pressedPreset = nil
                         onRateChange(newRate)
@@ -654,9 +662,12 @@ public struct CurrencyTipPanel: View {
         .onAppear {
             // Reopening after choosing a preset shows it as chosen.
             pressedPreset = presets.rates.firstIndex(of: rate)
-            sendResult()
+            // Opening at 0% (Off) applies nothing and clears nothing.
+            if rate != 0 { sendResult() }
         }
-        .onChange(of: total) { _, _ in sendResult() }
+        // Applied whenever the rate changes, not when the bill changes, so the
+        // pane never re-applies over something the person has since typed.
+        .onChange(of: rate) { _, _ in sendResult() }
     }
 
     /// A 0% tip is the slider's Off position: the tip is taken back off the
@@ -681,7 +692,9 @@ private struct TipRateSlider: View {
 
     let rate: Decimal
     let label: String
+    let offLabel: String
     let palette: Palette
+    let formatRate: (Decimal) -> String
     let onChange: (Decimal) -> Void
 
     private var notchCount: Int { Int((Self.range.upperBound - Self.range.lowerBound) / Self.step) }
@@ -701,7 +714,7 @@ private struct TipRateSlider: View {
                 step: Self.step
             )
             .accessibilityLabel(Text(label))
-            .accessibilityValue(Text("\(NSDecimalNumber(decimal: RateEntry.roundedForDisplay(rate)).stringValue)%"))
+            .accessibilityValue(Text(rate == 0 ? offLabel : "\(formatRate(rate))%"))
 
             GeometryReader { geometry in
                 ZStack(alignment: .topLeading) {

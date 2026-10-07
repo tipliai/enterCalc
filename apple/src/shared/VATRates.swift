@@ -184,7 +184,10 @@ public struct RateEntry: Equatable, Sendable {
     public init?(typed raw: String, decimalSeparator: String) {
         replacesOnNextKey = false
         var normalized = ""
-        for character in raw.trimmingCharacters(in: .whitespaces) {
+        // A trailing % is allowed: the field shows one in its placeholder.
+        var trimmed = raw.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasSuffix("%") { trimmed.removeLast() }
+        for character in trimmed.trimmingCharacters(in: .whitespaces) {
             if character.wholeNumberValue != nil, character.isASCII {
                 normalized.append(character)
             } else if String(character) == decimalSeparator || character == "." || character == "," {
@@ -200,12 +203,14 @@ public struct RateEntry: Equatable, Sendable {
         }
         guard normalized != ".",
               let value = Decimal(string: normalized.hasPrefix(".") ? "0" + normalized : normalized,
-                                  locale: Locale(identifier: "en_US_POSIX")),
-              value < RateEntry.limit else { return nil }
+                                  locale: Locale(identifier: "en_US_POSIX")) else { return nil }
         let integerDigits = max(normalized.split(separator: ".", omittingEmptySubsequences: false).first.map {
             String($0).drop { $0 == "0" }.count
         } ?? 0, 1)
-        text = RateEntry.canonicalText(for: RateEntry.rounded(value, scale: max(RateEntry.maximumDigits - integerDigits, 0), mode: .plain))
+        let carried = RateEntry.rounded(value, scale: max(RateEntry.maximumDigits - integerDigits, 0), mode: .plain)
+        // Checked after rounding, so 999.99999999999999 can't round up to 1000.
+        guard carried < RateEntry.limit else { return nil }
+        text = RateEntry.canonicalText(for: carried)
     }
 
     /// The rate the text represents; `nil` while nothing has been typed.
@@ -263,7 +268,9 @@ public struct RateEntry: Equatable, Sendable {
     /// Whether typed text is a well-formed number that is simply too large to
     /// be a rate (1000% or more), as opposed to not being a number at all.
     public static func isOutOfRange(_ raw: String, decimalSeparator: String) -> Bool {
-        let normalized = raw.trimmingCharacters(in: .whitespaces)
+        var trimmed = raw.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasSuffix("%") { trimmed.removeLast() }
+        let normalized = trimmed.trimmingCharacters(in: .whitespaces)
             .replacingOccurrences(of: decimalSeparator, with: ".")
             .replacingOccurrences(of: ",", with: ".")
         guard !normalized.isEmpty,
@@ -271,7 +278,9 @@ public struct RateEntry: Equatable, Sendable {
               normalized.filter({ $0 == "." }).count <= 1,
               let value = Decimal(string: normalized.hasPrefix(".") ? "0" + normalized : normalized,
                                   locale: Locale(identifier: "en_US_POSIX")) else { return false }
-        return value >= limit
+        // A well-formed number the entry still refuses can only have rounded up
+        // to the limit (999.99999999999999), which is out of range too.
+        return value >= limit || RateEntry(typed: raw, decimalSeparator: decimalSeparator) == nil
     }
 
     /// The rate in full, for storage and the maths.

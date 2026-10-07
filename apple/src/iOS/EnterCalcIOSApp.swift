@@ -463,6 +463,8 @@ struct EnterCalcIOSView: View {
     @AppStorage(RateToolPreferences.tipRateKey) private var storedTipRate = ""
     @AppStorage(RateToolPreferences.tipPresetOverridesKey) private var storedTipPresetOverrides = ""
     @StateObject private var rateEditor = RateEditor()
+    @State private var sessionVATRate: Decimal?
+    @State private var sessionTipRate: Decimal?
     @State private var vatRemovesTax: Bool = false
     @State private var counterRotatesForUpsideDownPortrait: Bool = false
     @State private var flashCopy: Bool = false
@@ -586,14 +588,23 @@ struct EnterCalcIOSView: View {
         activeScreen.settings.usesAlternativeKeypad
     }
 
+    // The rate in use belongs to this window (or iPad scene) for the session,
+    // so changing it in one window never rewrites another window's display.
+    // The stored value is only the default a new window starts from.
     private var vatRate: Decimal {
-        get { RateToolPreferences.rate(fromStored: storedVATRate, fallback: VATRateCatalog.defaultRate()) }
-        nonmutating set { storedVATRate = RateToolPreferences.storedText(for: newValue) }
+        get { sessionVATRate ?? RateToolPreferences.rate(fromStored: storedVATRate, fallback: VATRateCatalog.defaultRate()) }
+        nonmutating set {
+            sessionVATRate = newValue
+            storedVATRate = RateToolPreferences.storedText(for: newValue)
+        }
     }
 
     private var tipRate: Decimal {
-        get { RateToolPreferences.rate(fromStored: storedTipRate, fallback: RateToolPreferences.defaultTipRate) }
-        nonmutating set { storedTipRate = RateToolPreferences.storedText(for: newValue) }
+        get { sessionTipRate ?? RateToolPreferences.rate(fromStored: storedTipRate, fallback: RateToolPreferences.defaultTipRate) }
+        nonmutating set {
+            sessionTipRate = newValue
+            storedTipRate = RateToolPreferences.storedText(for: newValue)
+        }
     }
 
     private func ratePresets(defaults: [Decimal], storedOverrides: String) -> RatePresets {
@@ -966,7 +977,7 @@ struct EnterCalcIOSView: View {
                 syncHomeScreenFromStoredSettings()
             }
             // An open rate edit belongs to the panel; closing the panel by any
-            // route (Use Result, ✕, leaving Currency mode) abandons it.
+            // route (✕, trash, the scrim, leaving Currency mode) abandons it.
             .onValueChange(of: activeOverlay) { overlay in
                 if overlay != .vat && overlay != .tip {
                     rateEditor.cancel()
@@ -1133,6 +1144,14 @@ private extension EnterCalcIOSView {
 
     func handleHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
         resetLandscapeDisplayScroll(for: activeScreen)
+
+        // VAT and Tip apply live to the display, so typing on the calculator
+        // while one is open closes it first: the result stays, and the key
+        // then does what it always does (#124). Escape just closes the pane.
+        if activeOverlay == .vat || activeOverlay == .tip, !event.modifierFlags.contains(.command) {
+            dismissActiveOverlay()
+            if event.keyCode == .keyboardEscape { return true }
+        }
 
         let unsupportedModifiers = event.modifierFlags.intersection([.control])
         guard unsupportedModifiers.isEmpty else {
