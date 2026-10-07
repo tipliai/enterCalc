@@ -348,9 +348,9 @@ final class CurrencyModeTests: XCTestCase {
     // The operation line starts from the amount the tool worked from.
     func testToolOperationLineShowsTheOriginalAmount() {
         let dollars = currencyViewModel("100", symbol: "$")
-        XCTAssertEqual(dollars.toolOperationLine(base: 100, label: "VAT", rate: 10), "$100 + VAT(10%) =")
-        XCTAssertEqual(dollars.toolOperationLine(base: 110, label: "VAT", rate: 10, isRemoving: true), "$110 − VAT(10%) =")
-        XCTAssertEqual(dollars.toolOperationLine(base: 1234, label: "TIP", rate: Decimal(string: "17.5")!), "$1,234 + TIP(17.5%) =")
+        XCTAssertEqual(dollars.toolOperationLine(base: 100, label: "VAT", rate: 10), "100 + VAT(10%) =")
+        XCTAssertEqual(dollars.toolOperationLine(base: 110, label: "VAT", rate: 10, isRemoving: true), "110 − VAT(10%) =")
+        XCTAssertEqual(dollars.toolOperationLine(base: 1234, label: "TIP", rate: Decimal(string: "17.5")!), "1,234 + TIP(17.5%) =")
     }
 
     // Moving the Tip slider to Off leaves the amount on its own: no operation
@@ -385,7 +385,7 @@ final class CurrencyModeTests: XCTestCase {
 
     func testOperationLineRoundsTheRateForDisplayOnly() {
         let dollars = currencyViewModel("100", symbol: "$")
-        XCTAssertEqual(dollars.toolOperationLine(base: 100, label: "VAT", rate: Decimal(string: "12.34567")!), "$100 + VAT(12.346%) =")
+        XCTAssertEqual(dollars.toolOperationLine(base: 100, label: "VAT", rate: Decimal(string: "12.34567")!), "100 + VAT(12.346%) =")
     }
 
     // 10 + 5 typed but not entered: the panes press Enter first, so they work
@@ -412,7 +412,7 @@ final class CurrencyModeTests: XCTestCase {
     // still works from 100 rather than compounding on 110 (review M1).
     func testRedoAfterTrashKeepsTheToolBase() {
         let viewModel = currencyViewModel("100", symbol: "$")
-        viewModel.applyLiveToolResult(110, tool: .vat, base: 100, describedBy: "$100 + VAT(10%) =")
+        viewModel.applyLiveToolResult(110, tool: .vat, base: 100, describedBy: "100 + VAT(10%) =")
         viewModel.removeLiveToolResult(.vat)
         XCTAssertEqual(viewModel.currentValue, 100)
 
@@ -425,7 +425,7 @@ final class CurrencyModeTests: XCTestCase {
     // back with VAT's result (review M2).
     func testTipOffAfterVATRestoresTheVATBase() {
         let viewModel = currencyViewModel("100", symbol: "$")
-        viewModel.applyLiveToolResult(110, tool: .vat, base: 100, describedBy: "$100 + VAT(10%) =")
+        viewModel.applyLiveToolResult(110, tool: .vat, base: 100, describedBy: "100 + VAT(10%) =")
         let tipBase = viewModel.toolBase(for: .tip)
         XCTAssertEqual(tipBase, 110)
         viewModel.applyLiveToolResult(132, tool: .tip, base: tipBase, describedBy: "$110 + TIP(20%) =")

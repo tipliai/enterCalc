@@ -79,7 +79,7 @@ final class VATRateTableTests: XCTestCase {
     }
 
     func testMissingTableFallsBackToGenericPresets() {
-        XCTAssertEqual(VATRateCatalog.presets(for: Locale(identifier: "de_DE"), in: nil), VATRateCatalog.genericPresets)
+        XCTAssertEqual(VATRateCatalog.presets(for: Locale(identifier: "de_DE"), in: nil), [5, 10, 20], "three presets even without the table")
     }
 
     func testInvalidEntriesRejectTheWholeTable() {

@@ -1511,6 +1511,14 @@ struct CalculatorWindowView: View {
 
     /// Compact outlined pill, deliberately unlike a keypad key: it opens a tool
     /// rather than entering anything.
+    /// Captures the stored default rates into this window's own state the first
+    /// time a pane opens, so another window changing the default can never
+    /// change, and live-apply, this window's rate.
+    private func seedSessionRates() {
+        if sessionVATRate == nil { sessionVATRate = vatRate }
+        if sessionTipRate == nil { sessionTipRate = tipRate }
+    }
+
     /// Opening VAT or Tip over an unfinished sum (`10 + 5`) presses Enter for
     /// the person first, exactly as the Enter key would: the result, its
     /// history entry and the Enter sound.
@@ -1524,6 +1532,7 @@ struct CalculatorWindowView: View {
         let isActive = activeOverlay == pane
         return Button {
             if !isActive {
+                seedSessionRates()
                 pressEnterForPendingCalculation()
             }
             setActiveOverlay(isActive ? nil : pane)
@@ -3148,9 +3157,11 @@ private struct MacRoundingPanel: View {
             }
             .frame(height: 26)
         }
-        .padding(.horizontal, 5)
+        // Content lines up with the keypad: 8pt in from the window's sides and
+        // 10pt up from its bottom, the same as the VAT and Tip panes.
+        .padding(.horizontal, 8)
         .padding(.top, 0)
-        .padding(.bottom, 8)
+        .padding(.bottom, 10)
         .frame(maxWidth: .infinity, alignment: .top)
         .fixedSize(horizontal: false, vertical: true)
         .background(overlayBackgroundColor)

@@ -64,7 +64,7 @@ public enum VATRateCatalog {
 
     /// The presets for a locale's region, standard rate first.
     public static func presets(for locale: Locale = .current, in table: Table? = bundled) -> [Decimal] {
-        guard let table else { return genericPresets }
+        guard let table else { return filled(genericPresets) }
         if let code = locale.region?.identifier.uppercased(), let region = table.regions[code] {
             return filled(region.presets)
         }
