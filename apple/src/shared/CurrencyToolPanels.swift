@@ -123,32 +123,25 @@ private struct RateChooser: View {
         }
     }
 
+    /// The presets and the rate stepper share one row; the stepper's value is
+    /// the rate in use, so it needs no label of its own.
     private var choosingView: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 6) {
-                ForEach(Array(rates.enumerated()), id: \.offset) { slot, rate in
-                    presetButton(slot: slot, rate: rate)
-                }
+        HStack(spacing: 6) {
+            ForEach(Array(rates.enumerated()), id: \.offset) { slot, rate in
+                presetButton(slot: slot, rate: rate)
             }
 
-            HStack(spacing: 10) {
-                Text(stepLabel)
-                    .font(.system(size: 13))
-                    .foregroundStyle(palette.textSecondary)
-
-                Spacer(minLength: 8)
-
-                StepperControl(
-                    value: "\(format(selected))%",
-                    decreaseLabel: decreaseLabel,
-                    increaseLabel: increaseLabel,
-                    palette: palette,
-                    onDecrease: { onSelect(RateEntry.stepped(selected, up: false)) },
-                    onIncrease: { onSelect(RateEntry.stepped(selected, up: true)) },
-                    valueActionLabel: labels.typeRate,
-                    onValueTap: beginTypingRate
-                )
-            }
+            StepperControl(
+                value: "\(format(selected))%",
+                decreaseLabel: decreaseLabel,
+                increaseLabel: increaseLabel,
+                palette: palette,
+                onDecrease: { onSelect(RateEntry.stepped(selected, up: false)) },
+                onIncrease: { onSelect(RateEntry.stepped(selected, up: true)) },
+                valueActionLabel: labels.typeRate,
+                onValueTap: beginTypingRate
+            )
+            .layoutPriority(1)
         }
     }
 

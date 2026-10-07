@@ -35,11 +35,12 @@ public enum VATRateCatalog {
     public static let genericPresets: [Decimal] = [5, 10, 20, 25]
 
     /// The VAT and Tip panels always show exactly this many preset buttons.
-    public static let presetCount = 4
+    public static let presetCount = 3
 
     /// Exactly `presetCount` presets: the given ones in order, then the generic
-    /// rates they do not already include. A region with fewer than four rates
-    /// (Germany has 19 and 7) is topped up; each button can still be changed by
+    /// rates they do not already include. A region with fewer than three rates
+    /// (Germany has 19 and 7) is topped up, and one with more keeps its first
+    /// three; each button can still be changed by
     /// pressing and holding it.
     public static func filled(_ presets: [Decimal]) -> [Decimal] {
         var result: [Decimal] = []
