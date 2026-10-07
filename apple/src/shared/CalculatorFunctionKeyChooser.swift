@@ -41,6 +41,23 @@ private struct FunctionOptionFramesKey: PreferenceKey {
     }
 }
 
+/// Strings for the chooser's trash button and the confirmation it asks for.
+public struct FunctionKeyResetLabels {
+    public let button: String
+    public let title: String
+    public let message: String
+    public let confirm: String
+    public let cancel: String
+
+    public init(button: String, title: String, message: String, confirm: String, cancel: String) {
+        self.button = button
+        self.title = title
+        self.message = message
+        self.confirm = confirm
+        self.cancel = cancel
+    }
+}
+
 /// Grid of candidate functions shown during a hold-and-drag reassignment.
 public struct CalculatorFunctionKeyChooser: View {
     #if os(macOS)
@@ -74,14 +91,18 @@ public struct CalculatorFunctionKeyChooser: View {
     private let currencySymbol: String
     private let title: String
     private let closeLabel: String
+    private let resetLabels: FunctionKeyResetLabels
     private let label: (CalculatorFunctionKey) -> String
     private let onHighlight: (CalculatorFunctionKey?) -> Void
     private let onCommit: (CalculatorFunctionKey) -> Void
     private let onClose: () -> Void
+    private let onReset: () -> Void
 
     @State private var optionFrames: [CalculatorFunctionKey: CGRect] = [:]
+    @State private var isConfirmingReset = false
     #if os(macOS)
     @State private var isCloseHovering = false
+    @State private var isResetHovering = false
     #endif
 
     public init(
@@ -91,10 +112,12 @@ public struct CalculatorFunctionKeyChooser: View {
         currencySymbol: String,
         title: String,
         closeLabel: String,
+        resetLabels: FunctionKeyResetLabels,
         label: @escaping (CalculatorFunctionKey) -> String,
         onHighlight: @escaping (CalculatorFunctionKey?) -> Void,
         onCommit: @escaping (CalculatorFunctionKey) -> Void,
-        onClose: @escaping () -> Void
+        onClose: @escaping () -> Void,
+        onReset: @escaping () -> Void
     ) {
         self.session = session
         self.assignments = assignments
@@ -102,10 +125,12 @@ public struct CalculatorFunctionKeyChooser: View {
         self.currencySymbol = currencySymbol
         self.title = title
         self.closeLabel = closeLabel
+        self.resetLabels = resetLabels
         self.label = label
         self.onHighlight = onHighlight
         self.onCommit = onCommit
         self.onClose = onClose
+        self.onReset = onReset
     }
 
     private var options: [CalculatorFunctionKey] { CalculatorFunctionKey.chooserOrder }
@@ -171,8 +196,10 @@ public struct CalculatorFunctionKeyChooser: View {
         )
     }
 
-    /// The title centred, with a close button at the trailing edge like the
-    /// rounding, VAT and Tip panes (#131). Closing leaves the key as it was.
+    /// Laid out like the rounding, VAT and Tip panes (#131): the title centred,
+    /// the trash at the leading edge and the close button at the trailing
+    /// edge. Closing leaves the key as it was; the trash, once confirmed, puts
+    /// every changeable key back to its original action.
     private var header: some View {
         ZStack {
             Text(title)
@@ -182,32 +209,52 @@ public struct CalculatorFunctionKeyChooser: View {
                 .accessibilityAddTraits(.isHeader)
 
             HStack(spacing: 0) {
+                headerButton(symbol: "trash", label: resetLabels.button, isHovering: resetHoverBinding) {
+                    isConfirmingReset = true
+                }
+                // Nothing to reset while every key has its original action.
+                .disabled(assignments == .default)
+                .opacity(assignments == .default ? 0.35 : 1)
                 Spacer(minLength: 0)
-                closeButton
+                headerButton(symbol: "xmark", label: closeLabel, isHovering: closeHoverBinding, action: onClose)
             }
         }
         .frame(height: Self.headerHeight)
+        .alert(resetLabels.title, isPresented: $isConfirmingReset) {
+            Button(resetLabels.confirm, role: .destructive, action: onReset)
+            Button(resetLabels.cancel, role: .cancel) {}
+        } message: {
+            Text(resetLabels.message)
+        }
     }
 
+    #if os(macOS)
+    private var resetHoverBinding: Binding<Bool> { $isResetHovering }
+    private var closeHoverBinding: Binding<Bool> { $isCloseHovering }
+    #else
+    private var resetHoverBinding: Binding<Bool> { .constant(false) }
+    private var closeHoverBinding: Binding<Bool> { .constant(false) }
+    #endif
+
     @ViewBuilder
-    private var closeButton: some View {
+    private func headerButton(symbol: String, label: String, isHovering: Binding<Bool>, action: @escaping () -> Void) -> some View {
         #if os(macOS)
-        Button(action: onClose) {
-            Image(systemName: "xmark")
+        Button(action: action) {
+            Image(systemName: symbol)
                 .frame(width: 16, height: 16, alignment: .center)
                 .padding(6)
-                .background(isCloseHovering ? palette.headerHover : Color.clear)
+                .background(isHovering.wrappedValue ? palette.headerHover : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
         .buttonStyle(.borderless)
         .foregroundStyle(palette.textSecondary)
         .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        .help(closeLabel)
-        .accessibilityLabel(Text(closeLabel))
-        .onHover { isCloseHovering = $0 }
+        .help(label)
+        .accessibilityLabel(Text(label))
+        .onHover { isHovering.wrappedValue = $0 }
         #else
-        Button(action: onClose) {
-            Image(systemName: "xmark")
+        Button(action: action) {
+            Image(systemName: symbol)
                 .font(EnterCalcFont.appFont(size: 16))
                 .frame(width: 28, height: 28)
                 .foregroundColor(palette.textSecondary)
@@ -215,7 +262,7 @@ public struct CalculatorFunctionKeyChooser: View {
         .frame(width: 44, height: Self.headerHeight)
         .contentShape(Rectangle())
         .buttonStyle(.plain)
-        .accessibilityLabel(Text(closeLabel))
+        .accessibilityLabel(Text(label))
         #endif
     }
 

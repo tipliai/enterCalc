@@ -115,8 +115,9 @@ Every step below was driven end to end automatically — on the iPhone simulator
 2. **Pressing a dog-eared key** still pops and highlights in its cut-corner shape, and the hover highlight on Mac follows the cut.
 3. **Back-to-back edits.** Change a key, then immediately change it again, several times, then change the other large key. Every open, choice and close should work. On iOS, after a press-and-hold the key must not stay drawn as pressed, and the next tap anywhere must register.
 4. **Close.** The chooser's **✕** closes it without changing anything, on every platform; on Mac it has the same hover as the other panes' buttons.
-5. **Mac hint.** With VoiceOver, a changeable Mac key's hint says to right-click and choose Edit (not "press and hold").
-6. Run in another language: **Edit** in the context menu and the Mac hint are translated.
+5. **Reset all.** The chooser's **trash** (leading edge, like the other panes) is dimmed while every key has its original action. After changing a few keys, press it: a system alert asks **Reset All Actions?**; **Cancel** changes nothing, **Reset** puts every changeable key on this page or window back to its original action and closes the chooser.
+6. **Mac hint.** With VoiceOver, a changeable Mac key's hint says to right-click and choose Edit (not "press and hold").
+7. Run in another language: **Edit** in the context menu, the Mac hint and the reset alert are translated.
 
 If a check fails, `ENTERCALC_DEBUG_LOGS=1` makes the app log every chooser open and every reassignment as `[functionKeys] <slot> = <function>; layout = …`, which the macOS driver's `log` command prints. The accessibility tree cannot show which function a key carries, so that log is the only readable record.
 ## Percentage and VAT maths — #25

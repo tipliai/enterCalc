@@ -838,6 +838,14 @@ struct EnterCalcIOSView: View {
             .joined(separator: " ")
     }
 
+    /// The chooser's trash, once confirmed: every changeable key goes back to
+    /// its original action (#131).
+    func resetFunctionKeys() {
+        updateActiveScreenSettings { $0.functionKeyAssignments = .default }
+        DebugLog.emit("functionKeys", "reset; layout = \(describeFunctionKeyLayout())")
+        dismissFunctionChooser()
+    }
+
     func dismissFunctionChooser() {
         animateIfAllowed(.easeOut(duration: 0.14)) {
             functionChooser = nil
@@ -862,10 +870,18 @@ struct EnterCalcIOSView: View {
                     currencySymbol: activeScreen.settings.currencySymbol,
                     title: localized("functionKey.chooser.title"),
                     closeLabel: localized("currency.tool.close"),
+                    resetLabels: FunctionKeyResetLabels(
+                        button: localized("functionKey.reset"),
+                        title: localized("functionKey.reset.title"),
+                        message: localized("functionKey.reset.message"),
+                        confirm: localized("functionKey.reset.confirm"),
+                        cancel: localized("functionKey.reset.cancel")
+                    ),
                     label: { functionKeyLabel($0) },
                     onHighlight: { highlightFunctionChooserOption($0) },
                     onCommit: { commitFunctionChooser($0) },
-                    onClose: { dismissFunctionChooser() }
+                    onClose: { dismissFunctionChooser() },
+                    onReset: { resetFunctionKeys() }
                 )
             }
             // While the press that opened it is still down, the chooser must

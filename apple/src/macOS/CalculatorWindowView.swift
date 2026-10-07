@@ -946,6 +946,14 @@ struct CalculatorWindowView: View {
             .joined(separator: " ")
     }
 
+    /// The chooser's trash, once confirmed: every changeable key goes back to
+    /// its original action (#131).
+    func resetFunctionKeys() {
+        updateWindowSettings { $0.functionKeyAssignments = .default }
+        DebugLog.emit("functionKeys", "reset; layout = \(describeFunctionKeyLayout())")
+        dismissFunctionChooser()
+    }
+
     func dismissFunctionChooser() {
         withAnimation(reduceMotionEnabled ? nil : .easeOut(duration: 0.14)) {
             functionChooser = nil
@@ -969,10 +977,18 @@ struct CalculatorWindowView: View {
                     currencySymbol: windowSettings.currencySymbol,
                     title: macLocalized("functionKey.chooser.title", bundle: currentLocalizationBundle),
                     closeLabel: macLocalized("currency.tool.close", bundle: currentLocalizationBundle),
+                    resetLabels: FunctionKeyResetLabels(
+                        button: macLocalized("functionKey.reset", bundle: currentLocalizationBundle),
+                        title: macLocalized("functionKey.reset.title", bundle: currentLocalizationBundle),
+                        message: macLocalized("functionKey.reset.message", bundle: currentLocalizationBundle),
+                        confirm: macLocalized("functionKey.reset.confirm", bundle: currentLocalizationBundle),
+                        cancel: macLocalized("functionKey.reset.cancel", bundle: currentLocalizationBundle)
+                    ),
                     label: { functionKeyLabel($0) },
                     onHighlight: { highlightFunctionChooserOption($0) },
                     onCommit: { commitFunctionChooser($0) },
-                    onClose: { dismissFunctionChooser() }
+                    onClose: { dismissFunctionChooser() },
+                    onReset: { resetFunctionKeys() }
                 )
             }
             .transition(.opacity)
