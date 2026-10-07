@@ -36,18 +36,18 @@ final class VATRateTableTests: XCTestCase {
 
     func testPresetsPutTheStandardRateFirstThenOthersInListedOrder() throws {
         let parsed = try table(sample)
-        XCTAssertEqual(VATRateCatalog.presets(for: Locale(identifier: "de_DE"), in: parsed), [19, 7])
+        XCTAssertEqual(VATRateCatalog.presets(for: Locale(identifier: "de_DE"), in: parsed), [19, 7, 5, 10], "topped up to four")
         XCTAssertEqual(
             VATRateCatalog.presets(for: Locale(identifier: "fr_CH"), in: parsed),
-            [Decimal(string: "8.1")!, Decimal(string: "3.8")!, Decimal(string: "2.6")!]
+            [Decimal(string: "8.1")!, Decimal(string: "3.8")!, Decimal(string: "2.6")!, 5]
         )
         XCTAssertEqual(VATRateCatalog.defaultRate(for: Locale(identifier: "de_DE"), in: parsed), 19)
     }
 
     func testRegionWithoutAnEntryGetsTheFallback() throws {
         let parsed = try table(sample)
-        XCTAssertEqual(VATRateCatalog.presets(for: Locale(identifier: "en_US"), in: parsed), [5, 10, 20])
-        XCTAssertEqual(VATRateCatalog.presets(for: Locale(identifier: "en"), in: parsed), [5, 10, 20])
+        XCTAssertEqual(VATRateCatalog.presets(for: Locale(identifier: "en_US"), in: parsed), [5, 10, 20, 25])
+        XCTAssertEqual(VATRateCatalog.presets(for: Locale(identifier: "en"), in: parsed), [5, 10, 20, 25])
     }
 
     // Spot checks against docs/vat-rates-research.md, including rates that
@@ -63,6 +63,19 @@ final class VATRateTableTests: XCTestCase {
         XCTAssertEqual(presets("IN"), [18, 5, 40])
         XCTAssertEqual(presets("CA"), [5, 13, 14, 15])
         XCTAssertNil(bundled.regions["US"], "no national VAT: the US uses the fallback")
+    }
+
+    // Both panels always show four presets, whatever the region lists.
+    func testEveryRegionGetsExactlyFourDistinctPresetsStandardFirst() throws {
+        let bundled = try XCTUnwrap(VATRateCatalog.bundled)
+        for (code, region) in bundled.regions {
+            let presets = VATRateCatalog.presets(for: Locale(identifier: "en_\(code)"), in: bundled)
+            XCTAssertEqual(presets.count, 4, code)
+            XCTAssertEqual(Set(presets).count, 4, "\(code) repeats a preset")
+            XCTAssertEqual(presets.first, region.standard, code)
+        }
+        XCTAssertEqual(VATRateCatalog.presets(for: Locale(identifier: "en_US"), in: bundled).count, 4)
+        XCTAssertEqual(TipBreakdown.presetRates.count, VATRateCatalog.presetCount)
     }
 
     func testMissingTableFallsBackToGenericPresets() {

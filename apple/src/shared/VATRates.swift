@@ -32,7 +32,23 @@ public enum VATRateCatalog {
     }
 
     /// Offered when the region has no entry, or the table cannot be read.
-    public static let genericPresets: [Decimal] = [5, 10, 15, 20, 25]
+    public static let genericPresets: [Decimal] = [5, 10, 20, 25]
+
+    /// The VAT and Tip panels always show exactly this many preset buttons.
+    public static let presetCount = 4
+
+    /// Exactly `presetCount` presets: the given ones in order, then the generic
+    /// rates they do not already include. A region with fewer than four rates
+    /// (Germany has 19 and 7) is topped up; each button can still be changed by
+    /// pressing and holding it.
+    public static func filled(_ presets: [Decimal]) -> [Decimal] {
+        var result: [Decimal] = []
+        for rate in presets + genericPresets + [15, 7, 12, 8] where !result.contains(rate) {
+            result.append(rate)
+            if result.count == presetCount { break }
+        }
+        return result
+    }
 
     /// The bundled table, loaded once.
     public static let bundled: Table? = {
@@ -45,9 +61,9 @@ public enum VATRateCatalog {
     public static func presets(for locale: Locale = .current, in table: Table? = bundled) -> [Decimal] {
         guard let table else { return genericPresets }
         if let code = locale.region?.identifier.uppercased(), let region = table.regions[code] {
-            return region.presets
+            return filled(region.presets)
         }
-        return table.fallback.isEmpty ? genericPresets : table.fallback
+        return filled(table.fallback)
     }
 
     /// The rate the VAT panel starts on: the region's standard rate.

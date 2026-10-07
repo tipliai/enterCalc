@@ -361,8 +361,6 @@ public struct CurrencyVATPanel: View {
             onDismiss: onDismiss
         ) {
             VStack(spacing: 12) {
-                directionPicker
-
                 RateChooser(
                     rates: presets.rates,
                     selected: rate,
@@ -377,6 +375,8 @@ public struct CurrencyVATPanel: View {
                     onSelect: { onRateChange(max($0, 0)) },
                     onPresetEdited: onPresetEdited
                 )
+
+                directionPicker
 
                 if let breakdown {
                     VStack(spacing: 6) {
@@ -496,8 +496,6 @@ public struct CurrencyTipPanel: View {
             onDismiss: onDismiss
         ) {
             VStack(spacing: 12) {
-                ResultRow(label: localized("currency.tip.bill"), value: format(breakdown.bill), isEmphasised: false, palette: palette)
-
                 RateChooser(
                     rates: presets.rates,
                     selected: rate,
