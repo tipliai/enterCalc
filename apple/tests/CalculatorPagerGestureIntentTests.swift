@@ -95,4 +95,33 @@ final class CalculatorPagerGestureIntentTests: XCTestCase {
             CalculatorPagerGestureIntent.minimumDragDistance
         )
     }
+
+    // The page stays still until the finger passes the reveal distance, then
+    // eases out from rest instead of jumping to the finger (#122). A short
+    // swipe never moves the page, so there is nothing to snap back.
+    func testThePageDoesNotMoveUntilTheRevealDistance() {
+        let reveal = 393 * CalculatorPagerGestureIntent.revealThresholdRatio // iPhone 15 Pro width
+        for along: CGFloat in [0, 26, 41, -72, reveal, -reveal] {
+            XCTAssertEqual(CalculatorPagerGestureIntent.visibleTranslation(along: along, revealDistance: reveal), 0, "\(along)")
+        }
+        XCTAssertEqual(CalculatorPagerGestureIntent.visibleTranslation(along: reveal + 15, revealDistance: reveal), 15, accuracy: 0.001)
+        XCTAssertEqual(CalculatorPagerGestureIntent.visibleTranslation(along: -(reveal + 43), revealDistance: reveal), -43, accuracy: 0.001)
+    }
+
+    // The page must start moving before letting go would turn it on iOS, so
+    // there is visible feedback ahead of the turn, and short slips of the size
+    // fast typing produces (up to ~72pt on an iPhone) must not move it at all.
+    func testRevealSitsBetweenTypingSlipsAndTheTurnDistance() {
+        let iOSTurnRatio: CGFloat = 0.4
+        XCTAssertLessThan(CalculatorPagerGestureIntent.revealThresholdRatio, iOSTurnRatio)
+        XCTAssertGreaterThan(393 * CalculatorPagerGestureIntent.revealThresholdRatio, 72)
+    }
+
+    // A reveal distance below swipe recognition cannot draw travel that has
+    // not yet been recognised as a swipe.
+    func testRevealNeverStartsBeforeSwipeRecognition() {
+        let recognition = CalculatorPagerGestureIntent.minimumAxisTravel
+        XCTAssertEqual(CalculatorPagerGestureIntent.visibleTranslation(along: recognition, revealDistance: 0), 0)
+        XCTAssertEqual(CalculatorPagerGestureIntent.visibleTranslation(along: recognition + 10, revealDistance: 0), 10)
+    }
 }
