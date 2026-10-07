@@ -102,3 +102,5 @@
 "currency.rate.done" = "完了";
 "currency.rate.cancel" = "キャンセル";
 "currency.rate.range" = "0〜100、小数点以下3桁まで";
+"currency.vat.clear" = "消費税を解除";
+"currency.tip.clear" = "チップを解除";

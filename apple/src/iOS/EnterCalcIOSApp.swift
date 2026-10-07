@@ -1531,6 +1531,10 @@ private extension EnterCalcIOSView {
                             let viewModel = activeScreen.viewModel
                             viewModel.applyLiveToolResult(result, tool: .vat, base: viewModel.toolBase(for: .vat), describedBy: vatSummary())
                         },
+                        onRemove: {
+                            activeScreen.viewModel.removeLiveToolResult(.vat)
+                            dismissActiveOverlay()
+                        },
                         onDismiss: { dismissActiveOverlay() }
                     )
                     .padding(.bottom, roundingPanelBottomInset(mode: metrics.mode, isUpsideDown: counterRotatesForUpsideDownPortrait, safeAreaBottom: safeAreaInsets.bottom))
@@ -1555,6 +1559,10 @@ private extension EnterCalcIOSView {
                         onResult: { result in
                             let viewModel = activeScreen.viewModel
                             viewModel.applyLiveToolResult(result, tool: .tip, base: viewModel.toolBase(for: .tip), describedBy: tipSummary())
+                        },
+                        onRemove: {
+                            activeScreen.viewModel.removeLiveToolResult(.tip)
+                            dismissActiveOverlay()
                         },
                         onDismiss: { dismissActiveOverlay() }
                     )

@@ -308,4 +308,19 @@ final class CurrencyModeTests: XCTestCase {
         XCTAssertEqual(viewModel.toolBase(for: .vat), viewModel.currentValue)
         XCTAssertEqual(viewModel.currentValue, 5)
     }
+
+    // The trash button restores the display exactly as it was before the
+    // panel opened, and does nothing for a tool that isn't on the display.
+    func testRemovingALiveToolResultRestoresTheOriginal() {
+        let viewModel = currencyViewModel("100", symbol: "€")
+        viewModel.applyLiveToolResult(119, tool: .vat, base: 100, describedBy: "Add VAT 19% =")
+        viewModel.applyLiveToolResult(107, tool: .vat, base: 100, describedBy: "Add VAT 7% =")
+
+        viewModel.removeLiveToolResult(.tip)
+        XCTAssertEqual(viewModel.currentValue, 107, "Tip's trash leaves VAT alone")
+
+        viewModel.removeLiveToolResult(.vat)
+        XCTAssertEqual(viewModel.currentValue, 100)
+        XCTAssertEqual(viewModel.toolBase(for: .vat), 100)
+    }
 }
