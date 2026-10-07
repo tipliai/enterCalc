@@ -52,7 +52,9 @@ xcrun simctl spawn booted log stream --style compact --signpost --predicate 'sub
 
 ## Page switching — #83
 
-The swipe-intent change was driven on the iPad simulator: a 12pt horizontal drift starting on a digit key now enters nothing and turns no page, while a 400pt swipe pages normally and still creates a new page past the last one. There is a deliberate dead band between the two — a keypad key gives up on its tap at 8pt of horizontal travel, and paging does not engage until 18pt, so a slide in between does nothing. That is the intended fix: a slip of that size is not a clear press or a clear swipe.
+The swipe-intent change was driven on the iPad simulator: a 12pt horizontal drift starting on a digit key now enters nothing and turns no page, while a 400pt swipe pages normally and still creates a new page past the last one. Paging now engages at 28pt (raised from 18pt for #122), and a key accepts a press that travels up to 22pt. Before #122 the key gave up at 8pt of sideways travel, which dropped digits during fast typing. Between 22pt and 28pt neither happens: a slip of that size is not a clear press or a clear swipe.
+
+**Fast typing (#122), on iPhone and iPad:** type `123456789` quickly and repeatedly, with one thumb and then two alternating. Every digit should land, and the page should never start to move. Then make a deliberate swipe: it should still page with no extra effort.
 
 **The keyboard shortcuts were not driven.** Sending hardware keys to the simulator needs the Mac's display awake, and it was asleep for this pass — the same limitation that blocked the macOS driver.
 

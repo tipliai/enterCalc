@@ -9,11 +9,16 @@ import SwiftUI
 /// never start paging at all.
 public enum CalculatorPagerGestureIntent {
     /// Movement before the gesture is even considered. A tap that drifts stays
-    /// a tap.
-    public static let minimumDragDistance: CGFloat = 18
+    /// a tap. Raised from 18 for #122: fast typing slides a finger sideways as
+    /// it lifts toward the next key, and that alone used to start a page drag.
+    public static let minimumDragDistance: CGFloat = 28
     /// Movement along the paging axis before the page starts following the
     /// finger.
-    public static let minimumAxisTravel: CGFloat = 16
+    public static let minimumAxisTravel: CGFloat = 26
+    /// How far a finger may travel during a keypad press and still enter the
+    /// key. Kept below `minimumAxisTravel`, so one movement can never both
+    /// commit a tap and turn the page.
+    public static let keyTapAllowance: CGFloat = 22
     /// How much further the paging axis has to travel than the other one. A
     /// diagonal smudge off a key is not a page swipe.
     public static let axisDominanceRatio: CGFloat = 1.4

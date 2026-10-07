@@ -14,21 +14,39 @@ final class CalculatorPagerGestureIntentTests: XCTestCase {
         }
     }
 
-    // There is a deliberate dead band. A keypad key cancels its own tap once
-    // the finger travels 8pt horizontally, while paging does not engage until
-    // 18pt — so a slide of 8–18pt does nothing at all. That is the intended
-    // outcome for #83: a slip of that size is not a clear press *or* a clear
-    // swipe, and turning the page on it is the behaviour being fixed. Verified
-    // on the iPad simulator: a 12pt drift starting on a digit entered nothing
-    // and changed no page, while a 400pt swipe paged normally.
-    func testPagingThresholdSitsAboveTheKeypadTapCancellation() {
-        let keypadTapCancellationDistance: CGFloat = 8
+    // 1.1.0 QA still found swiping a little too eager, so a short, quick slide
+    // of about a finger's width no longer counts either: the user has to drag
+    // slightly further before the page starts to follow.
+    func testAShortSlideOfAboutAFingerWidthIsNotPaging() {
+        for drift in [CGSize(width: 20, height: 2), CGSize(width: -24, height: 3), CGSize(width: 26, height: 0)] {
+            XCTAssertFalse(
+                CalculatorPagerGestureIntent.isPagingIntent(translation: drift, axis: .horizontal),
+                "\(drift) should not page"
+            )
+        }
+    }
 
-        XCTAssertGreaterThan(
+    // A key accepts a press that travels up to `keyTapAllowance`; the page
+    // only engages beyond `minimumAxisTravel`. The first must stay below the
+    // second, so one movement can never both enter a digit and turn the page.
+    // Between them is a small band where neither happens. #83 originally had
+    // the key give up after just 8pt, which dropped digits during fast typing
+    // (#122); now a slide that small still enters the key.
+    func testPagingThresholdSitsAboveTheKeypadTapAllowance() {
+        XCTAssertLessThan(
+            CalculatorPagerGestureIntent.keyTapAllowance,
             CalculatorPagerGestureIntent.minimumAxisTravel,
-            keypadTapCancellationDistance,
             "paging must not engage while the keypad would still have accepted the tap"
         )
+    }
+
+    // The slide a fast typist's finger makes as it lifts toward the next key
+    // must stay a tap, not count as the start of a swipe (#122).
+    func testAFastTypingSlideStaysWithinTheKeyTapAllowanceAndDoesNotPage() {
+        for slide in [CGSize(width: 10, height: 2), CGSize(width: -15, height: 4), CGSize(width: 20, height: 3)] {
+            XCTAssertLessThanOrEqual(hypot(slide.width, slide.height), CalculatorPagerGestureIntent.keyTapAllowance, "\(slide)")
+            XCTAssertFalse(CalculatorPagerGestureIntent.isPagingIntent(translation: slide, axis: .horizontal), "\(slide) should not page")
+        }
     }
 
     // A real swipe still has to work; making it more deliberate must not make
