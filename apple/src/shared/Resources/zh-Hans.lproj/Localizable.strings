@@ -85,8 +85,6 @@
 "currency.vat.gross" = "含税";
 "currency.tip.title" = "小费";
 "currency.tip.rate" = "小费";
-"currency.tip.rate.decrease" = "减少小费";
-"currency.tip.rate.increase" = "增加小费";
 "currency.tip.amount" = "小费";
 "currency.tip.total" = "总计";
 "currency.tool.close" = "关闭";

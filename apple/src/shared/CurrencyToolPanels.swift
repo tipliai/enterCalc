@@ -135,6 +135,8 @@ private struct RateChooser: View {
     @ObservedObject var editor: RateEditor
     let onSelect: (Decimal) -> Void
     let onPresetEdited: (Int, Decimal?) -> Void
+    /// The Tip pane uses a slider instead of the − rate + selector.
+    var showsStepper: Bool = true
 
     @State private var typedText = ""
 
@@ -188,17 +190,19 @@ private struct RateChooser: View {
                 presetButton(slot: slot, rate: rate)
             }
 
-            StepperControl(
-                value: "\(format(selected))%",
-                decreaseLabel: decreaseLabel,
-                increaseLabel: increaseLabel,
-                palette: palette,
-                onDecrease: { onSelect(RateEntry.stepped(selected, up: false)) },
-                onIncrease: { onSelect(RateEntry.stepped(selected, up: true)) },
-                valueActionLabel: labels.typeRate,
-                onValueTap: beginTypingRate
-            )
-            .layoutPriority(1)
+            if showsStepper {
+                StepperControl(
+                    value: "\(format(selected))%",
+                    decreaseLabel: decreaseLabel,
+                    increaseLabel: increaseLabel,
+                    palette: palette,
+                    onDecrease: { onSelect(RateEntry.stepped(selected, up: false)) },
+                    onIncrease: { onSelect(RateEntry.stepped(selected, up: true)) },
+                    valueActionLabel: labels.typeRate,
+                    onValueTap: beginTypingRate
+                )
+                .layoutPriority(1)
+            }
         }
     }
 
@@ -506,6 +510,7 @@ public struct CurrencyTipPanel: View {
     @ObservedObject private var rateEditor: RateEditor
     private let onPresetEdited: (Int, Decimal?) -> Void
     private let onResult: (Decimal) -> Void
+    private let onTipOff: () -> Void
     private let onRemove: () -> Void
     private let onDismiss: () -> Void
 
@@ -522,6 +527,7 @@ public struct CurrencyTipPanel: View {
         rateEditor: RateEditor,
         onPresetEdited: @escaping (Int, Decimal?) -> Void,
         onResult: @escaping (Decimal) -> Void,
+        onTipOff: @escaping () -> Void,
         onRemove: @escaping () -> Void,
         onDismiss: @escaping () -> Void
     ) {
@@ -537,6 +543,7 @@ public struct CurrencyTipPanel: View {
         self.rateEditor = rateEditor
         self.onPresetEdited = onPresetEdited
         self.onResult = onResult
+        self.onTipOff = onTipOff
         self.onRemove = onRemove
         self.onDismiss = onDismiss
     }
@@ -561,21 +568,34 @@ public struct CurrencyTipPanel: View {
                     rates: presets.rates,
                     selected: rate,
                     stepLabel: localized("currency.tip.rate"),
-                    decreaseLabel: localized("currency.tip.rate.decrease"),
-                    increaseLabel: localized("currency.tip.rate.increase"),
+                    decreaseLabel: "",
+                    increaseLabel: "",
                     labels: RateEditingLabels(localized: localized),
                     decimalSeparator: presets.decimalSeparator,
                     palette: palette,
                     format: formatRate,
                     editor: rateEditor,
                     onSelect: { onRateChange(max($0, 0)) },
-                    onPresetEdited: onPresetEdited
+                    onPresetEdited: onPresetEdited,
+                    showsStepper: false
                 )
 
                 VStack(spacing: 6) {
-                    ResultRow(label: localized("currency.tip.amount"), value: format(tip), isEmphasised: false, palette: palette)
+                    ResultRow(
+                        label: "\(localized("currency.tip.amount")) (\(formatRate(rate))%)",
+                        value: format(tip),
+                        isEmphasised: false,
+                        palette: palette
+                    )
                     ResultRow(label: localized("currency.tip.total"), value: format(total), isEmphasised: true, palette: palette)
                 }
+
+                TipRateSlider(
+                    rate: rate,
+                    label: localized("currency.tip.rate"),
+                    palette: palette,
+                    onChange: { onRateChange($0) }
+                )
             }
         }
         // Applied as soon as the panel opens, and again on every change.
@@ -583,8 +603,82 @@ public struct CurrencyTipPanel: View {
         .onChange(of: total) { _, _ in sendResult() }
     }
 
+    /// A 0% tip is the slider's Off position: the tip is taken back off the
+    /// display rather than applied as a zero.
     private func sendResult() {
         guard bill != 0 else { return }
-        onResult(total)
+        if rate == 0 {
+            onTipOff()
+        } else {
+            onResult(total)
+        }
+    }
+}
+
+/// The Tip pane's slider, styled like the rounding pane's: Off (a power icon)
+/// at the left, then a notch every 2% up to 40%. It moves in whole steps of
+/// 2%; a preset or a long-press edit can still set any rate, which the slider
+/// shows between notches (and at the end for anything above 40%).
+private struct TipRateSlider: View {
+    static let range: ClosedRange<Double> = 0...40
+    static let step: Double = 2
+
+    let rate: Decimal
+    let label: String
+    let palette: Palette
+    let onChange: (Decimal) -> Void
+
+    private var notchCount: Int { Int((Self.range.upperBound - Self.range.lowerBound) / Self.step) }
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Slider(
+                value: Binding(
+                    get: { min(max(NSDecimalNumber(decimal: rate).doubleValue, Self.range.lowerBound), Self.range.upperBound) },
+                    set: { newValue in
+                        let snapped = (newValue / Self.step).rounded() * Self.step
+                        let whole = Decimal(Int(min(max(snapped, Self.range.lowerBound), Self.range.upperBound)))
+                        if whole != rate { onChange(whole) }
+                    }
+                ),
+                in: Self.range,
+                step: Self.step
+            )
+            .accessibilityLabel(Text(label))
+            .accessibilityValue(Text("\(NSDecimalNumber(decimal: rate).stringValue)%"))
+
+            GeometryReader { geometry in
+                ZStack(alignment: .topLeading) {
+                    ForEach(0...notchCount, id: \.self) { index in
+                        if index == 0 {
+                            Image(systemName: "power")
+                                .font(.system(size: 11))
+                                .foregroundStyle(palette.textSecondary)
+                                .frame(width: 14)
+                                .offset(x: offset(for: index, width: geometry.size.width, markerWidth: 14), y: -3)
+                        } else {
+                            Capsule(style: .continuous)
+                                .fill(palette.textSecondary.opacity(index % 5 == 0 ? 0.6 : 0.35))
+                                .frame(width: 2, height: index % 5 == 0 ? 7 : 5)
+                                .offset(x: offset(for: index, width: geometry.size.width, markerWidth: 2))
+                        }
+                    }
+                }
+            }
+            .frame(height: 14)
+            .accessibilityHidden(true)
+        }
+    }
+
+    /// Lines a marker up under the slider thumb's centre for notch `index`.
+    private func offset(for index: Int, width: CGFloat, markerWidth: CGFloat) -> CGFloat {
+        #if os(macOS)
+        let inset: CGFloat = 10
+        #else
+        let inset: CGFloat = 14
+        #endif
+        let usable = max(width - inset * 2, 0)
+        let position = CGFloat(index) / CGFloat(max(notchCount, 1))
+        return inset + position * usable - markerWidth / 2
     }
 }

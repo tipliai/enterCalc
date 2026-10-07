@@ -1558,6 +1558,7 @@ private extension EnterCalcIOSView {
                             let viewModel = activeScreen.viewModel
                             viewModel.applyLiveToolResult(result, tool: .tip, base: viewModel.toolBase(for: .tip), describedBy: tipSummary())
                         },
+                        onTipOff: { activeScreen.viewModel.removeLiveToolResult(.tip) },
                         onRemove: {
                             activeScreen.viewModel.removeLiveToolResult(.tip)
                             dismissActiveOverlay()

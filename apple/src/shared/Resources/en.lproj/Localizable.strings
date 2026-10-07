@@ -85,8 +85,6 @@
 "currency.vat.gross" = "Inc VAT";
 "currency.tip.title" = "Tip";
 "currency.tip.rate" = "Tip";
-"currency.tip.rate.decrease" = "Decrease Tip";
-"currency.tip.rate.increase" = "Increase Tip";
 "currency.tip.amount" = "Tip";
 "currency.tip.total" = "Total";
 "currency.tool.close" = "Close";
