@@ -29,7 +29,7 @@ public struct TipBreakdown: Equatable, Sendable {
 
     /// Quick choices for the tip percentage. A custom rate is always allowed,
     /// so this is a convenience list rather than a constraint.
-    public static let presetRates: [Decimal] = [10, 15, 18, 20]
+    public static let presetRates: [Decimal] = [15, 18, 20]
 
     /// The default party size: one, meaning no split.
     public static let defaultSplitCount = 1
