@@ -23,24 +23,26 @@ See the [changelog](https://github.com/tipliai/enterCalc/blob/main/CHANGELOG.md)
 
 ## Features
 
-- Multiple calculator panels with independent calculations
-- Calculation history with quick result reuse
-- Advanced copy, paste, undo, and redo
-- One-click copying
+- Open multiple calculator panels with independent calculations and settings
+- Calculation history with quick reuse of previous results
+- Customizable function keys for your preferred actions
+- Advanced copy, paste, undo, and redo support
+- One-click copying for fast workflows
 - Preserve calculation context when copying and pasting
-- Digit-level editing
-- Hardware keyboard shortcuts
-- Landscape support
-- Scientific notation
-- Configurable rounding
-- Currency symbol handling
+- Digit-level editing for quick corrections
+- Currency mode with built-in VAT and TIP calc tools
+- Hardware keyboard and shortcut support
+- Landscape mode support
+- Optional scientific notation
+- Configurable rounding behavior
 - Multiple number formatting styles
-- Localization support
-- Alternative keyboard layouts
-- Light and Dark Mode themes
+- Multiple language and localization options
+- Support for alternative keyboard layouts
+- Light and Dark Mode support
+- Optional tactile and audio feedback on supported devices
 - Accessibility-focused design
-- Privacy-first
-- No tracking or analytics
+- Lightweight and distraction-free
+- Privacy-focused, operates entirely on your device with no tracking or analytics
 - Open source under the MIT License
 
 ## Privacy
