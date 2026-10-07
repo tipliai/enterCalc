@@ -52,7 +52,7 @@ xcrun simctl spawn booted log stream --style compact --signpost --predicate 'sub
 
 ## Page switching — #83
 
-The swipe-intent change was driven on the iPad simulator: a 12pt horizontal drift starting on a digit key now enters nothing and turns no page, while a 400pt swipe pages normally and still creates a new page past the last one. Paging now engages at 28pt (raised from 18pt for #122), and a key accepts a press that travels up to 22pt. Before #122 the key gave up at 8pt of sideways travel, which dropped digits during fast typing. Between 22pt and 28pt neither happens: a slip of that size is not a clear press or a clear swipe.
+Swipe intent, as revised by #122: a key accepts a press that travels up to 22pt, so a 12pt drift starting on a digit key **enters the digit** and turns no page. #116 originally had the key give up at 8pt of sideways travel, which dropped digits during fast typing. Paging is recognised at 28pt (raised from 18pt), the page starts to move at 20% of its width, and it turns at 40% (or 24% with a flick). A 400pt swipe pages normally and still creates a new page past the last one. Between 22pt and 28pt neither happens: a slip of that size is not a clear press or a clear swipe.
 
 **Page swipes and dots (#122), on iPhone and iPad:**
 

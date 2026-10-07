@@ -1948,12 +1948,14 @@ private extension EnterCalcIOSView {
     }
 
     /// The page dots, always laid out and faded in only while there is more than
-    /// one page. Hidden dots take no touches and are not announced.
+    /// one page. Hidden dots are not announced. The dots never take touches:
+    /// they are display-only, and in portrait they sit over the pager, where
+    /// they would otherwise swallow a swipe that starts on them.
     func fadingPaginationIndicator(metrics: IOSLayoutMetrics, isVisible: Bool) -> some View {
         paginationIndicator(metrics: metrics)
             .opacity(isVisible ? 1 : 0)
             .animation(reduceMotionEnabled ? nil : .easeInOut(duration: 0.25), value: isVisible)
-            .allowsHitTesting(isVisible)
+            .allowsHitTesting(false)
             .accessibilityHidden(!isVisible)
     }
 
