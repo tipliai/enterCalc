@@ -17,6 +17,10 @@ Open source, privacy-first, and designed for speed. EnterCalc is a native calcul
 ![iPhone Screenshot](./images/iphone.gif)
 ![iPad Screenshot](./images/ipad.gif)
 
+## What's New
+
+See the [changelog](https://github.com/tipliai/enterCalc/blob/main/CHANGELOG.md) for what changed in each release.
+
 ## Features
 
 - Multiple calculator panels with independent calculations
