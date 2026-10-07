@@ -1030,6 +1030,11 @@ struct EnterCalcIOSView: View {
                 reconcileDisplayLayoutAfterOrientationChange()
             }
         }
+        // The only keyboard this screen raises is the rate alert's (#124), and
+        // nothing here needs to stay above it. Without this the layout measured
+        // a screen shortened by the keyboard and lifted the VAT/Tip panel over
+        // the calculator; now the keyboard simply covers the bottom.
+        .ignoresSafeArea(.keyboard, edges: .bottom)
     }
 }
 
