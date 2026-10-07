@@ -26,7 +26,7 @@ Download on the Apple App Store: [apps.apple.com/app/id6777242723](https://apps.
 - Optional scientific notation
 - Configurable rounding behavior
 - Function keys you can reassign per page — press and hold on iOS, right-click on macOS
-- Currency symbol handling
+- Currency mode with a choice of symbol, plus live VAT (add or remove) and Tip panes with region-aware VAT presets you can edit
 - Multiple number formatting styles
 - Multiple language and localization options
 - Support for alternative keyboard layouts
@@ -38,7 +38,15 @@ Download on the Apple App Store: [apps.apple.com/app/id6777242723](https://apps.
 
 ## Release Scope
 
-The initial `1.0.0` release focused on the core Basic calculator experience. `1.1.0` builds on that with bug fixes and workflow improvements.
+The initial `1.0.0` release focused on the core Basic calculator experience. `1.1.0` builds on it with:
+
+- **Currency mode**: a currency key you can toggle (it stays on through AC and is highlighted while on), a symbol picker in Settings, and the caret kept after the symbol while editing
+- **VAT and Tip panes**: results apply as soon as a pane opens, with a trash button to take them off. VAT can be added or removed, with three presets from a verified table of each region's rates. Tip has presets and a slider from Off to 40%. Long-press a preset to set your own rate, typed to any precision and shown to three decimals
+- **Configurable function keys**: reassign the top-row keys on each page — press and hold on iOS, right-click on macOS
+- **Page switching**: keyboard shortcuts, swipes that need clear intent and no longer drop fast taps, a fixed rail for the page dots, and a theme crossfade
+- **Percent fixes**: `9% + 9%` gives `18%`, and in currency mode `$10 + 10%` gives `$11`
+- **Faster key presses on iOS**: feedback work moved off the press path, roughly halving the time to handle a tap
+- **Settings and accessibility**: a feedback link and a rating prompt, an equals key labelled to suit the layout and language, keyboard resizing of the display on macOS, VoiceOver labels for the macOS header controls, and the macOS theme repainting correctly when switched to System
 
 Planned future enhancements include:
 
