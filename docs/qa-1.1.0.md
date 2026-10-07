@@ -111,7 +111,7 @@ Every step below was driven end to end automatically — on the iPhone simulator
 
 ## Function keys: Edit menu, repeated edits, close button and dog-ear — #131
 
-1. **Dog-ear.** On the Basic keypad, the six action-row keys and the `( )` and `%` keys have their top-right corner turned down; no other key does. Compare with the design canvas (Light, Dark and Blue, iPhone and Mac): the fold is a soft triangle with a rounded tip and a faint shadow, about 15pt on iPhone and 10pt on Mac for the large keys. Check it with Increase Contrast too, and on the currency key while Currency mode is on (accent fill).
+1. **Dog-ear.** On the Basic keypad, the six action-row keys and the `( )` and `%` keys have their top-right corner turned down; no other key does. Compare with the approved mockups (Light, Dark and Blue, iPhone and Mac): the fold is a soft triangle with a rounded tip and a faint shadow, about 15pt on iPhone and 10pt on Mac for the large keys. Check it with Increase Contrast too, and on the currency key while Currency mode is on (accent fill).
 2. **Pressing a dog-eared key** still pops and highlights in its cut-corner shape, and the hover highlight on Mac follows the cut.
 3. **Back-to-back edits.** Change a key, then immediately change it again, several times, then change the other large key. Every open, choice and close should work. On iOS, after a press-and-hold the key must not stay drawn as pressed, and the next tap anywhere must register.
 4. **Close.** The chooser's **✕** closes it without changing anything, on every platform; on Mac it has the same hover as the other panes' buttons.

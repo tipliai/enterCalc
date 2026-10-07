@@ -5555,7 +5555,7 @@ private struct IOSCompactActionButton: View {
                 color: isHighlighted ? palette.accentText : palette.textPrimary
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(Rectangle())
+            .contentShape(keyShape)
             .scaleEffect(reduceMotionEnabled ? 1.0 : pressPopScale)
         }
         .buttonStyle(.plain)
@@ -5569,7 +5569,7 @@ private struct IOSCompactActionButton: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .contentShape(Rectangle())
+        .contentShape(keyShape)
         .background(
             GeometryReader { proxy in
                 Color.clear
@@ -5852,8 +5852,10 @@ private struct IOSKeypadButton: View {
         }
     }
 
+    /// Follows the key's outline, so a press sliding into a dog-eared key's
+    /// cut-away corner lets go like one sliding off the key (#131).
     private func contains(location: CGPoint, in size: CGSize) -> Bool {
-        CGRect(origin: .zero, size: size).contains(location)
+        keyShape.path(in: CGRect(origin: .zero, size: size)).contains(location)
     }
 
     private func isTapEligible(translation: CGSize) -> Bool {

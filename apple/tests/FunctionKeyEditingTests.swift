@@ -7,16 +7,26 @@ import SwiftUI
 final class FunctionKeyEditingTests: XCTestCase {
     // MARK: Dog-ear
 
+    // The `ear15` sizes from the approved mockups: on the Mac 10pt on a 55pt
+    // keypad key, on iPhone 15pt on a 78pt key; 5pt and 7pt on the action row.
     func testEarSizesMatchTheChosenDesign() {
-        // 10pt on a 55pt keypad key and 5pt on an 18pt action-row key: the
-        // Mac's `ear15` sizes from the design canvas.
+        #if os(macOS)
         XCTAssertEqual(FunctionKeyEar.size(forKeyHeight: 55, isActionRow: false), 10)
         XCTAssertEqual(FunctionKeyEar.size(forKeyHeight: 18, isActionRow: true), 5)
+        #else
+        XCTAssertEqual(FunctionKeyEar.size(forKeyHeight: 78, isActionRow: false), 15)
+        XCTAssertEqual(FunctionKeyEar.size(forKeyHeight: 26, isActionRow: true), 7)
+        #endif
     }
 
     func testEarSizeStaysWithinItsBoundsAsKeysResize() {
+        #if os(macOS)
         XCTAssertEqual(FunctionKeyEar.size(forKeyHeight: 20, isActionRow: false), 8)
         XCTAssertEqual(FunctionKeyEar.size(forKeyHeight: 400, isActionRow: false), 14)
+        #else
+        XCTAssertEqual(FunctionKeyEar.size(forKeyHeight: 20, isActionRow: false), 12)
+        XCTAssertEqual(FunctionKeyEar.size(forKeyHeight: 400, isActionRow: false), 18)
+        #endif
         XCTAssertEqual(FunctionKeyEar.size(forKeyHeight: 4, isActionRow: true), 4)
         XCTAssertEqual(FunctionKeyEar.size(forKeyHeight: 100, isActionRow: true), 8)
     }
@@ -47,7 +57,9 @@ final class FunctionKeyEditingTests: XCTestCase {
         XCTAssertFalse(flap.contains(CGPoint(x: 70.5, y: 9.5)), "the right-angle tip is rounded off")
     }
 
-    // MARK: Chooser placement
+    // MARK: Chooser placement (Mac: below the key, 16pt clear of the window)
+
+    #if os(macOS)
 
     private let panel = CGSize(width: 238, height: 120)
     private let window = CGRect(x: 0, y: 0, width: 280, height: 484)
@@ -74,4 +86,5 @@ final class FunctionKeyEditingTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(origin.y, 16)
         XCTAssertLessThanOrEqual(origin.y + panel.height, tiny.maxY - 16 + 0.5)
     }
+    #endif
 }
