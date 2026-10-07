@@ -103,3 +103,5 @@
 "currency.rate.presetHint" = "Mantén pulsado para escribir un nuevo valor para este valor predefinido";
 "currency.rate.done" = "OK";
 "currency.rate.restore" = "Restaurar predeterminado";
+"currency.rate.cancel" = "Cancelar";
+"currency.rate.range" = "Entre 0 y 100, hasta 3 decimales";

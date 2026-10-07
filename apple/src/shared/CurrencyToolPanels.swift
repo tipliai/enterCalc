@@ -45,13 +45,17 @@ public struct RateEditingLabels {
     public let editPreset: String
     public let presetHint: String
     public let done: String
+    public let cancel: String
     public let restoreDefault: String
+    public let rateRange: String
 
     public init(localized: (String) -> String) {
         typeRate = localized("currency.rate.type")
         editPreset = localized("currency.rate.editPreset")
         presetHint = localized("currency.rate.presetHint")
         done = localized("currency.rate.done")
+        cancel = localized("currency.rate.cancel")
+        rateRange = localized("currency.rate.range")
         restoreDefault = localized("currency.rate.restore")
     }
 }
@@ -59,8 +63,10 @@ public struct RateEditingLabels {
 /// Quick-choice rates, a stepper, and typed entry (#124).
 ///
 /// Tap the rate to type one; press and hold a preset to type a new value for
-/// it, which is kept. Typing uses the system keyboard: the decimal pad on
-/// iPhone, and the numbers layout on iPad, which has no number-only pad.
+/// it, which is kept. Typing happens in a system alert with a text field — a
+/// lightbox over the panel rather than inline, since it is a rare action and
+/// editing in place was confusing. On iPhone the field brings up the decimal
+/// pad; iPad has no number-only pad and shows its numbers layout.
 private struct RateChooser: View {
     let rates: [Decimal]
     let defaultRates: [Decimal]
@@ -77,11 +83,56 @@ private struct RateChooser: View {
     let onSelect: (Decimal) -> Void
     let onPresetEdited: (Int, Decimal?) -> Void
 
+    @State private var typedText = ""
+
     var body: some View {
-        if let target = editor.target {
-            editingView(target: target)
+        choosingView
+            .alert(alertTitle, isPresented: isEditingBinding) {
+                TextField(editor.entry.displayText(decimalSeparator: decimalSeparator), text: $typedText)
+                    #if os(iOS)
+                    .keyboardType(.decimalPad)
+                    #endif
+
+                Button(labels.cancel, role: .cancel) { editor.cancel() }
+
+                if case .preset(let slot) = editor.target, editedSlots.contains(slot), defaultRates.indices.contains(slot) {
+                    Button(labels.restoreDefault) {
+                        let defaultRate = defaultRates[slot]
+                        editor.dismiss()
+                        onPresetEdited(slot, nil)
+                        onSelect(defaultRate)
+                    }
+                }
+
+                Button(labels.done) { commitTypedText() }
+            } message: {
+                Text(labels.rateRange)
+            }
+    }
+
+    private var alertTitle: String {
+        editor.target == .rate ? stepLabel : labels.editPreset
+    }
+
+    /// Presented while an edit is open. Dismissing the alert by any route the
+    /// buttons do not handle abandons the edit.
+    private var isEditingBinding: Binding<Bool> {
+        Binding(
+            get: { editor.isEditing },
+            set: { isPresented in
+                if !isPresented, editor.isEditing { editor.cancel() }
+            }
+        )
+    }
+
+    /// Applies the alert's text. An empty field keeps the rate it opened on;
+    /// text that is not a valid rate leaves everything unchanged.
+    private func commitTypedText() {
+        let text = typedText.trimmingCharacters(in: .whitespaces)
+        if text.isEmpty || editor.setTypedText(text, decimalSeparator: decimalSeparator) {
+            editor.press(.done)
         } else {
-            choosingView
+            editor.cancel()
         }
     }
 
@@ -147,6 +198,7 @@ private struct RateChooser: View {
     }
 
     private func beginTypingRate() {
+        typedText = ""
         let original = selected
         editor.begin(
             .rate,
@@ -159,6 +211,7 @@ private struct RateChooser: View {
 
     private func beginEditingPreset(_ slot: Int) {
         guard rates.indices.contains(slot) else { return }
+        typedText = ""
         let original = selected
         editor.begin(
             .preset(slot),
@@ -170,108 +223,6 @@ private struct RateChooser: View {
             },
             onCancel: { onSelect(original) }
         )
-    }
-
-    private func editingView(target: RateEditor.Target) -> some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 10) {
-                Text(target == .rate ? stepLabel : labels.editPreset)
-                    .font(.system(size: 13))
-                    .foregroundStyle(palette.textSecondary)
-
-                Spacer(minLength: 8)
-
-                RateField(
-                    editor: editor,
-                    placeholder: editor.entry.displayText(decimalSeparator: decimalSeparator),
-                    decimalSeparator: decimalSeparator,
-                    palette: palette
-                )
-            }
-
-            HStack(spacing: 6) {
-                if case .preset(let slot) = target, editedSlots.contains(slot), defaultRates.indices.contains(slot) {
-                    keypadActionButton(title: labels.restoreDefault, isPrimary: false) {
-                        let defaultRate = defaultRates[slot]
-                        editor.dismiss()
-                        onPresetEdited(slot, nil)
-                        onSelect(defaultRate)
-                    }
-                }
-
-                keypadActionButton(title: labels.done, isPrimary: true) {
-                    editor.press(.done)
-                }
-            }
-        }
-    }
-
-    private func keypadActionButton(title: String, isPrimary: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(isPrimary ? palette.accentText : palette.textPrimary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 9)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .background(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(isPrimary ? palette.accent : palette.buttonFunction)
-        )
-    }
-}
-
-/// The text field a rate is typed into, focused as soon as it appears.
-///
-/// It starts empty with the current rate as its placeholder, so typing replaces
-/// the rate rather than appending to it; Done on an untouched field keeps the
-/// rate. Text that is not a valid rate (a letter, a second separator, a third
-/// decimal, over 100) is refused as it is typed.
-private struct RateField: View {
-    @ObservedObject var editor: RateEditor
-    let placeholder: String
-    let decimalSeparator: String
-    let palette: Palette
-
-    @State private var text = ""
-    @FocusState private var isFocused: Bool
-
-    var body: some View {
-        HStack(spacing: 2) {
-            TextField(placeholder, text: $text)
-                .multilineTextAlignment(.trailing)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(palette.textPrimary)
-                .textFieldStyle(.plain)
-                #if os(iOS)
-                .keyboardType(.decimalPad)
-                #endif
-                .autocorrectionDisabled()
-                .focused($isFocused)
-                .onSubmit { editor.press(.done) }
-                #if os(macOS)
-                .onExitCommand { editor.cancel() }
-                #endif
-                .onChange(of: text) { previous, typed in
-                    if !editor.setTypedText(typed, decimalSeparator: decimalSeparator) {
-                        text = previous
-                    }
-                }
-
-            Text("%")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(palette.textPrimary)
-        }
-        .frame(maxWidth: 120)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(palette.buttonFunction)
-        )
-        .onAppear { isFocused = true }
     }
 }
 
