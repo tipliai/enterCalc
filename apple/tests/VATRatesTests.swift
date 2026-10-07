@@ -112,6 +112,23 @@ final class VATRateTableTests: XCTestCase {
             XCTAssertEqual($0 as? VATRateCatalog.TableError, .emptyFallback)
         }
         XCTAssertThrowsError(try table("{ not json"))
+
+        // Decimal(string:) would read these as their valid prefix.
+        for malformed in ["1..2", "1.2.3", ".5", "5.", "١٩"] {
+            let text = sample.replacingOccurrences(of: "\"7\"", with: "\"\(malformed)\"")
+            XCTAssertNotEqual(text, sample)
+            XCTAssertThrowsError(try table(text), malformed) {
+                XCTAssertEqual($0 as? VATRateCatalog.TableError, .invalidRate(region: "DE", value: malformed))
+            }
+        }
+    }
+
+    func testStrictDecimalAcceptsOnlyDigitsWithOneInteriorDot() {
+        XCTAssertEqual(RateEntry.strictDecimal("19"), 19)
+        XCTAssertEqual(RateEntry.strictDecimal("8.125"), Decimal(string: "8.125"))
+        for malformed in ["", ".", "1..2", "1.2.3", ".5", "5.", "-1", "1e2", " 5", "5%"] {
+            XCTAssertNil(RateEntry.strictDecimal(malformed), malformed)
+        }
     }
 }
 
@@ -178,5 +195,10 @@ final class RateEntryTests: XCTestCase {
         XCTAssertEqual(RateEntry.stepped(0, up: false), 0)
         XCTAssertEqual(RateEntry.stepped(100, up: true), 101)
         XCTAssertEqual(RateEntry.stepped(RateEntry.maximum, up: true), RateEntry.maximum)
+        // Typed entry allows up to (not including) 1000, above the stepper's
+        // cap: stepping up keeps such a rate instead of lowering it.
+        let typedAboveCap = Decimal(string: "999.9995")!
+        XCTAssertEqual(RateEntry.stepped(typedAboveCap, up: true), typedAboveCap)
+        XCTAssertLessThan(RateEntry.stepped(typedAboveCap, up: false), typedAboveCap)
     }
 }

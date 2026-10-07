@@ -1419,10 +1419,11 @@ public final class CalculatorViewModel: ObservableObject {
     ///
     /// With `clearingOperationLine`, as when the Tip slider is moved to Off,
     /// the operation line is cleared too, as an undoable step, even if the
-    /// amount had one of its own before — the amount is left on its own.
+    /// amount had one of its own before — the amount is left on its own. Off
+    /// is always a new step rather than an undo, so Undo brings the tip back.
     public func removeLiveToolResult(_ tool: Tool, clearingOperationLine: Bool = false) {
         if let live = liveToolApplication, live.tool == tool {
-            if undoStack.count == live.undoDepth {
+            if !clearingOperationLine, undoStack.count == live.undoDepth {
                 undo()
             } else {
                 applyToolResult(live.base, describedBy: "")

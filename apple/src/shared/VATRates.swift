@@ -165,8 +165,7 @@ public enum VATRateCatalog {
     }
 
     private static func rate(_ text: String, region: String) throws -> Decimal {
-        guard let value = Decimal(string: text, locale: Locale(identifier: "en_US_POSIX")),
-              text.allSatisfy({ $0.isNumber || $0 == "." }) else {
+        guard let value = RateEntry.strictDecimal(text) else {
             throw TableError.invalidRate(region: region, value: text)
         }
         guard value >= 0, value <= VATRateCatalog.maximumTableRate else {
@@ -332,9 +331,22 @@ public struct RateEntry: Equatable, Sendable {
         canonicalText(for: roundedForDisplay(rate)).replacingOccurrences(of: ".", with: decimalSeparator)
     }
 
+    /// Parses a rate written with `.` as the separator, as in stored settings
+    /// and the rate table: ASCII digits with at most one dot between them.
+    /// `Decimal(string:)` alone reads a valid prefix, taking "1..2" as 1, so
+    /// the syntax is checked first.
+    public static func strictDecimal(_ text: String) -> Decimal? {
+        let parts = text.split(separator: ".", omittingEmptySubsequences: false)
+        guard (1...2).contains(parts.count),
+              parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy { ("0"..."9").contains($0) } }) else { return nil }
+        return Decimal(string: text, locale: Locale(identifier: "en_US_POSIX"))
+    }
+
     /// The stepper's next rate. Whole rates step by 1; a rate with a fraction
     /// steps by 0.5, snapping onto the half-percent grid first (8.1 → 8.5 up,
-    /// 8.0 down). Clamped to 0…`maximum`.
+    /// 8.0 down). Stays within 0…`maximum`, and never moves the wrong way: a
+    /// rate already above `maximum` (typed entry allows up to `limit`) is kept
+    /// on the way up rather than lowered.
     public static func stepped(_ rate: Decimal, up: Bool) -> Decimal {
         let isWhole = rate == rounded(rate, scale: 0, mode: .down)
         let step: Decimal = isWhole ? 1 : Decimal(string: "0.5")!
@@ -345,7 +357,8 @@ public struct RateEntry: Equatable, Sendable {
         } else {
             next = up ? rate + step : rate - step
         }
-        return min(max(next, 0), maximum)
+        let clamped = min(max(next, 0), maximum)
+        return up ? max(clamped, rate) : min(clamped, rate)
     }
 
     static func rounded(_ value: Decimal, scale: Int, mode: NSDecimalNumber.RoundingMode) -> Decimal {

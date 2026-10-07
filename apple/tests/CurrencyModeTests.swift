@@ -448,4 +448,23 @@ final class CurrencyModeTests: XCTestCase {
         viewModel.undo()
         XCTAssertEqual(viewModel.expressionDisplay, line)
     }
+
+    // Off is a new step, not an undo of the tip: Undo brings the tip back
+    // (with its line and base) instead of leaving it on the redo stack.
+    func testUndoAfterTipOffRestoresTheTip() {
+        let viewModel = currencyViewModel("100", symbol: "$")
+        viewModel.applyLiveToolResult(118, tool: .tip, base: 100, describedBy: "100 + TIP(18%) =")
+        viewModel.removeLiveToolResult(.tip, clearingOperationLine: true)
+        XCTAssertEqual(viewModel.currentValue, 100)
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+
+        viewModel.undo()
+        XCTAssertEqual(viewModel.currentValue, 118)
+        XCTAssertEqual(viewModel.expressionDisplay, "100 + TIP(18%) =")
+        XCTAssertEqual(viewModel.toolBase(for: .tip), 100)
+
+        viewModel.redo()
+        XCTAssertEqual(viewModel.currentValue, 100)
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+    }
 }
