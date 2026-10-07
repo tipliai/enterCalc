@@ -352,4 +352,34 @@ final class CurrencyModeTests: XCTestCase {
         XCTAssertEqual(dollars.toolOperationLine(base: 110, label: "VAT", rate: 10, isRemoving: true), "$110 − VAT(10%) =")
         XCTAssertEqual(dollars.toolOperationLine(base: 1234, label: "TIP", rate: Decimal(string: "17.5")!), "$1,234 + TIP(17.5%) =")
     }
+
+    // Moving the Tip slider to Off leaves the amount on its own: no operation
+    // line, even one the amount had before the tip (here "50 + 50 =").
+    func testTipOffClearsTheOperationLine() {
+        let viewModel = currencyViewModel("50", symbol: "$")
+        viewModel.setOperator(.add)
+        enter("50", into: viewModel)
+        viewModel.evaluate()
+        XCTAssertFalse(viewModel.expressionDisplay.isEmpty)
+
+        viewModel.applyLiveToolResult(118, tool: .tip, base: 100, describedBy: "100 + TIP(18%) =")
+        viewModel.removeLiveToolResult(.tip, clearingOperationLine: true)
+
+        XCTAssertEqual(viewModel.currentValue, 100)
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+    }
+
+    // The pane can open at 0% (Off), so no tip was applied: Off still clears
+    // the operation line and leaves the amount alone.
+    func testTipOffClearsTheOperationLineEvenWithoutATip() {
+        let viewModel = currencyViewModel("50", symbol: "$")
+        viewModel.setOperator(.add)
+        enter("50", into: viewModel)
+        viewModel.evaluate()
+
+        viewModel.removeLiveToolResult(.tip, clearingOperationLine: true)
+
+        XCTAssertEqual(viewModel.currentValue, 100)
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+    }
 }
