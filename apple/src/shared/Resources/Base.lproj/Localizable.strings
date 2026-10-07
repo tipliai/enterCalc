@@ -102,6 +102,5 @@
 "currency.rate.editPreset" = "Edit Preset";
 "currency.rate.presetHint" = "Press and hold to type a new value for this preset";
 "currency.rate.done" = "Done";
-"currency.rate.restore" = "Restore Default";
 "currency.rate.cancel" = "Cancel";
 "currency.rate.range" = "Between 0 and 100, up to 3 decimal places";

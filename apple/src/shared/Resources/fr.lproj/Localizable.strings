@@ -102,6 +102,5 @@
 "currency.rate.editPreset" = "Modifier le préréglage";
 "currency.rate.presetHint" = "Maintenez enfoncé pour saisir une nouvelle valeur pour ce préréglage";
 "currency.rate.done" = "OK";
-"currency.rate.restore" = "Rétablir la valeur par défaut";
 "currency.rate.cancel" = "Annuler";
 "currency.rate.range" = "Entre 0 et 100, jusqu’à 3 décimales";
