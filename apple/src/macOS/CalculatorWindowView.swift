@@ -1472,6 +1472,7 @@ struct CalculatorWindowView: View {
             onResult: { result in
                 viewModel.applyLiveToolResult(result, tool: .tip, base: viewModel.toolBase(for: .tip), describedBy: tipSummary())
             },
+            onTipOff: { viewModel.removeLiveToolResult(.tip) },
             onRemove: {
                 viewModel.removeLiveToolResult(.tip)
                 setActiveOverlay(nil)

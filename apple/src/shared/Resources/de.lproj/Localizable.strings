@@ -85,8 +85,6 @@
 "currency.vat.gross" = "Brutto";
 "currency.tip.title" = "Trinkgeld";
 "currency.tip.rate" = "Trinkgeld";
-"currency.tip.rate.decrease" = "Trinkgeld verringern";
-"currency.tip.rate.increase" = "Trinkgeld erhöhen";
 "currency.tip.amount" = "Trinkgeld";
 "currency.tip.total" = "Gesamt";
 "currency.tool.close" = "Schließen";

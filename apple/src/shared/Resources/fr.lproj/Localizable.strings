@@ -85,8 +85,6 @@
 "currency.vat.gross" = "TTC";
 "currency.tip.title" = "Pourboire";
 "currency.tip.rate" = "Pourboire";
-"currency.tip.rate.decrease" = "Diminuer le pourboire";
-"currency.tip.rate.increase" = "Augmenter le pourboire";
 "currency.tip.amount" = "Pourboire";
 "currency.tip.total" = "Total";
 "currency.tool.close" = "Fermer";

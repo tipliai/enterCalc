@@ -274,8 +274,8 @@ final class CalculatorFunctionKeyTests: XCTestCase {
             + ["currency.vat.title", "currency.vat.add", "currency.vat.remove", "currency.vat.rate",
                "currency.vat.rate.decrease", "currency.vat.rate.increase", "currency.vat.net",
                "currency.vat.amount", "currency.vat.gross",
-               "currency.tip.title", "currency.tip.rate", "currency.tip.rate.decrease",
-               "currency.tip.rate.increase", "currency.tip.amount", "currency.tip.total",
+               "currency.tip.title", "currency.tip.rate",
+               "currency.tip.amount", "currency.tip.total",
                "currency.tool.close", "currency.vat.clear", "currency.tip.clear", "currency.vat.short", "currency.tip.short"]
 
         for localeCode in localeCodes {

@@ -85,8 +85,6 @@
 "currency.vat.gross" = "税込";
 "currency.tip.title" = "チップ";
 "currency.tip.rate" = "チップ";
-"currency.tip.rate.decrease" = "チップを減らす";
-"currency.tip.rate.increase" = "チップを増やす";
 "currency.tip.amount" = "チップ";
 "currency.tip.total" = "合計";
 "currency.tool.close" = "閉じる";
