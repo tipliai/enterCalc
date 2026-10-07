@@ -134,7 +134,7 @@ Rates were verified on 2026-10-06; sources and confidence are in [vat-rates-rese
 
 1. Set the device region to **Germany** and open VAT on an amount. The presets read **19%** and **7%**, with 19% selected. United Kingdom: 20 / 5. Switzerland: 8,1 / 3,8 / 2,6. United States (no VAT): the generic 5 / 10 / 15 / 20 / 25.
 2. Tap the rate between − and +. A system alert opens over the panel (a lightbox, not inline), titled **Rate**, with a text field: the decimal pad on iPhone, the numbers layout on iPad, a text field on Mac. Type `8,1` (German format) or `8.1`; up to three decimals are accepted (`9,975`, Quebec's QST). **Done** applies it; **Cancel**, or Done on an empty field, keeps the old rate; text that isn't a valid rate changes nothing.
-3. Press and hold a preset. The alert opens, titled **Edit Preset**; type a new value and press Done. The button shows the new value with a small dot. Quit and relaunch: it is still there.
+3. Press and hold a preset. The alert opens, titled **Edit Preset**; type a new value and press Done. The button shows the new value. Quit and relaunch: it is still there.
 4. Press and hold an edited preset: the alert also offers **Restore Default**, which puts the regional value back.
 5. Repeat 3–4 on the **Tip** panel's presets.
 6. While the alert is open, the calculator underneath must not change, and on iPhone the keyboard covers the VAT/Tip panel rather than pushing it up; when the alert closes, nothing has moved.
