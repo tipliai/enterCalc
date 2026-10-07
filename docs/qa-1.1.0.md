@@ -133,14 +133,14 @@ Worth knowing when QA'ing #92 later:
 Rates were verified on 2026-10-06; sources and confidence are in [vat-rates-research.md](vat-rates-research.md). Rates live in `apple/src/shared/Resources/vat-rates.json`: changing one is a one-line edit there.
 
 1. Set the device region to **Germany** and open VAT on an amount. The presets read **19%** and **7%**, with 19% selected. United Kingdom: 20 / 5. Switzerland: 8,1 / 3,8 / 2,6. United States (no VAT): the generic 5 / 10 / 15 / 20 / 25.
-2. Tap the rate between − and +. A number pad replaces the presets. Type `8,1` (German format) or `8.1`. The results update with every key; **Done** keeps the rate.
-3. Press and hold a preset. The pad opens for that preset; type a new value and press Done. The button shows the new value with a small dot. Quit and relaunch: it is still there.
+2. Tap the rate between − and +. The system keyboard opens: the decimal pad on iPhone, the numbers layout on iPad, a text field on Mac. The panel stays above the keyboard. Type `8,1` (German format) or `8.1`; up to three decimals are accepted (`9,975`, Quebec's QST). The results update with every key, and anything that isn't a valid rate is refused. **Done** (or Return) keeps the rate; Done on an untouched field keeps the old one.
+3. Press and hold a preset. The keyboard opens for that preset; type a new value and press Done. The button shows the new value with a small dot. Quit and relaunch: it is still there.
 4. Press and hold an edited preset: **Restore Default** puts the regional value back.
 5. Repeat 3–4 on the **Tip** panel's presets.
 6. While typing, the calculator underneath must not change. Close the panel with ✕ mid-edit: the rate goes back to what it was before typing.
-7. With a hardware keyboard: digits, `.`/`,`, Delete, Return (Done) and Escape (cancel) all go to the rate while the pad is open, and to the calculator when it is not.
+7. With a hardware keyboard: while the rate field is open, keys type into it (Return is Done; Escape cancels on Mac) and the calculator doesn't react; once it closes, keys go back to the calculator.
 8. The − / + stepper moves by 1 on a whole rate, and by 0.5 once a rate has decimals (8,1 → 8,5).
-9. VoiceOver: each preset offers an **Edit Preset** action; the pad keys are ordinary buttons.
+9. VoiceOver: each preset offers an **Edit Preset** action, and the rate field is a standard text field.
 
 ## VAT and TIP controls — #92
 

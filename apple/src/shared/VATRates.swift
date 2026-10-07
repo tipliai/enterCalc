@@ -132,7 +132,7 @@ public enum VATRateCatalog {
 /// shown with the active number format's.
 public struct RateEntry: Equatable, Sendable {
     public static let maximum: Decimal = 100
-    public static let maximumFractionDigits = 2
+    public static let maximumFractionDigits = 3
 
     public private(set) var text: String
     /// The first key replaces the rate being edited rather than appending to
@@ -143,6 +143,23 @@ public struct RateEntry: Equatable, Sendable {
     public init(editing rate: Decimal) {
         text = RateEntry.canonicalText(for: rate)
         replacesOnNextKey = true
+    }
+
+    /// The entry for text typed into a field, or `nil` when the text is not a
+    /// valid rate (a letter, a second separator, a third decimal, over 100).
+    /// Accepts the given decimal separator as well as `.` and `,`.
+    public init?(typed raw: String, decimalSeparator: String) {
+        text = ""
+        replacesOnNextKey = false
+        for character in raw {
+            if let digit = character.wholeNumberValue, character.isASCII {
+                guard appendDigit(digit) else { return nil }
+            } else if String(character) == decimalSeparator || character == "." || character == "," {
+                guard appendDecimalSeparator() else { return nil }
+            } else {
+                return nil
+            }
+        }
     }
 
     /// The rate the text represents; `nil` while nothing has been typed.

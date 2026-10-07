@@ -99,3 +99,41 @@ final class RateEditorTests: XCTestCase {
         XCTAssertFalse(editor.isEditing, "keys after closing are ignored")
     }
 }
+
+/// Text typed into the rate field (#124).
+@MainActor
+final class RateFieldTextTests: XCTestCase {
+    func testValidTextIsAcceptedInEitherSeparator() {
+        XCTAssertEqual(RateEntry(typed: "8,1", decimalSeparator: ",")?.value, Decimal(string: "8.1"))
+        XCTAssertEqual(RateEntry(typed: "8.1", decimalSeparator: ",")?.value, Decimal(string: "8.1"))
+        XCTAssertEqual(RateEntry(typed: "", decimalSeparator: ".")?.value, nil)
+        XCTAssertNotNil(RateEntry(typed: "", decimalSeparator: "."))
+    }
+
+    func testInvalidTextIsRejected() {
+        for bad in ["8a", "8.1.2", "8.1255", "101", "100.5", "-5", "1 2"] {
+            XCTAssertNil(RateEntry(typed: bad, decimalSeparator: "."), bad)
+        }
+    }
+
+    func testTheEditorReportsValidTextLiveAndRefusesInvalidText() {
+        let editor = RateEditor()
+        var live: [Decimal] = []
+        var committed: Decimal?
+        editor.begin(.rate, value: 20, onLive: { live.append($0) }, onCommit: { committed = $0 }, onCancel: {})
+        XCTAssertTrue(editor.setTypedText("8,1", decimalSeparator: ","))
+        XCTAssertFalse(editor.setTypedText("8,1x", decimalSeparator: ","))
+        XCTAssertEqual(live, [Decimal(string: "8.1")!])
+        editor.press(.done)
+        XCTAssertEqual(committed, Decimal(string: "8.1"))
+    }
+
+    // A field left untouched keeps the rate it was opened on.
+    func testUntouchedFieldCommitsTheOriginalRate() {
+        let editor = RateEditor()
+        var committed: Decimal?
+        editor.begin(.preset(1), value: 7, onLive: { _ in }, onCommit: { committed = $0 }, onCancel: {})
+        editor.press(.done)
+        XCTAssertEqual(committed, 7)
+    }
+}

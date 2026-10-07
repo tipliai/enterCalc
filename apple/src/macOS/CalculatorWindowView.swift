@@ -1417,21 +1417,6 @@ struct CalculatorWindowView: View {
         store(overrides.serialized)
     }
 
-    /// The key a rate being typed should receive, if any (#124).
-    private func rateEditorKey(for event: NSEvent) -> RateEditor.Key? {
-        guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return nil }
-        switch event.keyCode {
-        case 36, 76: return .done          // Return, keypad Enter
-        case 53: return .cancel            // Escape
-        case 51, 117: return .backspace    // Delete, Forward Delete
-        default: break
-        }
-        guard let character = (event.charactersIgnoringModifiers ?? "").first else { return nil }
-        if let digit = character.wholeNumberValue, character.isASCII { return .digit(digit) }
-        if character == "." || character == "," { return .decimalSeparator }
-        return nil
-    }
-
     private func vatOverlay() -> some View {
         CurrencyVATPanel(
             value: viewModel.currentValue,
@@ -1760,11 +1745,10 @@ struct CalculatorWindowView: View {
     // handled so the event is consumed. Active overlays get first refusal.
     @discardableResult
     private func handleKey(_ event: NSEvent) -> Bool {
-        // While a VAT or Tip rate is being typed, the keyboard types into it
-        // rather than into the calculator (#124).
-        if rateEditor.isEditing, let key = rateEditorKey(for: event) {
-            rateEditor.press(key)
-            return true
+        // While a VAT or Tip rate is being typed, every key belongs to its text
+        // field rather than to the calculator (#124).
+        if rateEditor.isEditing {
+            return false
         }
 
         let chars = event.charactersIgnoringModifiers ?? ""

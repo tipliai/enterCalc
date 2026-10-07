@@ -119,7 +119,8 @@ final class RateEntryTests: XCTestCase {
         XCTAssertEqual(typed("1000").text, "100", "a fourth digit past 100 is refused")
         XCTAssertEqual(typed("101").text, "10")
         XCTAssertEqual(typed("100.").text, "100", "100 cannot take a fraction")
-        XCTAssertEqual(typed("8.125").text, "8.12", "at most two decimals")
+        XCTAssertEqual(typed("9.975").value, Decimal(string: "9.975"), "three decimals, as in Quebec's QST")
+        XCTAssertEqual(typed("8.1255").text, "8.125", "at most three decimals")
         XCTAssertEqual(typed("8..1").text, "8.1", "one separator only")
     }
 

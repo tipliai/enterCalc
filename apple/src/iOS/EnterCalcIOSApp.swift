@@ -885,7 +885,9 @@ struct EnterCalcIOSView: View {
                 }
 
                 IOSHardwareKeyCaptureView(
-                    isEnabled: scenePhase == .active && !showSettingsSheet,
+                    // A rate being typed needs the keyboard focus for its text
+                    // field (#124), so the calculator's key capture steps aside.
+                    isEnabled: scenePhase == .active && !showSettingsSheet && !rateEditor.isEditing,
                     onKeyPress: handleHardwareKey
                 )
                 .frame(width: 1, height: 1)
@@ -1118,13 +1120,6 @@ private extension EnterCalcIOSView {
     }
 
     func handleHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
-        // While a VAT or Tip rate is being typed, the keyboard types into it
-        // rather than into the calculator (#124).
-        if rateEditor.isEditing, let key = rateEditorKey(for: event) {
-            rateEditor.press(key)
-            return true
-        }
-
         resetLandscapeDisplayScroll(for: activeScreen)
 
         let unsupportedModifiers = event.modifierFlags.intersection([.control])
@@ -3498,20 +3493,6 @@ private extension EnterCalcIOSView {
 
     func dismissHistoryOverlay() {
         dismissActiveOverlay()
-    }
-
-    func rateEditorKey(for event: IOSHardwareKeyEvent) -> RateEditor.Key? {
-        guard event.modifierFlags.intersection([.command, .control, .alternate]).isEmpty else { return nil }
-        switch event.keyCode {
-        case .keyboardReturnOrEnter, .keypadEnter: return .done
-        case .keyboardEscape: return .cancel
-        case .keyboardDeleteOrBackspace: return .backspace
-        default: break
-        }
-        guard let character = (event.charactersIgnoringModifiers ?? "").first else { return nil }
-        if let digit = character.wholeNumberValue, character.isASCII { return .digit(digit) }
-        if character == "." || character == "," { return .decimalSeparator }
-        return nil
     }
 
     func dismissActiveOverlay() {
