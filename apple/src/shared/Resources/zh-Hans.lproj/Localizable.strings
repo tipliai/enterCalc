@@ -99,3 +99,4 @@
 "currency.tip.clear" = "取消小费";
 "currency.vat.short" = "增值税";
 "currency.tip.short" = "小费";
+"currency.tip.off" = "关闭";

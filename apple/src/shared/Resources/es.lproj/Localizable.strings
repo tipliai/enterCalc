@@ -99,3 +99,4 @@
 "currency.tip.clear" = "Eliminar propina";
 "currency.vat.short" = "IVA";
 "currency.tip.short" = "Propina";
+"currency.tip.off" = "Desactivada";

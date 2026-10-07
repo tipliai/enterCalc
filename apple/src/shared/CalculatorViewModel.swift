@@ -137,6 +137,9 @@ public final class CalculatorViewModel: ObservableObject {
         let shouldPreserveTypedCurrencyInput: Bool
         let resultUsesPercentToken: Bool
         let displayEditCursorIndex: Int?
+        /// Which VAT/Tip result is on the display, so undo and redo bring back
+        /// the base it was worked out from along with the display.
+        let toolApplication: ToolApplication?
     }
 
     // Published state: what the UI renders. `display` is the large result line,
@@ -1343,13 +1346,6 @@ public final class CalculatorViewModel: ObservableObject {
         completeUndoableChange(from: snapshot)
     }
 
-    /// Replaces what is on screen with a figure produced by one of the
-    /// Currency-mode tools (#92).
-    ///
-    /// Modelled on `reuse(_:)`: the value lands as a completed result, so the
-    /// next digit starts a fresh entry rather than appending to it, and the
-    /// whole thing is a single undo step. The currency symbol is left alone —
-    /// a VAT or tip figure is still money.
     /// Which Currency-mode tool last wrote the display, and from what (#124).
     public enum Tool: Equatable, Sendable {
         case vat
@@ -1416,29 +1412,36 @@ public final class CalculatorViewModel: ObservableObject {
     /// The VAT or Tip pane's trash button: takes the tool's result back off the
     /// display, the way the rounding pane's trash removes rounding. While the
     /// result is still the latest change this is an undo, so the display comes
-    /// back exactly as it was, operation line included; otherwise the original
-    /// amount is written back as a new step.
+    /// back exactly as it was (and redo can bring the result back with its
+    /// base); otherwise the original amount is written back as a new step.
     ///
-    /// With `clearingOperationLine`, as when the Tip slider is moved to Off, the
-    /// operation line is cleared too, even if the amount had one of its own
-    /// before the tool was applied — the amount is left on its own.
+    /// With `clearingOperationLine`, as when the Tip slider is moved to Off,
+    /// the operation line is cleared too, as an undoable step, even if the
+    /// amount had one of its own before — the amount is left on its own.
     public func removeLiveToolResult(_ tool: Tool, clearingOperationLine: Bool = false) {
         if let live = liveToolApplication, live.tool == tool {
-            toolApplication = nil
             if undoStack.count == live.undoDepth {
                 undo()
             } else {
                 applyToolResult(live.base, describedBy: "")
+                toolApplication = nil
             }
         }
-        // Also when no tip was ever applied (the pane opened at 0%): Off still
-        // leaves the amount on its own.
         if clearingOperationLine, expression.isEmpty, pendingOperator == nil, !lastResultSummary.isEmpty {
+            let snapshot = beginUndoableChange()
             lastResultSummary = ""
             updateDisplay()
+            completeUndoableChange(from: snapshot)
         }
     }
 
+    /// Replaces what is on screen with a figure produced by one of the
+    /// Currency-mode tools (#92).
+    ///
+    /// Modelled on `reuse(_:)`: the value lands as a completed result, so the
+    /// next digit starts a fresh entry rather than appending to it, and the
+    /// whole thing is a single undo step. The currency symbol is left alone —
+    /// a VAT or tip figure is still money.
     public func applyToolResult(_ value: Decimal, describedBy summary: String) {
         let snapshot = beginUndoableChange()
         writeToolResult(value, describedBy: summary)
@@ -2385,7 +2388,8 @@ public final class CalculatorViewModel: ObservableObject {
             isPendingEntryClearedByClearButton: isPendingEntryClearedByClearButton,
             shouldPreserveTypedCurrencyInput: shouldPreserveTypedCurrencyInput,
             resultUsesPercentToken: resultUsesPercentToken,
-            displayEditCursorIndex: displayEditCursorIndex
+            displayEditCursorIndex: displayEditCursorIndex,
+            toolApplication: toolApplication
         )
     }
 
@@ -2414,6 +2418,7 @@ public final class CalculatorViewModel: ObservableObject {
         isResultRoundingEnabled = snapshot.isResultRoundingEnabled
         resultRoundingPrecision = snapshot.resultRoundingPrecision
         activeCurrencySymbol = snapshot.activeCurrencySymbol
+        toolApplication = snapshot.toolApplication
         isPendingEntryClearedByClearButton = snapshot.isPendingEntryClearedByClearButton
         shouldPreserveTypedCurrencyInput = snapshot.shouldPreserveTypedCurrencyInput
         resultUsesPercentToken = snapshot.resultUsesPercentToken
@@ -3078,10 +3083,6 @@ public final class CalculatorViewModel: ObservableObject {
         }
     }
 
-    /// Formats a value the way the display would, so numbers produced outside
-    /// the keypad — a VAT split, a tip share — cannot drift from the ones the
-    /// calculator shows. Honours the current number format style, and prefixes
-    /// the active currency symbol unless asked not to.
     /// An amount of money shown with exactly `fractionDigits` decimals — full
     /// cents, trailing zeros kept (£125.50, not £125.5) — in the active number
     /// format, with the currency symbol. Used by the VAT and Tip panes.
@@ -3105,6 +3106,10 @@ public final class CalculatorViewModel: ObservableObject {
             : "\(symbol)\(formatted)"
     }
 
+    /// Formats a value the way the display would, so numbers produced outside
+    /// the keypad — a VAT split, a tip share — cannot drift from the ones the
+    /// calculator shows. Honours the current number format style, and prefixes
+    /// the active currency symbol unless asked not to.
     public func formattedValue(_ value: Decimal, includingCurrency: Bool = true) -> String {
         let formatted = format(value)
         guard includingCurrency, let symbol = activeCurrencySymbol else { return formatted }

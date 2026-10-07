@@ -99,3 +99,4 @@
 "currency.tip.clear" = "Supprimer le pourboire";
 "currency.vat.short" = "TVA";
 "currency.tip.short" = "Pourboire";
+"currency.tip.off" = "Désactivé";

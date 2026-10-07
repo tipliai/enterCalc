@@ -407,4 +407,45 @@ final class CurrencyModeTests: XCTestCase {
     func testNothingPendingAfterAPlainNumber() {
         XCTAssertFalse(currencyViewModel("10", symbol: "$").hasPendingCalculation)
     }
+
+    // Trash undoes the VAT; redo brings it back with its base, so reopening VAT
+    // still works from 100 rather than compounding on 110 (review M1).
+    func testRedoAfterTrashKeepsTheToolBase() {
+        let viewModel = currencyViewModel("100", symbol: "$")
+        viewModel.applyLiveToolResult(110, tool: .vat, base: 100, describedBy: "$100 + VAT(10%) =")
+        viewModel.removeLiveToolResult(.vat)
+        XCTAssertEqual(viewModel.currentValue, 100)
+
+        viewModel.redo()
+        XCTAssertEqual(viewModel.currentValue, 110)
+        XCTAssertEqual(viewModel.toolBase(for: .vat), 100)
+    }
+
+    // VAT, then Tip on the VAT-inclusive price, then Tip off: VAT's base comes
+    // back with VAT's result (review M2).
+    func testTipOffAfterVATRestoresTheVATBase() {
+        let viewModel = currencyViewModel("100", symbol: "$")
+        viewModel.applyLiveToolResult(110, tool: .vat, base: 100, describedBy: "$100 + VAT(10%) =")
+        let tipBase = viewModel.toolBase(for: .tip)
+        XCTAssertEqual(tipBase, 110)
+        viewModel.applyLiveToolResult(132, tool: .tip, base: tipBase, describedBy: "$110 + TIP(20%) =")
+
+        viewModel.removeLiveToolResult(.tip)
+        XCTAssertEqual(viewModel.currentValue, 110)
+        XCTAssertEqual(viewModel.toolBase(for: .vat), 100)
+    }
+
+    // Clearing the operation line at Off is its own undo step.
+    func testTipOffClearingTheLineCanBeUndone() {
+        let viewModel = currencyViewModel("50", symbol: "$")
+        viewModel.setOperator(.add)
+        enter("50", into: viewModel)
+        viewModel.evaluate()
+        let line = viewModel.expressionDisplay
+
+        viewModel.removeLiveToolResult(.tip, clearingOperationLine: true)
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+        viewModel.undo()
+        XCTAssertEqual(viewModel.expressionDisplay, line)
+    }
 }

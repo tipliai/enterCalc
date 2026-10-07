@@ -99,3 +99,4 @@
 "currency.tip.clear" = "Remove";
 "currency.vat.short" = "VAT";
 "currency.tip.short" = "TIP";
+"currency.tip.off" = "Off";

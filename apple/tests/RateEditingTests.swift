@@ -169,4 +169,13 @@ final class RateFieldTextTests: XCTestCase {
         XCTAssertFalse(RateEntry.isOutOfRange("8a", decimalSeparator: "."))
         XCTAssertFalse(RateEntry.isOutOfRange("1.2.3", decimalSeparator: "."))
     }
+
+    // Review L1/L2: a value that rounds up to 1000 is out of range, and a
+    // trailing % (as in the placeholder) is accepted.
+    func testRoundingUpToTheLimitIsOutOfRangeAndPercentIsAccepted() {
+        XCTAssertNil(RateEntry(typed: "999.99999999999999", decimalSeparator: "."))
+        XCTAssertTrue(RateEntry.isOutOfRange("999.99999999999999", decimalSeparator: "."))
+        XCTAssertEqual(RateEntry(typed: "8.1%", decimalSeparator: ".")?.value, Decimal(string: "8.1"))
+        XCTAssertEqual(RateEntry(typed: "12,5 %", decimalSeparator: ",")?.value, Decimal(string: "12.5"))
+    }
 }

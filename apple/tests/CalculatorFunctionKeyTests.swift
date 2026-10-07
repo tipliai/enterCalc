@@ -276,7 +276,7 @@ final class CalculatorFunctionKeyTests: XCTestCase {
                "currency.vat.amount", "currency.vat.gross",
                "currency.tip.title", "currency.tip.rate",
                "currency.tip.amount", "currency.tip.total",
-               "currency.tool.close", "currency.vat.clear", "currency.tip.clear", "currency.vat.short", "currency.tip.short"]
+               "currency.tool.close", "currency.vat.clear", "currency.tip.clear", "currency.vat.short", "currency.tip.short", "currency.tip.off"]
 
         for localeCode in localeCodes {
             let strings = try localizedStrings(named: localeCode)

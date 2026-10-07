@@ -99,3 +99,4 @@
 "currency.tip.clear" = "Trinkgeld entfernen";
 "currency.vat.short" = "MwSt.";
 "currency.tip.short" = "Trinkgeld";
+"currency.tip.off" = "Aus";

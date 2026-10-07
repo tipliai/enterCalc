@@ -101,9 +101,7 @@ struct CalculatorWindowView: View {
     @State private var windowSettings: CalculatorScreenSettings
     /// Live hold-and-drag reassignment of a configurable key, if one is running.
     @State private var functionChooser: FunctionKeyChooserSession? = nil
-    // Currency-mode tool settings (#92). Per window, and session state rather
-    // than a stored preference: they belong to the calculation in progress, the
-    // same way the currency symbol itself does.
+    // Currency-mode tool settings (#92, #124).
     // Rates and edited presets are kept across launches and shared with iOS's
     // keys (#124). The VAT rate starts on the region's standard rate.
     @AppStorage(RateToolPreferences.vatRateKey) private var storedVATRate = ""
@@ -111,6 +109,8 @@ struct CalculatorWindowView: View {
     @AppStorage(RateToolPreferences.tipRateKey) private var storedTipRate = ""
     @AppStorage(RateToolPreferences.tipPresetOverridesKey) private var storedTipPresetOverrides = ""
     @StateObject private var rateEditor = RateEditor()
+    @State private var sessionVATRate: Decimal?
+    @State private var sessionTipRate: Decimal?
     @State private var vatRemovesTax: Bool = false
     @AppStorage("window.width") private var storedWindowWidth: Double = 0
     @AppStorage("window.height") private var storedWindowHeight: Double = 0
@@ -1386,14 +1386,23 @@ struct CalculatorWindowView: View {
             .padding(.bottom, -8)
     }
 
+    // The rate in use belongs to this window (or iPad scene) for the session,
+    // so changing it in one window never rewrites another window's display.
+    // The stored value is only the default a new window starts from.
     private var vatRate: Decimal {
-        get { RateToolPreferences.rate(fromStored: storedVATRate, fallback: VATRateCatalog.defaultRate()) }
-        nonmutating set { storedVATRate = RateToolPreferences.storedText(for: newValue) }
+        get { sessionVATRate ?? RateToolPreferences.rate(fromStored: storedVATRate, fallback: VATRateCatalog.defaultRate()) }
+        nonmutating set {
+            sessionVATRate = newValue
+            storedVATRate = RateToolPreferences.storedText(for: newValue)
+        }
     }
 
     private var tipRate: Decimal {
-        get { RateToolPreferences.rate(fromStored: storedTipRate, fallback: RateToolPreferences.defaultTipRate) }
-        nonmutating set { storedTipRate = RateToolPreferences.storedText(for: newValue) }
+        get { sessionTipRate ?? RateToolPreferences.rate(fromStored: storedTipRate, fallback: RateToolPreferences.defaultTipRate) }
+        nonmutating set {
+            sessionTipRate = newValue
+            storedTipRate = RateToolPreferences.storedText(for: newValue)
+        }
     }
 
     private func ratePresets(defaults: [Decimal], storedOverrides: String) -> RatePresets {
@@ -1785,6 +1794,14 @@ struct CalculatorWindowView: View {
         // field rather than to the calculator (#124).
         if rateEditor.isEditing {
             return false
+        }
+
+        // VAT and Tip apply live to the display, so typing on the calculator
+        // while one is open closes it first: the result stays, and the key
+        // then does what it always does. Escape just closes the pane.
+        if activeOverlay == .vat || activeOverlay == .tip, !event.modifierFlags.contains(.command) {
+            setActiveOverlay(nil)
+            if event.keyCode == 53 { return true }
         }
 
         let chars = event.charactersIgnoringModifiers ?? ""
