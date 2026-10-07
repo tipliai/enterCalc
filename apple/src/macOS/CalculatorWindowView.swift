@@ -1419,7 +1419,7 @@ struct CalculatorWindowView: View {
 
     private func vatOverlay() -> some View {
         CurrencyVATPanel(
-            value: viewModel.currentValue,
+            value: viewModel.toolBase(for: .vat),
             rate: vatRate,
             presets: vatPresets,
             currencyFractionDigits: CurrencyCatalog.fractionDigits(forSymbol: viewModel.activeCurrencySymbol ?? ""),
@@ -1434,9 +1434,8 @@ struct CalculatorWindowView: View {
                 editPreset(slot, to: rate, in: vatPresets) { storedVATPresetOverrides = $0 }
             },
             onDirectionChange: { vatRemovesTax = $0 },
-            onApply: { result in
-                viewModel.applyToolResult(result, describedBy: vatSummary())
-                setActiveOverlay(nil)
+            onResult: { result in
+                viewModel.applyLiveToolResult(result, tool: .vat, base: viewModel.toolBase(for: .vat), describedBy: vatSummary())
             },
             onDismiss: { setActiveOverlay(nil) }
         )
@@ -1446,7 +1445,7 @@ struct CalculatorWindowView: View {
 
     private func tipOverlay() -> some View {
         CurrencyTipPanel(
-            bill: viewModel.currentValue,
+            bill: viewModel.toolBase(for: .tip),
             rate: tipRate,
             presets: tipPresets,
             splitCount: tipSplitCount,
@@ -1460,9 +1459,8 @@ struct CalculatorWindowView: View {
                 editPreset(slot, to: rate, in: tipPresets) { storedTipPresetOverrides = $0 }
             },
             onSplitChange: { tipSplitCount = min(max($0, TipBreakdown.splitCountRange.lowerBound), TipBreakdown.splitCountRange.upperBound) },
-            onApply: { result in
-                viewModel.applyToolResult(result, describedBy: tipSummary())
-                setActiveOverlay(nil)
+            onResult: { result in
+                viewModel.applyLiveToolResult(result, tool: .tip, base: viewModel.toolBase(for: .tip), describedBy: tipSummary())
             },
             onDismiss: { setActiveOverlay(nil) }
         )

@@ -93,7 +93,6 @@
 "currency.tip.amount" = "Trinkgeld";
 "currency.tip.total" = "Gesamt";
 "currency.tip.perPerson" = "Pro Person";
-"currency.tool.use" = "Ergebnis übernehmen";
 "currency.tool.close" = "Schließen";
 
 /* Typed rates and editable presets on the VAT and Tip panels (issue #124) */

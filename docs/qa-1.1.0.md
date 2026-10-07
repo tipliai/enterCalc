@@ -133,6 +133,7 @@ Worth knowing when QA'ing #92 later:
 Rates were verified on 2026-10-06; sources and confidence are in [vat-rates-research.md](vat-rates-research.md). Rates live in `apple/src/shared/Resources/vat-rates.json`: changing one is a one-line edit there.
 
 1. Set the device region to **Germany** and open VAT on an amount. The first row holds **three** presets and the rate selector (− rate +, with no "Rate" label): **19%** and **7%** (Germany's rates, 19% selected), topped up with 5. United Kingdom: 20 / 5 / 10. Switzerland: 8,1 / 3,8 / 2,6. United States (no VAT): 5 / 10 / 20. Tip: 15 / 18 / 20. The Tip panel has no Bill row.
+   - **There is no Use Result button.** Opening VAT or Tip writes the result to the display straight away (with an operation line such as `Add VAT 20% =`), and every change of rate, direction or split updates it. Close the panel with ✕ (laid out like the rounding pane's) or by tapping outside. Reopen it to adjust: it works from the original amount (Ex VAT £100 after £120 was applied), so a new rate replaces the VAT or tip rather than adding to it. One **Undo** returns to the amount before the panel opened.
    - While a panel is open, its VAT or Tip pill in the display is **inverted** (filled), not blue.
    - Results follow the currency's decimals: removing 19% from €100 reads 84,03 / 15,97 / 100; removing 10% from ¥1,000 reads ¥909 / ¥91 / ¥1,000.
    - Check both panels in every language on the smallest iPhone: no label truncates (German *MwSt. herausrechnen* is the longest).

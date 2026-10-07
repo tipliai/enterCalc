@@ -1343,8 +1343,59 @@ public final class CalculatorViewModel: ObservableObject {
     /// next digit starts a fresh entry rather than appending to it, and the
     /// whole thing is a single undo step. The currency symbol is left alone —
     /// a VAT or tip figure is still money.
+    /// Which Currency-mode tool last wrote the display, and from what (#124).
+    public enum Tool: Equatable, Sendable {
+        case vat
+        case tip
+    }
+
+    private struct ToolApplication: Equatable {
+        let tool: Tool
+        let base: Decimal
+        let display: String
+        let summary: String
+    }
+
+    private var toolApplication: ToolApplication?
+
+    /// The amount a VAT or Tip panel works from. While the display still shows
+    /// that tool's own result, reopening the panel works from the amount it
+    /// started with, so choosing another rate replaces the VAT or tip rather
+    /// than adding it again on top. Anything typed since then starts afresh.
+    public func toolBase(for tool: Tool) -> Decimal {
+        if let application = liveToolApplication, application.tool == tool {
+            return application.base
+        }
+        return currentValue
+    }
+
+    private var liveToolApplication: ToolApplication? {
+        guard let application = toolApplication,
+              display == application.display,
+              lastResultSummary == application.summary else { return nil }
+        return application
+    }
+
+    /// Writes a VAT or Tip result to the display as soon as the panel opens,
+    /// and again whenever its rate changes. The first write is one undo step
+    /// back to the original amount; later adjustments replace that result in
+    /// place rather than adding undo steps.
+    public func applyLiveToolResult(_ value: Decimal, tool: Tool, base: Decimal, describedBy summary: String) {
+        if liveToolApplication?.tool == tool {
+            writeToolResult(value, describedBy: summary)
+        } else {
+            applyToolResult(value, describedBy: summary)
+        }
+        toolApplication = ToolApplication(tool: tool, base: base, display: display, summary: lastResultSummary)
+    }
+
     public func applyToolResult(_ value: Decimal, describedBy summary: String) {
         let snapshot = beginUndoableChange()
+        writeToolResult(value, describedBy: summary)
+        completeUndoableChange(from: snapshot)
+    }
+
+    private func writeToolResult(_ value: Decimal, describedBy summary: String) {
         currentInput = decimalNumberString(from: value)
         shouldPreserveTypedCurrencyInput = false
         isResultRoundingEnabled = false
@@ -1363,7 +1414,6 @@ public final class CalculatorViewModel: ObservableObject {
         currentErrorKey = nil
         isPendingEntryClearedByClearButton = false
         updateDisplay()
-        completeUndoableChange(from: snapshot)
     }
 
     public func clearHistory() {
