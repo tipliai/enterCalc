@@ -103,3 +103,5 @@
 "currency.rate.presetHint" = "按住可为此预设输入新的数值";
 "currency.rate.done" = "完成";
 "currency.rate.restore" = "恢复默认";
+"currency.rate.cancel" = "取消";
+"currency.rate.range" = "0 到 100 之间，最多 3 位小数";
