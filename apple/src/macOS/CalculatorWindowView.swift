@@ -1422,6 +1422,7 @@ struct CalculatorWindowView: View {
             value: viewModel.currentValue,
             rate: vatRate,
             presets: vatPresets,
+            currencyFractionDigits: CurrencyCatalog.fractionDigits(forSymbol: viewModel.activeCurrencySymbol ?? ""),
             isRemoving: vatRemovesTax,
             palette: palette,
             localized: { macLocalized($0, bundle: currentLocalizationBundle) },

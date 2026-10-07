@@ -1515,6 +1515,7 @@ private extension EnterCalcIOSView {
                         value: activeScreen.viewModel.currentValue,
                         rate: vatRate,
                         presets: vatPresets,
+                        currencyFractionDigits: CurrencyCatalog.fractionDigits(forSymbol: activeScreen.viewModel.activeCurrencySymbol ?? ""),
                         isRemoving: vatRemovesTax,
                         palette: palette,
                         localized: { localized($0) },

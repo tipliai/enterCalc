@@ -300,6 +300,7 @@ public struct CurrencyVATPanel: View {
     private let value: Decimal
     private let rate: Decimal
     private let presets: RatePresets
+    private let currencyFractionDigits: Int
     private let isRemoving: Bool
     private let palette: Palette
     private let localized: (String) -> String
@@ -316,6 +317,7 @@ public struct CurrencyVATPanel: View {
         value: Decimal,
         rate: Decimal,
         presets: RatePresets,
+        currencyFractionDigits: Int = 2,
         isRemoving: Bool,
         palette: Palette,
         localized: @escaping (String) -> String,
@@ -331,6 +333,7 @@ public struct CurrencyVATPanel: View {
         self.value = value
         self.rate = rate
         self.presets = presets
+        self.currencyFractionDigits = currencyFractionDigits
         self.isRemoving = isRemoving
         self.palette = palette
         self.localized = localized
@@ -344,13 +347,14 @@ public struct CurrencyVATPanel: View {
         self.onDismiss = onDismiss
     }
 
-    /// Rounded to cents: VAT is always money, so neither the figures shown nor
-    /// the result applied carry more than two decimals.
+    /// Rounded to the currency's minor units: VAT is always money, so the
+    /// figures shown and the result applied carry two decimals for most
+    /// currencies and none for the yen, won and the like.
     private var breakdown: VATBreakdown? {
         let exact = isRemoving
             ? VATCalculation.removing(rate: rate, fromGross: value)
             : VATCalculation.adding(rate: rate, toNet: value)
-        return exact?.rounded(isRemoving: isRemoving)
+        return exact?.rounded(toScale: currencyFractionDigits, isRemoving: isRemoving)
     }
 
     public var body: some View {
