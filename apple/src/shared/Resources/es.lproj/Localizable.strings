@@ -87,12 +87,8 @@
 "currency.tip.rate" = "Propina";
 "currency.tip.rate.decrease" = "Reducir propina";
 "currency.tip.rate.increase" = "Aumentar propina";
-"currency.tip.split" = "Dividir";
-"currency.tip.split.decrease" = "Menos personas";
-"currency.tip.split.increase" = "Más personas";
 "currency.tip.amount" = "Propina";
 "currency.tip.total" = "Total";
-"currency.tip.perPerson" = "Por persona";
 "currency.tool.close" = "Cerrar";
 
 /* Typed rates and editable presets on the VAT and Tip panels (issue #124) */

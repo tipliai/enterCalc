@@ -87,12 +87,8 @@
 "currency.tip.rate" = "チップ";
 "currency.tip.rate.decrease" = "チップを減らす";
 "currency.tip.rate.increase" = "チップを増やす";
-"currency.tip.split" = "割り勘";
-"currency.tip.split.decrease" = "人数を減らす";
-"currency.tip.split.increase" = "人数を増やす";
 "currency.tip.amount" = "チップ";
 "currency.tip.total" = "合計";
-"currency.tip.perPerson" = "1人あたり";
 "currency.tool.close" = "閉じる";
 
 /* Typed rates and editable presets on the VAT and Tip panels (issue #124) */

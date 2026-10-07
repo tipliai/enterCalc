@@ -87,12 +87,8 @@
 "currency.tip.rate" = "Tip";
 "currency.tip.rate.decrease" = "Decrease Tip";
 "currency.tip.rate.increase" = "Increase Tip";
-"currency.tip.split" = "Split";
-"currency.tip.split.decrease" = "Fewer People";
-"currency.tip.split.increase" = "More People";
 "currency.tip.amount" = "Tip";
 "currency.tip.total" = "Total";
-"currency.tip.perPerson" = "Each";
 "currency.tool.close" = "Close";
 
 /* Typed rates and editable presets on the VAT and Tip panels (issue #124) */

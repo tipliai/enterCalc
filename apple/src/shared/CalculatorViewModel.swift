@@ -3054,6 +3054,29 @@ public final class CalculatorViewModel: ObservableObject {
     /// the keypad — a VAT split, a tip share — cannot drift from the ones the
     /// calculator shows. Honours the current number format style, and prefixes
     /// the active currency symbol unless asked not to.
+    /// An amount of money shown with exactly `fractionDigits` decimals — full
+    /// cents, trailing zeros kept (£125.50, not £125.5) — in the active number
+    /// format, with the currency symbol. Used by the VAT and Tip panes.
+    public func formattedCurrencyAmount(_ value: Decimal, fractionDigits: Int) -> String {
+        var rounded = Decimal()
+        var source = value
+        NSDecimalRound(&rounded, &source, fractionDigits, .plain)
+
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.usesGroupingSeparator = false
+        formatter.minimumFractionDigits = fractionDigits
+        formatter.maximumFractionDigits = fractionDigits
+        formatter.minimumIntegerDigits = 1
+        let raw = formatter.string(from: NSDecimalNumber(decimal: rounded)) ?? decimalNumberString(from: rounded)
+        let formatted = groupedNumberString(raw)
+        guard let symbol = activeCurrencySymbol else { return formatted }
+
+        return formatted.hasPrefix("-")
+            ? "-\(symbol)\(formatted.dropFirst())"
+            : "\(symbol)\(formatted)"
+    }
+
     public func formattedValue(_ value: Decimal, includingCurrency: Bool = true) -> String {
         let formatted = format(value)
         guard includingCurrency, let symbol = activeCurrencySymbol else { return formatted }

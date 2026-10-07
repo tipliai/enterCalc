@@ -54,3 +54,14 @@ public struct TipBreakdown: Equatable, Sendable {
         self.perPerson = clampedSplit == 1 ? total : total / Decimal(clampedSplit)
     }
 }
+
+extension TipBreakdown {
+    /// The tip on `bill` at `rate` percent, rounded to `scale` decimals (the
+    /// currency's minor units), as it would actually be paid.
+    public static func roundedTip(bill: Decimal, rate: Decimal, scale: Int) -> Decimal {
+        var exact = bill * rate / 100
+        var result = Decimal()
+        NSDecimalRound(&result, &exact, scale, .plain)
+        return result
+    }
+}
