@@ -159,6 +159,13 @@ final class RateFieldTextTests: XCTestCase {
         XCTAssertEqual(RateEntry(typed: " 7 ", decimalSeparator: ".")?.value, 7)
     }
 
+    // Below 1, leading zeros aren't significant digits, as in the calculator.
+    func testRatesBelowOneKeepSixteenSignificantDigits() {
+        XCTAssertEqual(RateEntry(typed: "0.1234567890123456", decimalSeparator: ".")?.value, Decimal(string: "0.1234567890123456"))
+        XCTAssertEqual(RateEntry(typed: "0.0000000000000001", decimalSeparator: ".")?.value, Decimal(string: "0.0000000000000001"))
+        XCTAssertEqual(RateEntry(typed: ".12345678901234567", decimalSeparator: ".")?.value, Decimal(string: "0.1234567890123457"))
+    }
+
     // An untouched edit keeps the rate's full precision.
     func testUntouchedEditKeepsFullPrecision() {
         let editor = RateEditor()

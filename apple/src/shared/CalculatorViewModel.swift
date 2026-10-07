@@ -1355,13 +1355,19 @@ public final class CalculatorViewModel: ObservableObject {
     private struct ToolApplication: Equatable {
         let tool: Tool
         let base: Decimal
-        let display: String
+        /// The amount the result left, compared by value so a change of
+        /// number format alone doesn't lose track of it.
+        let value: Decimal
         let summary: String
-        /// The undo stack's depth right after the result was first applied.
-        let undoDepth: Int
+        /// `undoRevision` right after the result was first applied.
+        let revision: Int
     }
 
     private var toolApplication: ToolApplication?
+    /// Counts every change to the undo history. Unlike the stack's depth it
+    /// keeps moving once the stack is at its cap, so it tells whether a tool's
+    /// result is still the latest step.
+    private var undoRevision = 0
 
     /// The amount a VAT or Tip panel works from. While the display still shows
     /// that tool's own result, reopening the panel works from the amount it
@@ -1376,7 +1382,8 @@ public final class CalculatorViewModel: ObservableObject {
 
     private var liveToolApplication: ToolApplication? {
         guard let application = toolApplication,
-              display == application.display,
+              expression.isEmpty, pendingOperator == nil,
+              currentValue == application.value,
               lastResultSummary == application.summary else { return nil }
         return application
     }
@@ -1386,16 +1393,16 @@ public final class CalculatorViewModel: ObservableObject {
     /// back to the original amount; later adjustments replace that result in
     /// place rather than adding undo steps.
     public func applyLiveToolResult(_ value: Decimal, tool: Tool, base: Decimal, describedBy summary: String) {
-        let undoDepth: Int
+        let revision: Int
         if let live = liveToolApplication, live.tool == tool {
             writeToolResult(value, describedBy: summary)
-            undoDepth = live.undoDepth
+            revision = live.revision
         } else {
             applyToolResult(value, describedBy: summary)
-            undoDepth = undoStack.count
+            revision = undoRevision
         }
         toolApplication = ToolApplication(
-            tool: tool, base: base, display: display, summary: lastResultSummary, undoDepth: undoDepth
+            tool: tool, base: base, value: currentValue, summary: lastResultSummary, revision: revision
         )
     }
 
@@ -1423,7 +1430,7 @@ public final class CalculatorViewModel: ObservableObject {
     /// is always a new step rather than an undo, so Undo brings the tip back.
     public func removeLiveToolResult(_ tool: Tool, clearingOperationLine: Bool = false) {
         if let live = liveToolApplication, live.tool == tool {
-            if !clearingOperationLine, undoStack.count == live.undoDepth {
+            if !clearingOperationLine, undoRevision == live.revision {
                 undo()
             } else {
                 applyToolResult(live.base, describedBy: "")
@@ -1564,6 +1571,7 @@ public final class CalculatorViewModel: ObservableObject {
         apply(snapshot: snapshot)
         suppressHistoryTracking = false
         redoStack.append(current)
+        undoRevision += 1
     }
 
     public func redo() {
@@ -1574,6 +1582,7 @@ public final class CalculatorViewModel: ObservableObject {
         suppressHistoryTracking = false
         undoStack.append(current)
         trimToRecentSnapshots(&undoStack, maxCount: Limits.maxUndoDepth)
+        undoRevision += 1
     }
 
     // MARK: - Private helpers
@@ -2360,6 +2369,7 @@ public final class CalculatorViewModel: ObservableObject {
         undoStack.append(snapshot)
         trimToRecentSnapshots(&undoStack, maxCount: Limits.maxUndoDepth)
         redoStack.removeAll()
+        undoRevision += 1
     }
 
     private func makeSnapshot() -> CalculatorSnapshot {

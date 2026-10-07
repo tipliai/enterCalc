@@ -467,4 +467,31 @@ final class CurrencyModeTests: XCTestCase {
         XCTAssertEqual(viewModel.currentValue, 100)
         XCTAssertEqual(viewModel.expressionDisplay, "")
     }
+
+    // Changing the number format only reformats the display: reopening VAT
+    // still replaces the VAT rather than adding it on top of the gross.
+    func testNumberFormatChangeKeepsTheToolBase() {
+        let viewModel = currencyViewModel("1234.5", symbol: "$")
+        viewModel.applyLiveToolResult(Decimal(string: "1358.95")!, tool: .vat, base: Decimal(string: "1234.5")!, describedBy: "1,234.5 + VAT(10%) =")
+        viewModel.setNumberFormatStyle(.european)
+        XCTAssertEqual(viewModel.toolBase(for: .vat), Decimal(string: "1234.5"))
+
+        viewModel.applyLiveToolResult(Decimal(string: "1481.4")!, tool: .vat, base: Decimal(string: "1234.5")!, describedBy: "1.234,5 + VAT(20%) =")
+        viewModel.removeLiveToolResult(.vat)
+        XCTAssertEqual(viewModel.currentValue, Decimal(string: "1234.5"))
+    }
+
+    // With the undo stack at its cap, a later change that leaves the display
+    // alone (storing to memory) must not be mistaken for the VAT step: trash
+    // writes the amount back instead of undoing the memory store.
+    func testTrashWithAFullUndoStackRemovesTheVAT() {
+        let viewModel = currencyViewModel("100", symbol: "$")
+        for _ in 0..<120 { viewModel.storeMemory(); viewModel.clearMemory() }
+        viewModel.applyLiveToolResult(110, tool: .vat, base: 100, describedBy: "100 + VAT(10%) =")
+        viewModel.storeMemory()
+
+        viewModel.removeLiveToolResult(.vat)
+        XCTAssertEqual(viewModel.currentValue, 100)
+        XCTAssertFalse(viewModel.memoryEntries.isEmpty)
+    }
 }
