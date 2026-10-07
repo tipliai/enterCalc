@@ -26,9 +26,10 @@ private struct CurrencyToolChrome<Content: View>: View {
             content
         }
         #if os(macOS)
-        // The same insets as the Mac rounding pane, so all three panes line up.
-        .padding(.horizontal, 5)
-        .padding(.bottom, 8)
+        // Content lines up with the keypad: 8pt in from the window's sides and
+        // 10pt up from its bottom, the same as the rounding pane.
+        .padding(.horizontal, 8)
+        .padding(.bottom, 10)
         #else
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
@@ -660,8 +661,9 @@ public struct CurrencyTipPanel: View {
         }
         // Applied as soon as the panel opens, and again on every change.
         .onAppear {
-            // Reopening after choosing a preset shows it as chosen.
-            pressedPreset = presets.rates.firstIndex(of: rate)
+            // A preset is shown as chosen only after it is pressed in this
+            // presentation of the pane, never just because its value matches.
+            pressedPreset = nil
             // Opening at 0% (Off) applies nothing and clears nothing.
             if rate != 0 { sendResult() }
         }

@@ -1404,7 +1404,8 @@ public final class CalculatorViewModel: ObservableObject {
     /// when VAT is backed out of a gross price. `label` is the short tool name
     /// (VAT, TIP, MwSt., …).
     public func toolOperationLine(base: Decimal, label: String, rate: Decimal, isRemoving: Bool = false) -> String {
-        let amount = formattedValue(base)
+        // No symbol, like every currency operation line.
+        let amount = formattedValue(base, includingCurrency: false)
         let rateText = formattedValue(RateEntry.roundedForDisplay(rate), includingCurrency: false)
         return "\(amount) \(isRemoving ? "−" : "+") \(label)(\(rateText)%) ="
     }

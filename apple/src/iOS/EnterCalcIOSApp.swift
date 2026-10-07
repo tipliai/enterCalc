@@ -3561,6 +3561,7 @@ private extension EnterCalcIOSView {
         let wasActiveOverlay = activeOverlay
 
         if (overlay == .vat || overlay == .tip), wasActiveOverlay != overlay {
+            seedSessionRates()
             pressEnterForPendingCalculation()
         }
 
@@ -3579,6 +3580,14 @@ private extension EnterCalcIOSView {
         if activeOverlay != .history {
             resetHistoryOverlayResizeState()
         }
+    }
+
+    /// Captures the stored default rates into this scene's own state the first
+    /// time a pane opens, so another scene changing the default can never
+    /// change, and live-apply, this scene's rate.
+    func seedSessionRates() {
+        if sessionVATRate == nil { sessionVATRate = vatRate }
+        if sessionTipRate == nil { sessionTipRate = tipRate }
     }
 
     /// Opening VAT or Tip over an unfinished sum (`10 + 5`) presses Enter for
