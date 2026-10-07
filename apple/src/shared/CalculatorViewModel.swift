@@ -1400,7 +1400,8 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     /// The operation line a VAT or Tip result leaves on the display, starting
-    /// from the amount it was worked out from: `$100 + VAT(10%) =`, or with `−`
+    /// from the amount it was worked out from, without the currency symbol:
+    /// `100 + VAT(10%) =`, or with `−`
     /// when VAT is backed out of a gross price. `label` is the short tool name
     /// (VAT, TIP, MwSt., …).
     public func toolOperationLine(base: Decimal, label: String, rate: Decimal, isRemoving: Bool = false) -> String {

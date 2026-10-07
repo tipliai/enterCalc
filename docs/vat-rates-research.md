@@ -4,7 +4,7 @@ Researched 2026-10-06. Rates are those in force on that date. Use this as input 
 
 **How to read this**
 
-- **Std** is the standard rate. **Reduced** lists up to three lower rates that shoppers commonly meet; obscure or sector-only rates are left out.
+- **Std** is the standard rate. **Additional** lists up to three other rates that shoppers commonly meet — usually reduced rates, but sometimes higher (Argentina 27, India 40, Canada's HST); obscure or sector-only rates are left out. The JSON field is `additional`.
 - **Latest change** is the effective date of the most recent change to a rate in this row. "—" means no 2024–2026 change was found.
 - **Conf.**
   - **H**: an official source, checked this session, confirms the rate is current.
@@ -14,7 +14,7 @@ Researched 2026-10-06. Rates are those in force on that date. Use this as input 
 
 ## European Union (27)
 
-| Country | ISO | Std | Reduced (common) | Latest change | Source | Conf. |
+| Country | ISO | Std | Additional (common) | Latest change | Source | Conf. |
 |---|---|---|---|---|---|---|
 | Austria | AT | 20 | 10, 13, **4.9** (staple foods) | 2026-07-01 (staple foods 10 → 4.9) | Your Europe; Austrian Parliament approval reported by meridianglobalservices.com/austria-4-9-vat-rate-approved, bta.bg | M (Your Europe table predates the 4.9 rate) |
 | Belgium | BE | 21 | 12, 6 | 2026-03-01 (hotels/campsites 6 → 12) | Your Europe; bdo.be 2026 alert | H |
@@ -46,7 +46,7 @@ Researched 2026-10-06. Rates are those in force on that date. Use this as input 
 
 ## Rest of Europe
 
-| Country | ISO | Std | Reduced (common) | Latest change | Source | Conf. |
+| Country | ISO | Std | Additional (common) | Latest change | Source | Conf. |
 |---|---|---|---|---|---|---|
 | United Kingdom | GB | 20 | 5, 0 | 2026-10-01: temporary 0 on domestic electricity in Great Britain to 2027-03-31 (Northern Ireland stays 5) | gov.uk/guidance/rates-of-vat-on-different-goods-and-services (updated 2026-07-10); HMRC R&C Brief 10 (2026) | H |
 | Switzerland | CH | 8.1 | 3.8 (accommodation), 2.6 | 2024-01-01 (7.7 → 8.1) | estv.admin.ch/en/vat-rates-switzerland | H |
@@ -62,7 +62,7 @@ Researched 2026-10-06. Rates are those in force on that date. Use this as input 
 
 ## Americas
 
-| Country | ISO | Std | Reduced (common) | Latest change | Source | Conf. |
+| Country | ISO | Std | Additional (common) | Latest change | Source | Conf. |
 |---|---|---|---|---|---|---|
 | Canada | CA | 5 (federal GST) | HST combined: ON 13, NS 14, NB/NL/PE 15. QC: GST 5 + QST 9.975 = 14.975 | 2025-04-01 (NS HST 15 → 14) | canada.ca CRA GST/HST rate table | H |
 | United States | US | — | No national VAT. State and local sales taxes run from 0 to about 10+%, and the price is shown before tax | — | — | H (structural) |
@@ -86,7 +86,7 @@ Researched 2026-10-06. Rates are those in force on that date. Use this as input 
 
 ## Asia-Pacific
 
-| Country | ISO | Std | Reduced (common) | Latest change | Source | Conf. |
+| Country | ISO | Std | Additional (common) | Latest change | Source | Conf. |
 |---|---|---|---|---|---|---|
 | Australia | AU | 10 (GST) | 0 (GST-free basic food, health) | — | ATO (page returned 403; rate well established) / PwC | M |
 | New Zealand | NZ | 15 (GST) | — | — | ird.govt.nz/gst | H |
@@ -108,7 +108,7 @@ Researched 2026-10-06. Rates are those in force on that date. Use this as input 
 
 ## Middle East & Africa
 
-| Country | ISO | Std | Reduced (common) | Latest change | Source | Conf. |
+| Country | ISO | Std | Additional (common) | Latest change | Source | Conf. |
 |---|---|---|---|---|---|---|
 | United Arab Emirates | AE | 5 | — | 2018-01-01 | tax.gov.ae (FTA) | H |
 | Saudi Arabia | SA | 15 | — | 2020-07-01 (5 → 15) | ZATCA via trykintsugi / PwC | M |

@@ -560,13 +560,15 @@ struct EnterCalcIOSView: View {
             copy: { copyCurrentResultToPasteboard(from: viewModel) },
             copyOperation: { copyCurrentOperationToPasteboard(from: viewModel) },
             canCopyOperation: viewModel.hasOperationToCopy,
-            paste: { viewModel.pasteFromPasteboard() },
-            undo: { viewModel.undo() },
-            redo: { viewModel.redo() },
+            // Menu commands that change the display close an open VAT/Tip pane
+            // first, the same as typing does, so the pane can't drift from it.
+            paste: { closeToolPane(); viewModel.pasteFromPasteboard() },
+            undo: { closeToolPane(); viewModel.undo() },
+            redo: { closeToolPane(); viewModel.redo() },
             canUndo: viewModel.canUndo,
             canRedo: viewModel.canRedo,
-            clear: { viewModel.clearEntry() },
-            clearAll: { viewModel.clearAll() },
+            clear: { closeToolPane(); viewModel.clearEntry() },
+            clearAll: { closeToolPane(); viewModel.clearAll() },
             toggleHistoryPanel: currentDeviceFamily() == .pad ? { toggleOverlay(.history) } : nil,
             toggleRoundingPanel: currentDeviceFamily() == .pad ? { toggleOverlay(.rounding) } : nil,
             growDisplayArea: { adjustDisplayHeightFromKeyboard(byPoints: Self.keyboardDisplayResizeStep) },
@@ -978,10 +980,10 @@ struct EnterCalcIOSView: View {
             }
             // An open rate edit belongs to the panel; closing the panel by any
             // route (✕, trash, the scrim, leaving Currency mode) abandons it.
-            .onValueChange(of: activeOverlay) { overlay in
-                if overlay != .vat && overlay != .tip {
-                    rateEditor.cancel()
-                }
+            // Any overlay change cancels it, including switching straight
+            // between VAT and Tip, which share the editor.
+            .onValueChange(of: activeOverlay) { _ in
+                rateEditor.cancel()
             }
             // A preset opened for editing by press-and-hold gets the same
             // haptic as the other long-press actions, such as the function-key
@@ -1145,11 +1147,12 @@ private extension EnterCalcIOSView {
     func handleHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
         resetLandscapeDisplayScroll(for: activeScreen)
 
-        // VAT and Tip apply live to the display, so typing on the calculator
-        // while one is open closes it first: the result stays, and the key
-        // then does what it always does (#124). Escape just closes the pane.
-        if activeOverlay == .vat || activeOverlay == .tip, !event.modifierFlags.contains(.command) {
-            dismissActiveOverlay()
+        // VAT and Tip apply live to the display, so any key on the calculator
+        // while one is open — typing, or a shortcut such as ⌘V, ⌘Z or
+        // ⌘Delete — closes it first: the result stays, and the key then does
+        // what it always does (#124). Escape just closes the pane.
+        if activeOverlay == .vat || activeOverlay == .tip {
+            closeToolPane()
             if event.keyCode == .keyboardEscape { return true }
         }
 
@@ -3579,6 +3582,14 @@ private extension EnterCalcIOSView {
         }
         if activeOverlay != .history {
             resetHistoryOverlayResizeState()
+        }
+    }
+
+    /// Closes the VAT or Tip pane, if one is open, before something else
+    /// changes the display.
+    func closeToolPane() {
+        if activeOverlay == .vat || activeOverlay == .tip {
+            dismissActiveOverlay()
         }
     }
 

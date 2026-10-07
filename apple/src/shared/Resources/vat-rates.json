@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "updated": "2026-10-06",
-  "_readme": "VAT presets per region (ISO 3166 alpha-2). Standard rate first, then up to three other common rates, shown in the order listed. Rates are strings so they parse exactly. Verified 2026-10-06; see docs/vat-rates-research.md. Regions not listed get the fallback.",
+  "_readme": "VAT presets per region (ISO 3166 alpha-2). Standard rate first, then up to three additional common rates (usually reduced, sometimes higher, e.g. Canada's HST), shown in the order listed. Rates are strings so they parse exactly. Verified 2026-10-06; see docs/vat-rates-research.md. Regions not listed get the fallback.",
   "fallback": [
     "5",
     "10",
@@ -12,7 +12,7 @@
     {
       "region": "AT",
       "standard": "20",
-      "reduced": [
+      "additional": [
         "10",
         "13",
         "4.9"
@@ -24,7 +24,7 @@
     {
       "region": "BE",
       "standard": "21",
-      "reduced": [
+      "additional": [
         "12",
         "6"
       ],
@@ -35,7 +35,7 @@
     {
       "region": "BG",
       "standard": "20",
-      "reduced": [
+      "additional": [
         "9"
       ],
       "effective": "before 2024",
@@ -45,7 +45,7 @@
     {
       "region": "HR",
       "standard": "25",
-      "reduced": [
+      "additional": [
         "13",
         "5"
       ],
@@ -56,7 +56,7 @@
     {
       "region": "CY",
       "standard": "19",
-      "reduced": [
+      "additional": [
         "9",
         "5",
         "3"
@@ -68,7 +68,7 @@
     {
       "region": "CZ",
       "standard": "21",
-      "reduced": [
+      "additional": [
         "12"
       ],
       "effective": "2024-01-01",
@@ -78,7 +78,7 @@
     {
       "region": "DK",
       "standard": "25",
-      "reduced": [],
+      "additional": [],
       "effective": "before 2024",
       "source": "Your Europe",
       "confidence": "H"
@@ -86,7 +86,7 @@
     {
       "region": "EE",
       "standard": "24",
-      "reduced": [
+      "additional": [
         "13",
         "9"
       ],
@@ -97,7 +97,7 @@
     {
       "region": "FI",
       "standard": "25.5",
-      "reduced": [
+      "additional": [
         "13.5",
         "10"
       ],
@@ -108,7 +108,7 @@
     {
       "region": "FR",
       "standard": "20",
-      "reduced": [
+      "additional": [
         "10",
         "5.5",
         "2.1"
@@ -120,7 +120,7 @@
     {
       "region": "DE",
       "standard": "19",
-      "reduced": [
+      "additional": [
         "7"
       ],
       "effective": "2026-01-01",
@@ -130,7 +130,7 @@
     {
       "region": "GR",
       "standard": "24",
-      "reduced": [
+      "additional": [
         "13",
         "6"
       ],
@@ -141,7 +141,7 @@
     {
       "region": "HU",
       "standard": "27",
-      "reduced": [
+      "additional": [
         "18",
         "5"
       ],
@@ -152,7 +152,7 @@
     {
       "region": "IE",
       "standard": "23",
-      "reduced": [
+      "additional": [
         "13.5",
         "9"
       ],
@@ -163,7 +163,7 @@
     {
       "region": "IT",
       "standard": "22",
-      "reduced": [
+      "additional": [
         "10",
         "5",
         "4"
@@ -175,7 +175,7 @@
     {
       "region": "LV",
       "standard": "21",
-      "reduced": [
+      "additional": [
         "12",
         "5"
       ],
@@ -186,7 +186,7 @@
     {
       "region": "LT",
       "standard": "21",
-      "reduced": [
+      "additional": [
         "12",
         "5"
       ],
@@ -197,7 +197,7 @@
     {
       "region": "LU",
       "standard": "17",
-      "reduced": [
+      "additional": [
         "14",
         "8",
         "3"
@@ -209,7 +209,7 @@
     {
       "region": "MT",
       "standard": "18",
-      "reduced": [
+      "additional": [
         "7",
         "5"
       ],
@@ -220,7 +220,7 @@
     {
       "region": "NL",
       "standard": "21",
-      "reduced": [
+      "additional": [
         "9"
       ],
       "effective": "2026-01-01",
@@ -230,7 +230,7 @@
     {
       "region": "PL",
       "standard": "23",
-      "reduced": [
+      "additional": [
         "8",
         "5"
       ],
@@ -241,7 +241,7 @@
     {
       "region": "PT",
       "standard": "23",
-      "reduced": [
+      "additional": [
         "13",
         "6"
       ],
@@ -252,7 +252,7 @@
     {
       "region": "RO",
       "standard": "21",
-      "reduced": [
+      "additional": [
         "11"
       ],
       "effective": "2025-08-01",
@@ -262,7 +262,7 @@
     {
       "region": "SK",
       "standard": "23",
-      "reduced": [
+      "additional": [
         "19",
         "5"
       ],
@@ -273,7 +273,7 @@
     {
       "region": "SI",
       "standard": "22",
-      "reduced": [
+      "additional": [
         "9.5",
         "5"
       ],
@@ -284,7 +284,7 @@
     {
       "region": "ES",
       "standard": "21",
-      "reduced": [
+      "additional": [
         "10",
         "4"
       ],
@@ -295,7 +295,7 @@
     {
       "region": "SE",
       "standard": "25",
-      "reduced": [
+      "additional": [
         "12",
         "6"
       ],
@@ -306,7 +306,7 @@
     {
       "region": "GB",
       "standard": "20",
-      "reduced": [
+      "additional": [
         "5"
       ],
       "effective": "2026-10-01",
@@ -316,7 +316,7 @@
     {
       "region": "CH",
       "standard": "8.1",
-      "reduced": [
+      "additional": [
         "3.8",
         "2.6"
       ],
@@ -327,7 +327,7 @@
     {
       "region": "LI",
       "standard": "8.1",
-      "reduced": [
+      "additional": [
         "3.8",
         "2.6"
       ],
@@ -338,7 +338,7 @@
     {
       "region": "NO",
       "standard": "25",
-      "reduced": [
+      "additional": [
         "15",
         "12"
       ],
@@ -349,7 +349,7 @@
     {
       "region": "IS",
       "standard": "24",
-      "reduced": [
+      "additional": [
         "11"
       ],
       "effective": "2026-09-01",
@@ -359,7 +359,7 @@
     {
       "region": "RU",
       "standard": "22",
-      "reduced": [
+      "additional": [
         "10"
       ],
       "effective": "2026-01-01",
@@ -369,7 +369,7 @@
     {
       "region": "UA",
       "standard": "20",
-      "reduced": [
+      "additional": [
         "7"
       ],
       "effective": "before 2024",
@@ -379,7 +379,7 @@
     {
       "region": "TR",
       "standard": "20",
-      "reduced": [
+      "additional": [
         "10",
         "1"
       ],
@@ -390,7 +390,7 @@
     {
       "region": "ME",
       "standard": "21",
-      "reduced": [
+      "additional": [
         "7"
       ],
       "effective": "before 2024",
@@ -400,7 +400,7 @@
     {
       "region": "AD",
       "standard": "4.5",
-      "reduced": [
+      "additional": [
         "2.5",
         "1"
       ],
@@ -411,7 +411,7 @@
     {
       "region": "MC",
       "standard": "20",
-      "reduced": [
+      "additional": [
         "10",
         "5.5",
         "2.1"
@@ -423,7 +423,7 @@
     {
       "region": "CA",
       "standard": "5",
-      "reduced": [
+      "additional": [
         "13",
         "14",
         "15"
@@ -435,7 +435,7 @@
     {
       "region": "MX",
       "standard": "16",
-      "reduced": [
+      "additional": [
         "8"
       ],
       "effective": "2025-12-31",
@@ -445,7 +445,7 @@
     {
       "region": "AR",
       "standard": "21",
-      "reduced": [
+      "additional": [
         "10.5",
         "27"
       ],
@@ -456,7 +456,7 @@
     {
       "region": "CL",
       "standard": "19",
-      "reduced": [],
+      "additional": [],
       "effective": "before 2024",
       "source": "PwC",
       "confidence": "M"
@@ -464,7 +464,7 @@
     {
       "region": "CO",
       "standard": "19",
-      "reduced": [
+      "additional": [
         "5"
       ],
       "effective": "before 2024",
@@ -474,7 +474,7 @@
     {
       "region": "PE",
       "standard": "18",
-      "reduced": [
+      "additional": [
         "10.5"
       ],
       "effective": "before 2024",
@@ -484,7 +484,7 @@
     {
       "region": "PY",
       "standard": "10",
-      "reduced": [
+      "additional": [
         "5"
       ],
       "effective": "before 2024",
@@ -494,7 +494,7 @@
     {
       "region": "CR",
       "standard": "13",
-      "reduced": [
+      "additional": [
         "4",
         "2",
         "1"
@@ -506,7 +506,7 @@
     {
       "region": "EC",
       "standard": "15",
-      "reduced": [
+      "additional": [
         "5"
       ],
       "effective": "2024-04-01",
@@ -516,7 +516,7 @@
     {
       "region": "SV",
       "standard": "13",
-      "reduced": [],
+      "additional": [],
       "effective": "before 2024",
       "source": "secondary (LatAm VAT tables)",
       "confidence": "M"
@@ -524,7 +524,7 @@
     {
       "region": "PA",
       "standard": "7",
-      "reduced": [],
+      "additional": [],
       "effective": "before 2024",
       "source": "vatupdate.com (Jul 2026)",
       "confidence": "M"
@@ -532,7 +532,7 @@
     {
       "region": "UY",
       "standard": "22",
-      "reduced": [
+      "additional": [
         "10"
       ],
       "effective": "before 2024",
@@ -542,7 +542,7 @@
     {
       "region": "DO",
       "standard": "18",
-      "reduced": [
+      "additional": [
         "16"
       ],
       "effective": "before 2024",
@@ -552,7 +552,7 @@
     {
       "region": "AU",
       "standard": "10",
-      "reduced": [],
+      "additional": [],
       "effective": "before 2024",
       "source": "ATO / PwC",
       "confidence": "M"
@@ -560,7 +560,7 @@
     {
       "region": "NZ",
       "standard": "15",
-      "reduced": [],
+      "additional": [],
       "effective": "before 2024",
       "source": "ird.govt.nz",
       "confidence": "H"
@@ -568,7 +568,7 @@
     {
       "region": "JP",
       "standard": "10",
-      "reduced": [
+      "additional": [
         "8"
       ],
       "effective": "before 2024",
@@ -578,7 +578,7 @@
     {
       "region": "KR",
       "standard": "10",
-      "reduced": [],
+      "additional": [],
       "effective": "before 2024",
       "source": "PwC",
       "confidence": "M"
@@ -586,7 +586,7 @@
     {
       "region": "CN",
       "standard": "13",
-      "reduced": [
+      "additional": [
         "9",
         "6"
       ],
@@ -597,7 +597,7 @@
     {
       "region": "TW",
       "standard": "5",
-      "reduced": [],
+      "additional": [],
       "effective": "before 2024",
       "source": "PwC Worldwide Tax Summaries",
       "confidence": "M"
@@ -605,7 +605,7 @@
     {
       "region": "SG",
       "standard": "9",
-      "reduced": [],
+      "additional": [],
       "effective": "2024-01-01",
       "source": "IRAS / PwC",
       "confidence": "M"
@@ -613,7 +613,7 @@
     {
       "region": "IN",
       "standard": "18",
-      "reduced": [
+      "additional": [
         "5",
         "40"
       ],
@@ -624,7 +624,7 @@
     {
       "region": "TH",
       "standard": "7",
-      "reduced": [],
+      "additional": [],
       "effective": "2026-10-01",
       "source": "Royal Decree 807/2026",
       "confidence": "M"
@@ -632,7 +632,7 @@
     {
       "region": "VN",
       "standard": "10",
-      "reduced": [
+      "additional": [
         "8",
         "5"
       ],
@@ -643,7 +643,7 @@
     {
       "region": "PH",
       "standard": "12",
-      "reduced": [],
+      "additional": [],
       "effective": "before 2024",
       "source": "Bloomberg Tax",
       "confidence": "M"
@@ -651,7 +651,7 @@
     {
       "region": "ID",
       "standard": "11",
-      "reduced": [
+      "additional": [
         "12"
       ],
       "effective": "2025-01-01",
@@ -661,7 +661,7 @@
     {
       "region": "LA",
       "standard": "10",
-      "reduced": [],
+      "additional": [],
       "effective": "2024-01-01",
       "source": "Tilleke & Gibbins; PwC",
       "confidence": "M"
@@ -669,7 +669,7 @@
     {
       "region": "MN",
       "standard": "10",
-      "reduced": [],
+      "additional": [],
       "effective": "before 2024",
       "source": "PwC Mongolia",
       "confidence": "M"
@@ -677,7 +677,7 @@
     {
       "region": "FJ",
       "standard": "12.5",
-      "reduced": [],
+      "additional": [],
       "effective": "2025-08-01",
       "source": "Fiji Budget 2025-26",
       "confidence": "M"
@@ -685,7 +685,7 @@
     {
       "region": "AE",
       "standard": "5",
-      "reduced": [],
+      "additional": [],
       "effective": "before 2024",
       "source": "tax.gov.ae (FTA)",
       "confidence": "H"
@@ -693,7 +693,7 @@
     {
       "region": "SA",
       "standard": "15",
-      "reduced": [],
+      "additional": [],
       "effective": "before 2024",
       "source": "ZATCA / PwC",
       "confidence": "M"
@@ -701,7 +701,7 @@
     {
       "region": "IL",
       "standard": "18",
-      "reduced": [],
+      "additional": [],
       "effective": "2025-01-01",
       "source": "PwC",
       "confidence": "M"
@@ -709,7 +709,7 @@
     {
       "region": "ZA",
       "standard": "15",
-      "reduced": [],
+      "additional": [],
       "effective": "before 2024",
       "source": "sars.gov.za",
       "confidence": "H"
@@ -717,7 +717,7 @@
     {
       "region": "NG",
       "standard": "7.5",
-      "reduced": [],
+      "additional": [],
       "effective": "2026-01-01",
       "source": "Nigeria Tax Act 2025 (BDO)",
       "confidence": "M"
@@ -725,7 +725,7 @@
     {
       "region": "EG",
       "standard": "14",
-      "reduced": [
+      "additional": [
         "5"
       ],
       "effective": "before 2024",
@@ -735,7 +735,7 @@
     {
       "region": "KE",
       "standard": "16",
-      "reduced": [
+      "additional": [
         "8"
       ],
       "effective": "2026-07-01",
@@ -745,7 +745,7 @@
     {
       "region": "GH",
       "standard": "20",
-      "reduced": [],
+      "additional": [],
       "effective": "2026-01-01",
       "source": "VAT Act 2025 (VAT 15 + NHIL 2.5 + GETFund 2.5)",
       "confidence": "M"
@@ -753,7 +753,7 @@
     {
       "region": "LR",
       "standard": "13",
-      "reduced": [],
+      "additional": [],
       "effective": "2026-05-01",
       "source": "vatcalc.com / innovatetax.com (VAT 18 from 2027-01-01)",
       "confidence": "M"
@@ -761,7 +761,7 @@
     {
       "region": "ZW",
       "standard": "15.5",
-      "reduced": [],
+      "additional": [],
       "effective": "before 2024",
       "source": "vatupdate.com (Jul 2026)",
       "confidence": "M"
