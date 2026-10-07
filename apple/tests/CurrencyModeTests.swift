@@ -344,4 +344,12 @@ final class CurrencyModeTests: XCTestCase {
         XCTAssertEqual(TipBreakdown.roundedTip(bill: Decimal(string: "47.10")!, rate: 18, scale: 2), Decimal(string: "8.48"))
         XCTAssertEqual(TipBreakdown.roundedTip(bill: 1234, rate: 15, scale: 0), 185)
     }
+
+    // The operation line starts from the amount the tool worked from.
+    func testToolOperationLineShowsTheOriginalAmount() {
+        let dollars = currencyViewModel("100", symbol: "$")
+        XCTAssertEqual(dollars.toolOperationLine(base: 100, label: "VAT", rate: 10), "$100 + VAT(10%) =")
+        XCTAssertEqual(dollars.toolOperationLine(base: 110, label: "VAT", rate: 10, isRemoving: true), "$110 − VAT(10%) =")
+        XCTAssertEqual(dollars.toolOperationLine(base: 1234, label: "TIP", rate: Decimal(string: "17.5")!), "$1,234 + TIP(17.5%) =")
+    }
 }

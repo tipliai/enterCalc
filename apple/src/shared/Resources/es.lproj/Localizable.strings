@@ -100,3 +100,5 @@
 "currency.rate.range" = "Entre 0 y 100, hasta 3 decimales";
 "currency.vat.clear" = "Eliminar IVA";
 "currency.tip.clear" = "Eliminar propina";
+"currency.vat.short" = "IVA";
+"currency.tip.short" = "Propina";

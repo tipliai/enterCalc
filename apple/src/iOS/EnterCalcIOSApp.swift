@@ -3016,14 +3016,18 @@ private extension EnterCalcIOSView {
     /// The operation line left behind after a tool writes its result, so the
     /// display says where the number came from.
     func vatSummary() -> String {
-        let rate = activeScreen.viewModel.formattedValue(vatRate, includingCurrency: false)
-        let action = localized(vatRemovesTax ? "currency.vat.remove" : "currency.vat.add")
-        return "\(action) \(rate)% ="
+        let viewModel = activeScreen.viewModel
+        return viewModel.toolOperationLine(
+            base: viewModel.toolBase(for: .vat),
+            label: localized("currency.vat.short"),
+            rate: vatRate,
+            isRemoving: vatRemovesTax
+        )
     }
 
     func tipSummary() -> String {
-        let rate = activeScreen.viewModel.formattedValue(tipRate, includingCurrency: false)
-        return "\(localized("currency.tip.title")) \(rate)% ="
+        let viewModel = activeScreen.viewModel
+        return viewModel.toolOperationLine(base: viewModel.toolBase(for: .tip), label: localized("currency.tip.short"), rate: tipRate)
     }
 
     /// Leaving currency mode takes the tools with it, so a panel is never left
@@ -3047,8 +3051,8 @@ private extension EnterCalcIOSView {
             Spacer(minLength: 4)
 
             if showsCurrencyTools {
-                currencyToolButton(metrics: metrics, titleKey: "currency.vat.title", pane: .vat, opacity: opacity)
-                currencyToolButton(metrics: metrics, titleKey: "currency.tip.title", pane: .tip, opacity: opacity)
+                currencyToolButton(metrics: metrics, titleKey: "currency.vat.short", pane: .vat, opacity: opacity)
+                currencyToolButton(metrics: metrics, titleKey: "currency.tip.short", pane: .tip, opacity: opacity)
             }
         }
             .frame(maxWidth: .infinity, minHeight: metrics.memoryHeight, maxHeight: metrics.memoryHeight, alignment: .leading)

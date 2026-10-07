@@ -100,3 +100,5 @@
 "currency.rate.range" = "0〜100、小数点以下3桁まで";
 "currency.vat.clear" = "消費税を解除";
 "currency.tip.clear" = "チップを解除";
+"currency.vat.short" = "消費税";
+"currency.tip.short" = "チップ";

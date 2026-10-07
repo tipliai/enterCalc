@@ -100,3 +100,5 @@
 "currency.rate.range" = "0 到 100 之间，最多 3 位小数";
 "currency.vat.clear" = "取消增值税";
 "currency.tip.clear" = "取消小费";
+"currency.vat.short" = "增值税";
+"currency.tip.short" = "小费";

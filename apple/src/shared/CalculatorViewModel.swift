@@ -1396,6 +1396,16 @@ public final class CalculatorViewModel: ObservableObject {
         )
     }
 
+    /// The operation line a VAT or Tip result leaves on the display, starting
+    /// from the amount it was worked out from: `$100 + VAT(10%) =`, or with `−`
+    /// when VAT is backed out of a gross price. `label` is the short tool name
+    /// (VAT, TIP, MwSt., …).
+    public func toolOperationLine(base: Decimal, label: String, rate: Decimal, isRemoving: Bool = false) -> String {
+        let amount = formattedValue(base)
+        let rateText = formattedValue(rate, includingCurrency: false)
+        return "\(amount) \(isRemoving ? "−" : "+") \(label)(\(rateText)%) ="
+    }
+
     /// The VAT or Tip pane's trash button: takes the tool's result back off the
     /// display, the way the rounding pane's trash removes rounding. While the
     /// result is still the latest change this is an undo, so the display comes

@@ -12,7 +12,7 @@ Current verification status on macOS:
 - `swift test list` discovers `190` `CalculatorViewModelTests` methods.
 - This matrix documents the same `190` methods with no missing or extra entries.
 - The current macOS run includes the AppKit-only clipboard tests guarded by `canImport(AppKit)`.
-- A full `swift test` run executes `352` tests across every suite, of which `13` fail. Those 13 failures span 4 methods, all in `CalculatorViewModelTests`, and reproduce identically on an untouched checkout — they pre-date the 1.1.0 work and are not regressions.
+- A full `swift test` run executes `353` tests across every suite, of which `13` fail. Those 13 failures span 4 methods, all in `CalculatorViewModelTests`, and reproduce identically on an untouched checkout — they pre-date the 1.1.0 work and are not regressions.
 
 ### Other suites
 
