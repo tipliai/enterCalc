@@ -100,3 +100,5 @@
 "currency.rate.range" = "Zwischen 0 und 100, bis zu 3 Nachkommastellen";
 "currency.vat.clear" = "MwSt. entfernen";
 "currency.tip.clear" = "Trinkgeld entfernen";
+"currency.vat.short" = "MwSt.";
+"currency.tip.short" = "Trinkgeld";

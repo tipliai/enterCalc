@@ -858,8 +858,8 @@ struct CalculatorWindowView: View {
             Spacer(minLength: 4)
 
             if viewModel.activeCurrencySymbol != nil {
-                currencyToolButton(titleKey: "currency.vat.title", pane: .vat, opacity: opacity)
-                currencyToolButton(titleKey: "currency.tip.title", pane: .tip, opacity: opacity)
+                currencyToolButton(titleKey: "currency.vat.short", pane: .vat, opacity: opacity)
+                currencyToolButton(titleKey: "currency.tip.short", pane: .tip, opacity: opacity)
             }
         }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1485,14 +1485,20 @@ struct CalculatorWindowView: View {
     /// The operation line left behind after a tool writes its result, so the
     /// display says where the number came from.
     private func vatSummary() -> String {
-        let rate = viewModel.formattedValue(vatRate, includingCurrency: false)
-        let action = macLocalized(vatRemovesTax ? "currency.vat.remove" : "currency.vat.add", bundle: currentLocalizationBundle)
-        return "\(action) \(rate)% ="
+        viewModel.toolOperationLine(
+            base: viewModel.toolBase(for: .vat),
+            label: macLocalized("currency.vat.short", bundle: currentLocalizationBundle),
+            rate: vatRate,
+            isRemoving: vatRemovesTax
+        )
     }
 
     private func tipSummary() -> String {
-        let rate = viewModel.formattedValue(tipRate, includingCurrency: false)
-        return "\(macLocalized("currency.tip.title", bundle: currentLocalizationBundle)) \(rate)% ="
+        viewModel.toolOperationLine(
+            base: viewModel.toolBase(for: .tip),
+            label: macLocalized("currency.tip.short", bundle: currentLocalizationBundle),
+            rate: tipRate
+        )
     }
 
     /// Compact outlined pill, deliberately unlike a keypad key: it opens a tool
