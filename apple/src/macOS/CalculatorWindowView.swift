@@ -1539,19 +1539,21 @@ struct CalculatorWindowView: View {
         } label: {
             Text(macLocalized(titleKey, bundle: currentLocalizationBundle))
                 .font(EnterCalcFont.appFont(size: 11))
-                // An open panel's pill is inverted rather than tinted blue,
-                // which was hard to read on the display.
-                .foregroundStyle((isActive ? palette.surface : primaryForeground).opacity(opacity))
+                // An open panel's pill is shown as a solid grey pill with white
+                // text, matching the iOS inverted pill as it appears behind the
+                // panel's scrim. A literal inversion (a light pill with dark
+                // text) is unreadable on the Mac's dark display.
+                .foregroundStyle(isActive ? Color.white : primaryForeground.opacity(opacity))
                 .padding(.horizontal, 6)
                 .padding(.vertical, 1)
                 .background(
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(isActive ? primaryForeground.opacity(opacity) : Color.clear)
+                        .fill(isActive ? Color.gray : Color.clear)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 4)
                         .strokeBorder(
-                            (isActive ? primaryForeground : palette.textSecondary).opacity(isActive ? opacity : opacity * 0.7),
+                            isActive ? Color.gray : palette.textSecondary.opacity(opacity * 0.7),
                             lineWidth: 1
                         )
                 )
