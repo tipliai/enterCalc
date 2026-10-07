@@ -270,6 +270,14 @@ final class CalculatorFunctionKeyTests: XCTestCase {
             // The VAT and Tip panels' rate editing (#124).
             + ["currency.rate.type", "currency.rate.editPreset", "currency.rate.presetHint",
                "currency.rate.done", "currency.rate.cancel", "currency.rate.range"]
+            // The VAT and Tip panels themselves (#92).
+            + ["currency.vat.title", "currency.vat.add", "currency.vat.remove", "currency.vat.rate",
+               "currency.vat.rate.decrease", "currency.vat.rate.increase", "currency.vat.net",
+               "currency.vat.amount", "currency.vat.gross",
+               "currency.tip.title", "currency.tip.bill", "currency.tip.rate", "currency.tip.rate.decrease",
+               "currency.tip.rate.increase", "currency.tip.split", "currency.tip.split.decrease",
+               "currency.tip.split.increase", "currency.tip.amount", "currency.tip.total", "currency.tip.perPerson",
+               "currency.tool.use", "currency.tool.close"]
 
         for localeCode in localeCodes {
             let strings = try localizedStrings(named: localeCode)
