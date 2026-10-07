@@ -69,9 +69,16 @@
 "function.reciprocal" = "Reciprocal";
 "function.parentheses" = "Parentheses";
 "function.percent" = "Percent";
-"functionKey.chooser.title" = "Choose Function";
-"functionKey.change" = "Change Function";
-"functionKey.hint" = "Press and hold to change this key";
+"functionKey.chooser.title" = "Edit Action";
+"functionKey.change" = "Edit Action";
+"functionKey.hint" = "Press and hold to edit this key’s action";
+"functionKey.hint.mac" = "Right-click and choose Edit to edit this key’s action";
+"functionKey.edit" = "Edit";
+"functionKey.reset" = "Restore Default Keys";
+"functionKey.reset.title" = "Restore Default Keys?";
+"functionKey.reset.message" = "The keys you’ve changed go back to their original actions.";
+"functionKey.reset.confirm" = "Restore";
+"functionKey.reset.cancel" = "Cancel";
 
 /* Currency mode tools: VAT and tipping (issue #92) */
 "currency.vat.title" = "VAT";

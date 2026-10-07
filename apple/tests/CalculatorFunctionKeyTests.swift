@@ -266,7 +266,7 @@ final class CalculatorFunctionKeyTests: XCTestCase {
     func testFunctionKeyLocalizationExistsAcrossSupportedBundles() throws {
         let localeCodes = ["Base", "en", "de", "es", "fr", "ja", "zh-Hans"]
         let keys = CalculatorFunctionKey.allCases.map(\.accessibilityLabelKey)
-            + ["functionKey.chooser.title", "functionKey.change", "functionKey.hint"]
+            + ["functionKey.chooser.title", "functionKey.change", "functionKey.hint", "functionKey.hint.mac", "functionKey.edit", "functionKey.reset", "functionKey.reset.title", "functionKey.reset.message", "functionKey.reset.confirm", "functionKey.reset.cancel"]
             // The VAT and Tip panels' rate editing (#124).
             + ["currency.rate.type", "currency.rate.editPreset", "currency.rate.presetHint",
                "currency.rate.done", "currency.rate.cancel", "error.invalidInput", "error.outOfRange"]

@@ -69,9 +69,16 @@
 "function.reciprocal" = "逆数";
 "function.parentheses" = "かっこ";
 "function.percent" = "パーセント";
-"functionKey.chooser.title" = "機能を選択";
-"functionKey.change" = "機能を変更";
-"functionKey.hint" = "長押しすると、このキーを変更できます";
+"functionKey.chooser.title" = "アクションを編集";
+"functionKey.change" = "アクションを編集";
+"functionKey.hint" = "長押しすると、このキーのアクションを編集できます";
+"functionKey.hint.mac" = "右クリックして「編集」を選ぶと、このキーのアクションを編集できます";
+"functionKey.edit" = "編集";
+"functionKey.reset" = "デフォルトのキーに戻す";
+"functionKey.reset.title" = "デフォルトのキーに戻しますか？";
+"functionKey.reset.message" = "変更したキーが元のアクションに戻ります。";
+"functionKey.reset.confirm" = "戻す";
+"functionKey.reset.cancel" = "キャンセル";
 
 /* 通貨モードのツール: 消費税とチップ (Issue #92) */
 "currency.vat.title" = "消費税";

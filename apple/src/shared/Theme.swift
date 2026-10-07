@@ -22,6 +22,8 @@ public struct Palette {
     public let headerHover: Color
     public let historyBackground: Color
     public let historyTileBackground: Color
+    /// The folded-down corner on keys whose function can be changed (#131).
+    public var functionKeyEar: Color = .clear
 
     /// Titles of the right-column operator/equals buttons, ordered top→bottom.
     public static let operatorColumnTitles: [String] = ["÷", "×", "−", "+", "="]
@@ -85,7 +87,8 @@ public struct Palette {
             memoryControlDisabled: memoryControlActive.opacity(isDarkLike ? 0.86 : 0.72),
             headerHover: isDarkLike ? Color.white.opacity(isBlueLike ? 0.22 : 0.2) : Color.black.opacity(0.16),
             historyBackground: highContrastSurface,
-            historyTileBackground: isDarkLike ? Color.white.opacity(isBlueLike ? 0.15 : 0.13) : Color.black.opacity(0.11)
+            historyTileBackground: isDarkLike ? Color.white.opacity(isBlueLike ? 0.15 : 0.13) : Color.black.opacity(0.11),
+            functionKeyEar: isBlueLike ? Color.white.opacity(0.45) : (isDarkLike ? Color.white.opacity(0.30) : Color.black.opacity(0.22))
         )
     }
 
@@ -112,7 +115,8 @@ public struct Palette {
         memoryControlDisabled: Color(red: 0.6118, green: 0.7725, blue: 0.9882), // #9cc5fc
         headerHover: Color.white.opacity(0.08),
         historyBackground: Color(red: 0.1137, green: 0.1137, blue: 0.1137), // match surface
-        historyTileBackground: Color.white.opacity(0.05)
+        historyTileBackground: Color.white.opacity(0.05),
+        functionKeyEar: Color.white.opacity(0.20)
     )
 
     public static let light = Palette(
@@ -135,7 +139,8 @@ public struct Palette {
         memoryControlDisabled: Color(red: 0.6118, green: 0.7725, blue: 0.9882), // #9cc5fc
         headerHover: Color.black.opacity(0.08),
         historyBackground: Color(red: 0.9451, green: 0.9451, blue: 0.9451), // match surface
-        historyTileBackground: Color.black.opacity(0.05)
+        historyTileBackground: Color.black.opacity(0.05),
+        functionKeyEar: Color.black.opacity(0.13)
     )
 
     public static let blue = Palette(
@@ -158,6 +163,7 @@ public struct Palette {
         memoryControlDisabled: Color(red: 0.803, green: 0.878, blue: 1.0),
         headerHover: Color.white.opacity(0.12),
         historyBackground: Color(red: 0.246, green: 0.318, blue: 0.870),
-        historyTileBackground: Color.white.opacity(0.08)
+        historyTileBackground: Color.white.opacity(0.08),
+        functionKeyEar: Color.white.opacity(0.34)
     )
 }

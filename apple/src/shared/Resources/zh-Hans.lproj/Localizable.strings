@@ -69,9 +69,16 @@
 "function.reciprocal" = "倒数";
 "function.parentheses" = "括号";
 "function.percent" = "百分比";
-"functionKey.chooser.title" = "选择功能";
-"functionKey.change" = "更改功能";
-"functionKey.hint" = "长按即可更改此键";
+"functionKey.chooser.title" = "编辑操作";
+"functionKey.change" = "编辑操作";
+"functionKey.hint" = "长按即可编辑此键的操作";
+"functionKey.hint.mac" = "右键点按并选择“编辑”以编辑此键的操作";
+"functionKey.edit" = "编辑";
+"functionKey.reset" = "恢复默认按键";
+"functionKey.reset.title" = "要恢复默认按键吗？";
+"functionKey.reset.message" = "你更改过的键将恢复为原始操作。";
+"functionKey.reset.confirm" = "恢复";
+"functionKey.reset.cancel" = "取消";
 
 /* 货币模式工具：增值税与小费 (议题 #92) */
 "currency.vat.title" = "增值税";

@@ -69,9 +69,16 @@
 "function.reciprocal" = "Inverse";
 "function.parentheses" = "Parenthèses";
 "function.percent" = "Pourcentage";
-"functionKey.chooser.title" = "Choisir une fonction";
-"functionKey.change" = "Changer de fonction";
-"functionKey.hint" = "Maintenez appuyé pour changer cette touche";
+"functionKey.chooser.title" = "Modifier l’action";
+"functionKey.change" = "Modifier l’action";
+"functionKey.hint" = "Maintenez appuyé pour modifier l’action de cette touche";
+"functionKey.hint.mac" = "Cliquez avec le bouton droit et choisissez Modifier pour modifier l’action de cette touche";
+"functionKey.edit" = "Modifier";
+"functionKey.reset" = "Restaurer les touches par défaut";
+"functionKey.reset.title" = "Restaurer les touches par défaut ?";
+"functionKey.reset.message" = "Les touches que vous avez modifiées reprennent leurs actions d’origine.";
+"functionKey.reset.confirm" = "Restaurer";
+"functionKey.reset.cancel" = "Annuler";
 
 /* Outils du mode devise : TVA et pourboire (ticket #92) */
 "currency.vat.title" = "TVA";
