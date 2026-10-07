@@ -69,7 +69,7 @@
 "function.reciprocal" = "逆数";
 "function.parentheses" = "かっこ";
 "function.percent" = "パーセント";
-"functionKey.chooser.title" = "機能を選択";
+"functionKey.chooser.title" = "アクションを編集";
 "functionKey.change" = "機能を変更";
 "functionKey.hint" = "長押しすると、このキーを変更できます";
 "functionKey.hint.mac" = "右クリックして「編集」を選ぶと、このキーを変更できます";

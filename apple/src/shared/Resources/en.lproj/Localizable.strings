@@ -69,7 +69,7 @@
 "function.reciprocal" = "Reciprocal";
 "function.parentheses" = "Parentheses";
 "function.percent" = "Percent";
-"functionKey.chooser.title" = "Choose Function";
+"functionKey.chooser.title" = "Edit Action";
 "functionKey.change" = "Change Function";
 "functionKey.hint" = "Press and hold to change this key";
 "functionKey.hint.mac" = "Right-click and choose Edit to change this key";

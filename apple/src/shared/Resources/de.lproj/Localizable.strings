@@ -69,7 +69,7 @@
 "function.reciprocal" = "Kehrwert";
 "function.parentheses" = "Klammern";
 "function.percent" = "Prozent";
-"functionKey.chooser.title" = "Funktion wählen";
+"functionKey.chooser.title" = "Aktion bearbeiten";
 "functionKey.change" = "Funktion ändern";
 "functionKey.hint" = "Gedrückt halten, um diese Taste zu ändern";
 "functionKey.hint.mac" = "Rechtsklick und „Bearbeiten“ wählen, um diese Taste zu ändern";
