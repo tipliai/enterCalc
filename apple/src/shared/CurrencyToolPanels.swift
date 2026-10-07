@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 /// Shared chrome for the Currency-mode tools (#92).
 ///
@@ -721,16 +724,28 @@ private struct TipRateSlider: View {
             GeometryReader { geometry in
                 ZStack(alignment: .topLeading) {
                     ForEach(0...notchCount, id: \.self) { index in
+                        // Drawn exactly like the rounding pane's markers: the
+                        // same power icon and the same 2×5 ticks, in the same
+                        // colours, on each platform.
                         if index == 0 {
                             Image(systemName: "power")
-                                .font(.system(size: 11))
+                                #if os(macOS)
+                                .font(.system(size: NSFont.smallSystemFontSize))
+                                .foregroundStyle(.secondary)
+                                #else
+                                .font(EnterCalcFont.appFont(size: 12))
                                 .foregroundStyle(palette.textSecondary)
+                                #endif
                                 .frame(width: 14)
                                 .offset(x: offset(for: index, width: geometry.size.width, markerWidth: 14), y: -3)
                         } else {
                             Capsule(style: .continuous)
-                                .fill(palette.textSecondary.opacity(index % 5 == 0 ? 0.6 : 0.35))
-                                .frame(width: 2, height: index % 5 == 0 ? 7 : 5)
+                                #if os(macOS)
+                                .fill(Color.secondary.opacity(0.35))
+                                #else
+                                .fill(palette.textSecondary.opacity(0.35))
+                                #endif
+                                .frame(width: 2, height: 5)
                                 .offset(x: offset(for: index, width: geometry.size.width, markerWidth: 2))
                         }
                     }
