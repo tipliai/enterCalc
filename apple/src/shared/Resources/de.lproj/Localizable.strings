@@ -84,7 +84,6 @@
 "currency.vat.amount" = "MwSt.";
 "currency.vat.gross" = "Brutto";
 "currency.tip.title" = "Trinkgeld";
-"currency.tip.bill" = "Rechnung";
 "currency.tip.rate" = "Trinkgeld";
 "currency.tip.rate.decrease" = "Trinkgeld verringern";
 "currency.tip.rate.increase" = "Trinkgeld erhöhen";

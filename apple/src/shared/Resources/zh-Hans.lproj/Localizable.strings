@@ -84,7 +84,6 @@
 "currency.vat.amount" = "增值税";
 "currency.vat.gross" = "含税";
 "currency.tip.title" = "小费";
-"currency.tip.bill" = "账单";
 "currency.tip.rate" = "小费";
 "currency.tip.rate.decrease" = "减少小费";
 "currency.tip.rate.increase" = "增加小费";

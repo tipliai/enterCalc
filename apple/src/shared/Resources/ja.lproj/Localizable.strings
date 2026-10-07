@@ -84,7 +84,6 @@
 "currency.vat.amount" = "消費税";
 "currency.vat.gross" = "税込";
 "currency.tip.title" = "チップ";
-"currency.tip.bill" = "会計";
 "currency.tip.rate" = "チップ";
 "currency.tip.rate.decrease" = "チップを減らす";
 "currency.tip.rate.increase" = "チップを増やす";

@@ -132,7 +132,10 @@ Worth knowing when QA'ing #92 later:
 
 Rates were verified on 2026-10-06; sources and confidence are in [vat-rates-research.md](vat-rates-research.md). Rates live in `apple/src/shared/Resources/vat-rates.json`: changing one is a one-line edit there.
 
-1. Set the device region to **Germany** and open VAT on an amount. The presets read **19%** and **7%**, with 19% selected. United Kingdom: 20 / 5. Switzerland: 8,1 / 3,8 / 2,6. United States (no VAT): the generic 5 / 10 / 15 / 20 / 25.
+1. Set the device region to **Germany** and open VAT on an amount. The panel opens with its **four** presets at the top: **19%** and **7%** (Germany's rates, 19% selected), topped up with 5 and 10. United Kingdom: 20 / 5 / 10 / 25. Switzerland: 8,1 / 3,8 / 2,6 / 5. United States (no VAT): 5 / 10 / 20 / 25. Both panels always show exactly four presets, and the Tip panel has no Bill row.
+   - While a panel is open, its VAT or Tip pill in the display is **inverted** (filled), not blue.
+   - Results are always in cents: removing 19% from 100 reads 84,03 / 15,97 / 100.
+   - Check both panels in every language on the smallest iPhone: no label truncates (German *MwSt. herausrechnen* is the longest).
 2. Tap the rate between − and +. A system alert opens over the panel (a lightbox, not inline), titled **Rate**, with a text field: the decimal pad on iPhone, the numbers layout on iPad, a text field on Mac. Type `8,1` (German format) or `8.1`; up to three decimals are accepted (`9,975`, Quebec's QST). **Done** applies it; **Cancel**, or Done on an empty field, keeps the old rate; text that isn't a valid rate changes nothing.
 3. Press and hold a preset. You feel the same haptic as other long-press actions, and the alert opens, titled **Edit Preset**; type a new value and press Done. The button shows the new value. Quit and relaunch: it is still there.
 4. To undo an edit, press and hold the preset again and type its original value.

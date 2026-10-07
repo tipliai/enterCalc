@@ -84,7 +84,6 @@
 "currency.vat.amount" = "TVA";
 "currency.vat.gross" = "TTC";
 "currency.tip.title" = "Pourboire";
-"currency.tip.bill" = "Addition";
 "currency.tip.rate" = "Pourboire";
 "currency.tip.rate.decrease" = "Diminuer le pourboire";
 "currency.tip.rate.increase" = "Augmenter le pourboire";

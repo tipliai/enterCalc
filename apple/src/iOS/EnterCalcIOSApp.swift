@@ -2982,13 +2982,19 @@ private extension EnterCalcIOSView {
         } label: {
             Text(localized(titleKey))
                 .font(EnterCalcFont.appFont(size: metrics.memoryFontSize))
-                .foregroundStyle((isActive ? palette.accent : palette.textPrimary).opacity(opacity))
+                // An open panel's pill is inverted (filled with the text colour)
+                // rather than tinted blue, which was hard to read on the display.
+                .foregroundStyle((isActive ? palette.surface : palette.textPrimary).opacity(opacity))
                 .padding(.horizontal, 7)
                 .padding(.vertical, 2)
+                .background(
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(isActive ? palette.textPrimary.opacity(opacity) : Color.clear)
+                )
                 .overlay(
                     RoundedRectangle(cornerRadius: 5)
                         .strokeBorder(
-                            (isActive ? palette.accent : palette.textSecondary).opacity(opacity * 0.7),
+                            (isActive ? palette.textPrimary : palette.textSecondary).opacity(isActive ? opacity : opacity * 0.7),
                             lineWidth: 1
                         )
                 )
