@@ -157,6 +157,18 @@ public final class RateEditor: ObservableObject {
         }
     }
 
+    /// Takes the text of the rate field. Returns `false`, changing nothing, when
+    /// the text is not a valid rate, so the field can put back what it had.
+    @discardableResult
+    public func setTypedText(_ raw: String, decimalSeparator: String) -> Bool {
+        guard isEditing, let typed = RateEntry(typed: raw, decimalSeparator: decimalSeparator) else { return false }
+        entry = typed
+        if let value = typed.value {
+            onLive?(value)
+        }
+        return true
+    }
+
     /// Abandons the edit without applying it, e.g. when the panel closes.
     public func cancel() {
         guard isEditing else { return }

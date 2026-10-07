@@ -103,4 +103,3 @@
 "currency.rate.presetHint" = "長押ししてこのプリセットに新しい値を入力";
 "currency.rate.done" = "完了";
 "currency.rate.restore" = "デフォルトに戻す";
-"currency.rate.delete" = "削除";

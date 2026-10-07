@@ -46,7 +46,6 @@ public struct RateEditingLabels {
     public let presetHint: String
     public let done: String
     public let restoreDefault: String
-    public let delete: String
 
     public init(localized: (String) -> String) {
         typeRate = localized("currency.rate.type")
@@ -54,16 +53,14 @@ public struct RateEditingLabels {
         presetHint = localized("currency.rate.presetHint")
         done = localized("currency.rate.done")
         restoreDefault = localized("currency.rate.restore")
-        delete = localized("currency.rate.delete")
     }
 }
 
-/// Quick-choice rates, a stepper, and typed entry on a number pad (#124).
+/// Quick-choice rates, a stepper, and typed entry (#124).
 ///
 /// Tap the rate to type one; press and hold a preset to type a new value for
-/// it, which is kept. Typing happens on a number pad drawn here, not the
-/// system keyboard: iPad has no number-only keyboard, and on iPhone it would
-/// cover the results being read.
+/// it, which is kept. Typing uses the system keyboard: the decimal pad on
+/// iPhone, and the numbers layout on iPad, which has no number-only pad.
 private struct RateChooser: View {
     let rates: [Decimal]
     let defaultRates: [Decimal]
@@ -184,19 +181,13 @@ private struct RateChooser: View {
 
                 Spacer(minLength: 8)
 
-                Text("\(editor.entry.displayText(decimalSeparator: decimalSeparator))%")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(palette.textPrimary)
-                    .lineLimit(1)
-                    .accessibilityAddTraits(.updatesFrequently)
+                RateField(
+                    editor: editor,
+                    placeholder: editor.entry.displayText(decimalSeparator: decimalSeparator),
+                    decimalSeparator: decimalSeparator,
+                    palette: palette
+                )
             }
-
-            RateKeypad(
-                decimalSeparator: decimalSeparator,
-                deleteLabel: labels.delete,
-                palette: palette,
-                onKey: { editor.press($0) }
-            )
 
             HStack(spacing: 6) {
                 if case .preset(let slot) = target, editedSlots.contains(slot), defaultRates.indices.contains(slot) {
@@ -232,66 +223,55 @@ private struct RateChooser: View {
     }
 }
 
-/// The number pad for typing a rate: 7 8 9 / 4 5 6 / 1 2 3 / separator 0 ⌫.
-private struct RateKeypad: View {
+/// The text field a rate is typed into, focused as soon as it appears.
+///
+/// It starts empty with the current rate as its placeholder, so typing replaces
+/// the rate rather than appending to it; Done on an untouched field keeps the
+/// rate. Text that is not a valid rate (a letter, a second separator, a third
+/// decimal, over 100) is refused as it is typed.
+private struct RateField: View {
+    @ObservedObject var editor: RateEditor
+    let placeholder: String
     let decimalSeparator: String
-    let deleteLabel: String
     let palette: Palette
-    let onKey: (RateEditor.Key) -> Void
 
-    private let rows: [[RateEditor.Key]] = [
-        [.digit(7), .digit(8), .digit(9)],
-        [.digit(4), .digit(5), .digit(6)],
-        [.digit(1), .digit(2), .digit(3)],
-        [.decimalSeparator, .digit(0), .backspace]
-    ]
+    @State private var text = ""
+    @FocusState private var isFocused: Bool
 
     var body: some View {
-        VStack(spacing: 6) {
-            ForEach(rows.indices, id: \.self) { row in
-                HStack(spacing: 6) {
-                    ForEach(rows[row].indices, id: \.self) { column in
-                        key(rows[row][column])
+        HStack(spacing: 2) {
+            TextField(placeholder, text: $text)
+                .multilineTextAlignment(.trailing)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(palette.textPrimary)
+                .textFieldStyle(.plain)
+                #if os(iOS)
+                .keyboardType(.decimalPad)
+                #endif
+                .autocorrectionDisabled()
+                .focused($isFocused)
+                .onSubmit { editor.press(.done) }
+                #if os(macOS)
+                .onExitCommand { editor.cancel() }
+                #endif
+                .onChange(of: text) { previous, typed in
+                    if !editor.setTypedText(typed, decimalSeparator: decimalSeparator) {
+                        text = previous
                     }
                 }
-            }
-        }
-    }
 
-    private func key(_ key: RateEditor.Key) -> some View {
-        Button { onKey(key) } label: {
-            label(for: key)
-                .font(.system(size: 18, weight: .medium))
+            Text("%")
+                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(palette.textPrimary)
-                .frame(maxWidth: .infinity)
-                .frame(height: 38)
-                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: 120)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(palette.buttonFunction)
         )
-        .accessibilityLabel(accessibilityLabel(for: key))
-    }
-
-    @ViewBuilder
-    private func label(for key: RateEditor.Key) -> some View {
-        switch key {
-        case .digit(let digit): Text("\(digit)")
-        case .decimalSeparator: Text(decimalSeparator)
-        case .backspace: Image(systemName: "delete.left")
-        case .done, .cancel: EmptyView()
-        }
-    }
-
-    private func accessibilityLabel(for key: RateEditor.Key) -> Text {
-        switch key {
-        case .digit(let digit): return Text("\(digit)")
-        case .decimalSeparator: return Text(decimalSeparator)
-        case .backspace: return Text(deleteLabel)
-        case .done, .cancel: return Text("")
-        }
+        .onAppear { isFocused = true }
     }
 }
 
