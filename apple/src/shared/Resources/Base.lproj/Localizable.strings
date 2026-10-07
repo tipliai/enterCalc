@@ -74,6 +74,11 @@
 "functionKey.hint" = "Press and hold to edit this key’s action";
 "functionKey.hint.mac" = "Right-click and choose Edit to edit this key’s action";
 "functionKey.edit" = "Edit";
+"functionKey.reset" = "Reset All Actions";
+"functionKey.reset.title" = "Reset All Actions?";
+"functionKey.reset.message" = "Every editable key goes back to its original action.";
+"functionKey.reset.confirm" = "Reset";
+"functionKey.reset.cancel" = "Cancel";
 
 /* Currency mode tools: VAT and tipping (issue #92) */
 "currency.vat.title" = "VAT";

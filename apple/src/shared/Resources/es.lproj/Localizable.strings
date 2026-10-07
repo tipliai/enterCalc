@@ -74,6 +74,11 @@
 "functionKey.hint" = "Mantén pulsado para editar la acción de esta tecla";
 "functionKey.hint.mac" = "Haz clic derecho y elige Editar para editar la acción de esta tecla";
 "functionKey.edit" = "Editar";
+"functionKey.reset" = "Restablecer todas las acciones";
+"functionKey.reset.title" = "¿Restablecer todas las acciones?";
+"functionKey.reset.message" = "Todas las teclas editables vuelven a su acción original.";
+"functionKey.reset.confirm" = "Restablecer";
+"functionKey.reset.cancel" = "Cancelar";
 
 /* Herramientas del modo moneda: IVA y propina (incidencia #92) */
 "currency.vat.title" = "IVA";

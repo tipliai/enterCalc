@@ -74,6 +74,11 @@
 "functionKey.hint" = "长按即可编辑此键的操作";
 "functionKey.hint.mac" = "右键点按并选择“编辑”以编辑此键的操作";
 "functionKey.edit" = "编辑";
+"functionKey.reset" = "重置所有操作";
+"functionKey.reset.title" = "要重置所有操作吗？";
+"functionKey.reset.message" = "所有可编辑的键都将恢复为原始操作。";
+"functionKey.reset.confirm" = "重置";
+"functionKey.reset.cancel" = "取消";
 
 /* 货币模式工具：增值税与小费 (议题 #92) */
 "currency.vat.title" = "增值税";
