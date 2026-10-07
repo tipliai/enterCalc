@@ -69,7 +69,7 @@
 "function.reciprocal" = "Inverse";
 "function.parentheses" = "Parenthèses";
 "function.percent" = "Pourcentage";
-"functionKey.chooser.title" = "Choisir une fonction";
+"functionKey.chooser.title" = "Modifier l’action";
 "functionKey.change" = "Changer de fonction";
 "functionKey.hint" = "Maintenez appuyé pour changer cette touche";
 "functionKey.hint.mac" = "Cliquez avec le bouton droit et choisissez Modifier pour changer cette touche";

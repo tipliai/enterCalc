@@ -69,7 +69,7 @@
 "function.reciprocal" = "倒数";
 "function.parentheses" = "括号";
 "function.percent" = "百分比";
-"functionKey.chooser.title" = "选择功能";
+"functionKey.chooser.title" = "编辑操作";
 "functionKey.change" = "更改功能";
 "functionKey.hint" = "长按即可更改此键";
 "functionKey.hint.mac" = "右键点按并选择“编辑”以更改此键";
