@@ -212,9 +212,6 @@ public struct CalculatorFunctionKeyChooser: View {
                 headerButton(symbol: "trash", label: resetLabels.button, isHovering: resetHoverBinding) {
                     isConfirmingReset = true
                 }
-                // Nothing to reset while every key has its original action.
-                .disabled(assignments == .default)
-                .opacity(assignments == .default ? 0.35 : 1)
                 Spacer(minLength: 0)
                 headerButton(symbol: "xmark", label: closeLabel, isHovering: closeHoverBinding, action: onClose)
             }
