@@ -274,4 +274,38 @@ final class CurrencyModeTests: XCTestCase {
         XCTAssertEqual(viewModel.display, "$5,120")
         XCTAssertEqual(caretRendering(of: viewModel), "$5|,120")
     }
+
+    // MARK: - Live VAT and Tip (#124)
+
+    // Opening a panel writes its result straight away; changing the rate
+    // replaces it rather than stacking, and one undo returns to the amount the
+    // panel started from.
+    func testLiveToolResultReplacesItselfAndUndoesInOneStep() {
+        let viewModel = currencyViewModel("100", symbol: "€")
+        let base = viewModel.toolBase(for: .vat)
+        XCTAssertEqual(base, 100)
+
+        viewModel.applyLiveToolResult(119, tool: .vat, base: base, describedBy: "Add VAT 19% =")
+        XCTAssertEqual(viewModel.currentValue, 119)
+        XCTAssertEqual(viewModel.toolBase(for: .vat), 100, "reopening works from the original amount")
+
+        viewModel.applyLiveToolResult(107, tool: .vat, base: base, describedBy: "Add VAT 7% =")
+        XCTAssertEqual(viewModel.currentValue, 107)
+
+        viewModel.undo()
+        XCTAssertEqual(viewModel.currentValue, 100, "one undo step for the whole adjustment")
+    }
+
+    // Another tool, or anything typed after the result, starts from what is
+    // on the display.
+    func testToolBaseFollowsTheDisplayOnceSomethingElseHappens() {
+        let viewModel = currencyViewModel("100", symbol: "€")
+        viewModel.applyLiveToolResult(119, tool: .vat, base: 100, describedBy: "Add VAT 19% =")
+
+        XCTAssertEqual(viewModel.toolBase(for: .tip), 119, "tipping on a VAT-inclusive price")
+
+        viewModel.inputDigit("5")
+        XCTAssertEqual(viewModel.toolBase(for: .vat), viewModel.currentValue)
+        XCTAssertEqual(viewModel.currentValue, 5)
+    }
 }

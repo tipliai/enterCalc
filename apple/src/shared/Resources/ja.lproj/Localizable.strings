@@ -93,7 +93,6 @@
 "currency.tip.amount" = "チップ";
 "currency.tip.total" = "合計";
 "currency.tip.perPerson" = "1人あたり";
-"currency.tool.use" = "結果を使う";
 "currency.tool.close" = "閉じる";
 
 /* Typed rates and editable presets on the VAT and Tip panels (issue #124) */

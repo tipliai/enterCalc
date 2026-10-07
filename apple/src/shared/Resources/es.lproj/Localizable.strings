@@ -93,7 +93,6 @@
 "currency.tip.amount" = "Propina";
 "currency.tip.total" = "Total";
 "currency.tip.perPerson" = "Por persona";
-"currency.tool.use" = "Usar resultado";
 "currency.tool.close" = "Cerrar";
 
 /* Typed rates and editable presets on the VAT and Tip panels (issue #124) */

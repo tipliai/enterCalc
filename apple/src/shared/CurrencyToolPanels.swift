@@ -13,29 +13,73 @@ private struct CurrencyToolChrome<Content: View>: View {
     let onDismiss: () -> Void
     @ViewBuilder var content: Content
 
+    #if os(macOS)
+    @State private var isCloseHovering = false
+    #endif
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(palette.textPrimary)
-
-                Spacer(minLength: 8)
-
-                Button(action: onDismiss) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(palette.textSecondary)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text(closeLabel))
-            }
-
+            header
             content
         }
-        .padding(16)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 16)
+        .padding(.top, 4)
+    }
+
+    /// Laid out like the rounding pane's header: the title centred in the
+    /// secondary colour, and the close button at the trailing edge.
+    private var header: some View {
+        ZStack {
+            Text(title)
+                #if os(macOS)
+                .font(EnterCalcFont.subheadline)
+                #else
+                .font(EnterCalcFont.appFont(size: 13))
+                #endif
+                .foregroundStyle(palette.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                closeButton
+            }
+        }
+        #if os(macOS)
+        .frame(height: 32)
+        #else
+        .frame(height: 44)
+        #endif
+    }
+
+    @ViewBuilder
+    private var closeButton: some View {
+        #if os(macOS)
+        Button(action: onDismiss) {
+            Image(systemName: "xmark")
+                .frame(width: 16, height: 16, alignment: .center)
+                .padding(8)
+                .background(isCloseHovering ? palette.headerHover : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(palette.textSecondary)
+        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .help(closeLabel)
+        .accessibilityLabel(Text(closeLabel))
+        .onHover { isCloseHovering = $0 }
+        #else
+        Button(action: onDismiss) {
+            Image(systemName: "xmark")
+                .font(EnterCalcFont.appFont(size: 18))
+                .frame(width: 28, height: 28)
+                .foregroundColor(palette.textSecondary)
+        }
+        .frame(width: 44, height: 44, alignment: .center)
+        .contentShape(Rectangle())
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(closeLabel))
+        #endif
     }
 }
 
@@ -303,7 +347,7 @@ public struct CurrencyVATPanel: View {
     @ObservedObject private var rateEditor: RateEditor
     private let onPresetEdited: (Int, Decimal?) -> Void
     private let onDirectionChange: (Bool) -> Void
-    private let onApply: (Decimal) -> Void
+    private let onResult: (Decimal) -> Void
     private let onDismiss: () -> Void
 
     public init(
@@ -320,7 +364,7 @@ public struct CurrencyVATPanel: View {
         rateEditor: RateEditor,
         onPresetEdited: @escaping (Int, Decimal?) -> Void,
         onDirectionChange: @escaping (Bool) -> Void,
-        onApply: @escaping (Decimal) -> Void,
+        onResult: @escaping (Decimal) -> Void,
         onDismiss: @escaping () -> Void
     ) {
         self.value = value
@@ -336,7 +380,7 @@ public struct CurrencyVATPanel: View {
         self.rateEditor = rateEditor
         self.onPresetEdited = onPresetEdited
         self.onDirectionChange = onDirectionChange
-        self.onApply = onApply
+        self.onResult = onResult
         self.onDismiss = onDismiss
     }
 
@@ -381,11 +425,24 @@ public struct CurrencyVATPanel: View {
                         ResultRow(label: localized("currency.vat.amount"), value: format(breakdown.vat), isEmphasised: false, palette: palette)
                         ResultRow(label: localized("currency.vat.gross"), value: format(breakdown.gross), isEmphasised: !isRemoving, palette: palette)
                     }
-
-                    applyButton(for: isRemoving ? breakdown.net : breakdown.gross)
                 }
             }
         }
+        // Applied as soon as the panel opens, and again on every change: there
+        // is no Use Result step. Reopening the panel adjusts the same result.
+        .onAppear(perform: sendResult)
+        .onChange(of: appliedResult) { _, _ in sendResult() }
+    }
+
+    /// The figure written to the display: the gross when adding VAT, the net
+    /// when removing it.
+    private var appliedResult: Decimal? {
+        breakdown.map { isRemoving ? $0.net : $0.gross }
+    }
+
+    private func sendResult() {
+        guard value != 0, let appliedResult else { return }
+        onResult(appliedResult)
     }
 
     private var directionPicker: some View {
@@ -411,22 +468,6 @@ public struct CurrencyVATPanel: View {
         )
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
-
-    private func applyButton(for result: Decimal) -> some View {
-        Button { onApply(result) } label: {
-            Text(localized("currency.tool.use"))
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(palette.accentText)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 9)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .background(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(palette.accent)
-        )
-    }
 }
 
 // MARK: - Tip
@@ -446,7 +487,7 @@ public struct CurrencyTipPanel: View {
     @ObservedObject private var rateEditor: RateEditor
     private let onPresetEdited: (Int, Decimal?) -> Void
     private let onSplitChange: (Int) -> Void
-    private let onApply: (Decimal) -> Void
+    private let onResult: (Decimal) -> Void
     private let onDismiss: () -> Void
 
     public init(
@@ -462,7 +503,7 @@ public struct CurrencyTipPanel: View {
         rateEditor: RateEditor,
         onPresetEdited: @escaping (Int, Decimal?) -> Void,
         onSplitChange: @escaping (Int) -> Void,
-        onApply: @escaping (Decimal) -> Void,
+        onResult: @escaping (Decimal) -> Void,
         onDismiss: @escaping () -> Void
     ) {
         self.bill = bill
@@ -477,7 +518,7 @@ public struct CurrencyTipPanel: View {
         self.rateEditor = rateEditor
         self.onPresetEdited = onPresetEdited
         self.onSplitChange = onSplitChange
-        self.onApply = onApply
+        self.onResult = onResult
         self.onDismiss = onDismiss
     }
 
@@ -533,21 +574,15 @@ public struct CurrencyTipPanel: View {
                         ResultRow(label: localized("currency.tip.perPerson"), value: format(breakdown.perPerson), isEmphasised: true, palette: palette)
                     }
                 }
-
-                Button { onApply(breakdown.total) } label: {
-                    Text(localized("currency.tool.use"))
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(palette.accentText)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 9)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .background(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(palette.accent)
-                )
             }
         }
+        // Applied as soon as the panel opens, and again on every change.
+        .onAppear(perform: sendResult)
+        .onChange(of: breakdown.total) { _, _ in sendResult() }
+    }
+
+    private func sendResult() {
+        guard bill != 0 else { return }
+        onResult(breakdown.total)
     }
 }

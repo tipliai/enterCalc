@@ -1512,7 +1512,7 @@ private extension EnterCalcIOSView {
             } else if activeOverlay == .vat {
                 roundingOverlayPanel(metrics: metrics) {
                     CurrencyVATPanel(
-                        value: activeScreen.viewModel.currentValue,
+                        value: activeScreen.viewModel.toolBase(for: .vat),
                         rate: vatRate,
                         presets: vatPresets,
                         currencyFractionDigits: CurrencyCatalog.fractionDigits(forSymbol: activeScreen.viewModel.activeCurrencySymbol ?? ""),
@@ -1527,10 +1527,9 @@ private extension EnterCalcIOSView {
                             editPreset(slot, to: rate, in: vatPresets) { storedVATPresetOverrides = $0 }
                         },
                         onDirectionChange: { vatRemovesTax = $0; triggerActionFeedback() },
-                        onApply: { result in
-                            activeScreen.viewModel.applyToolResult(result, describedBy: vatSummary())
-                            triggerActionFeedback(emphasized: true)
-                            dismissActiveOverlay()
+                        onResult: { result in
+                            let viewModel = activeScreen.viewModel
+                            viewModel.applyLiveToolResult(result, tool: .vat, base: viewModel.toolBase(for: .vat), describedBy: vatSummary())
                         },
                         onDismiss: { dismissActiveOverlay() }
                     )
@@ -1539,7 +1538,7 @@ private extension EnterCalcIOSView {
             } else if activeOverlay == .tip {
                 roundingOverlayPanel(metrics: metrics) {
                     CurrencyTipPanel(
-                        bill: activeScreen.viewModel.currentValue,
+                        bill: activeScreen.viewModel.toolBase(for: .tip),
                         rate: tipRate,
                         presets: tipPresets,
                         splitCount: tipSplitCount,
@@ -1553,10 +1552,9 @@ private extension EnterCalcIOSView {
                             editPreset(slot, to: rate, in: tipPresets) { storedTipPresetOverrides = $0 }
                         },
                         onSplitChange: { tipSplitCount = clampedSplitCount($0); triggerActionFeedback() },
-                        onApply: { result in
-                            activeScreen.viewModel.applyToolResult(result, describedBy: tipSummary())
-                            triggerActionFeedback(emphasized: true)
-                            dismissActiveOverlay()
+                        onResult: { result in
+                            let viewModel = activeScreen.viewModel
+                            viewModel.applyLiveToolResult(result, tool: .tip, base: viewModel.toolBase(for: .tip), describedBy: tipSummary())
                         },
                         onDismiss: { dismissActiveOverlay() }
                     )

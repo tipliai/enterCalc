@@ -93,7 +93,6 @@
 "currency.tip.amount" = "Pourboire";
 "currency.tip.total" = "Total";
 "currency.tip.perPerson" = "Par personne";
-"currency.tool.use" = "Utiliser le résultat";
 "currency.tool.close" = "Fermer";
 
 /* Typed rates and editable presets on the VAT and Tip panels (issue #124) */

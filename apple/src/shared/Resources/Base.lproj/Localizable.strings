@@ -93,7 +93,6 @@
 "currency.tip.amount" = "Tip";
 "currency.tip.total" = "Total";
 "currency.tip.perPerson" = "Each";
-"currency.tool.use" = "Use Result";
 "currency.tool.close" = "Close";
 
 /* Typed rates and editable presets on the VAT and Tip panels (issue #124) */
