@@ -9,16 +9,39 @@ import SwiftUI
 /// never start paging at all.
 public enum CalculatorPagerGestureIntent {
     /// Movement before the gesture is even considered. A tap that drifts stays
-    /// a tap.
-    public static let minimumDragDistance: CGFloat = 18
+    /// a tap. Raised from 18 for #122: fast typing slides a finger sideways as
+    /// it lifts toward the next key, and that alone used to start a page drag.
+    public static let minimumDragDistance: CGFloat = 28
     /// Movement along the paging axis before the page starts following the
     /// finger.
-    public static let minimumAxisTravel: CGFloat = 16
+    public static let minimumAxisTravel: CGFloat = 26
+    /// How far a finger may travel during a keypad press and still enter the
+    /// key. Kept below `minimumAxisTravel`, so one movement can never both
+    /// commit a tap and turn the page.
+    public static let keyTapAllowance: CGFloat = 22
     /// How much further the paging axis has to travel than the other one. A
     /// diagonal smudge off a key is not a page swipe.
     public static let axisDominanceRatio: CGFloat = 1.4
     /// Movement before a drag counts as under way, for interaction locks.
     public static let dragEngagedDistance: CGFloat = 10
+
+    /// Fraction of the page width the finger must travel before the page starts
+    /// to move (#122). Below this a swipe draws nothing, so short slips never
+    /// move the page. Waiting for the full turn distance (40% on iOS) felt
+    /// sluggish on device, so the page starts moving halfway there; turning
+    /// still needs the full distance. Never more than the turn distance.
+    public static let revealThresholdRatio: CGFloat = 0.2
+
+    /// How far the page is drawn from rest for a finger that has travelled
+    /// `along` the paging axis. Nothing is drawn until the finger passes
+    /// `revealDistance`, and from there the page eases out from rest rather
+    /// than jumping to where the finger is (#122). Only the
+    /// drawing uses this; whether the page turns still measures the finger's
+    /// full travel, so turning a page takes no further than before.
+    public static func visibleTranslation(along: CGFloat, revealDistance: CGFloat) -> CGFloat {
+        let shown = max(0, abs(along) - max(revealDistance, minimumAxisTravel))
+        return along < 0 ? -shown : shown
+    }
 
     /// Whether a drag is deliberate enough to be page navigation rather than a
     /// slip while using the keypad.
@@ -55,7 +78,12 @@ public struct CalculatorScreenPager<Content: View>: View {
     public let isGestureDisabled: Bool
     public let content: (Int) -> Content
 
-    @GestureState private var dragState = DragState()
+    // A swipe that falls short resets this to zero without changing the page,
+    // so the `activeIndex` animations never run for it. Without its own reset
+    // animation the page teleported back in a single frame (#122); it now
+    // springs back the same way a completed swipe settles.
+    @GestureState(resetTransaction: Transaction(animation: Self.pageSnapAnimation))
+    private var dragState = DragState()
     @State private var isTransitionSettling = false
     @State private var settlingDisplayIndex: Int? = nil
     @State private var transitionGeneration: Int = 0
@@ -199,9 +227,11 @@ public struct CalculatorScreenPager<Content: View>: View {
         return nil
     }
 
-    private var pageSnapAnimation: Animation {
+    private static var pageSnapAnimation: Animation {
         .interactiveSpring(response: 0.34, dampingFraction: 0.92, blendDuration: 0.16)
     }
+
+    private var pageSnapAnimation: Animation { Self.pageSnapAnimation }
 
     @ViewBuilder
     private func page(at index: Int) -> some View {
@@ -238,7 +268,15 @@ public struct CalculatorScreenPager<Content: View>: View {
             .updating($dragState) { value, state, _ in
                 let followsPagingAxis = isPredominantlyAlongPagingAxis(translation: value.translation)
                 state = DragState(
-                    translation: followsPagingAxis ? pagingTranslation(from: value.translation) : 0,
+                    translation: followsPagingAxis
+                        ? CalculatorPagerGestureIntent.visibleTranslation(
+                            along: pagingTranslation(from: value.translation),
+                            revealDistance: pageDimension * min(
+                                CalculatorPagerGestureIntent.revealThresholdRatio,
+                                activationThresholdRatio
+                            )
+                        )
+                        : 0,
                     isPagingAxis: followsPagingAxis
                 )
             }

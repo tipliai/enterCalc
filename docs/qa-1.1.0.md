@@ -52,7 +52,16 @@ xcrun simctl spawn booted log stream --style compact --signpost --predicate 'sub
 
 ## Page switching — #83
 
-The swipe-intent change was driven on the iPad simulator: a 12pt horizontal drift starting on a digit key now enters nothing and turns no page, while a 400pt swipe pages normally and still creates a new page past the last one. There is a deliberate dead band between the two — a keypad key gives up on its tap at 8pt of horizontal travel, and paging does not engage until 18pt, so a slide in between does nothing. That is the intended fix: a slip of that size is not a clear press or a clear swipe.
+Swipe intent, as revised by #122: a key accepts a press that travels up to 22pt, so a 12pt drift starting on a digit key **enters the digit** and turns no page. #116 originally had the key give up at 8pt of sideways travel, which dropped digits during fast typing. Paging is recognised at 28pt (raised from 18pt), the page starts to move at 20% of its width, and it turns at 40% (or 24% with a flick). A 400pt swipe pages normally and still creates a new page past the last one. Between 22pt and 28pt neither happens: a slip of that size is not a clear press or a clear swipe.
+
+**Page swipes and dots (#122), on iPhone and iPad:**
+
+1. Swipe partway and let go. The page should not move until about 20% of the width, and if it moved it should spring back smoothly, never jump.
+2. Start a swipe on a keypad key. The key should not play its press pop, and no digit is entered.
+3. Add a page, then close it. The calculator must not resize; the page dots fade in and out in a strip that is always reserved.
+4. Swipe slowly between pages. The dots stay fixed while the page slides beneath them.
+
+**Fast typing (#122), on iPhone and iPad:** type `123456789` quickly and repeatedly, with one thumb and then two alternating. Every digit should land, and the page should never start to move. Then make a deliberate swipe: it should still page with no extra effort.
 
 **The keyboard shortcuts were not driven.** Sending hardware keys to the simulator needs the Mac's display awake, and it was asleep for this pass — the same limitation that blocked the macOS driver.
 
