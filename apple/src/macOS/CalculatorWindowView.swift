@@ -2463,7 +2463,7 @@ private struct CompactActionButton: View {
                     .scaleEffect(x: horizontalScale, y: 1.0, anchor: .center)
                     .scaleEffect(pressPopScale)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .contentShape(Rectangle())
+                    .contentShape(keyShape)
             }
             .buttonStyle(PlainButtonStyle())
             .accessibilityLabel(Text(accessibilityLabelOverride ?? title))
