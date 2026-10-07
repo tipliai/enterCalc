@@ -956,9 +956,9 @@ struct CalculatorWindowView: View {
     var functionChooserOverlay: some View {
         if let session = functionChooser {
             ZStack {
-                // Catches the click that dismisses a chooser opened without a
-                // drag (VoiceOver's "Edit Action" action).
-                Color.black.opacity(0.001)
+                // Dims the calculator like the rounding, VAT and Tip panes
+                // (#131), and a click on it closes the chooser.
+                Color.black.opacity(overlayScrimOpacity)
                     .contentShape(Rectangle())
                     .onTapGesture { dismissFunctionChooser() }
 
