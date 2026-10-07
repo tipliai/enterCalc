@@ -1,4 +1,6 @@
 import SwiftUI
+// Provides the requestReview environment action used for the in-app prompt.
+import StoreKit
 #if canImport(UIKit)
 import UIKit
 #if canImport(CoreHaptics)
@@ -25,6 +27,10 @@ private enum IOSActionHaptics {
         true
 #endif
     }()
+    // `prepare()` warms the Taptic Engine, which takes time the system does not
+    // have if it is called in the same breath as the feedback. Preparing after
+    // firing warms the engine for the *next* press instead of adding work to
+    // this one, which is what the API is for.
     static func performKeyPress(isEnterKey: Bool = false) {
         guard supportsHaptics else {
             if !isEnterKey {
@@ -33,19 +39,19 @@ private enum IOSActionHaptics {
             return
         }
 
-        keyPressImpact.prepare()
         keyPressImpact.impactOccurred(intensity: 1.0)
+        keyPressImpact.prepare()
     }
 
     static func perform(emphasized: Bool) {
         if emphasized {
-            mediumImpact.prepare()
             mediumImpact.impactOccurred(intensity: 1)
-            successNotification.prepare()
             successNotification.notificationOccurred(.success)
+            mediumImpact.prepare()
+            successNotification.prepare()
         } else {
-            lightImpact.prepare()
             lightImpact.impactOccurred(intensity: 1.0)
+            lightImpact.prepare()
         }
     }
 
@@ -60,9 +66,119 @@ private enum IOSActionHaptics {
 #endif
 import EnterCalcCore
 
-extension Notification.Name {
-    static let enterCalcIOSToggleHistoryPanel = Notification.Name("EnterCalc.iOS.ToggleHistoryPanel")
-    static let enterCalcIOSToggleRoundingPanel = Notification.Name("EnterCalc.iOS.ToggleRoundingPanel")
+// Tracks the usage the review prompt is gated on, and remembers which release
+// already asked.
+//
+// Days are stored as a rolling set of day stamps rather than a counter so that
+// repeated use on one day counts once, which is the whole point of the gate.
+@MainActor
+final class ReviewPromptTracker {
+    static let shared = ReviewPromptTracker()
+
+    private static let daysUsedKey = "review.daysUsed"
+    private static let lastPromptedVersionKey = "review.lastPromptedVersion"
+
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    /// Records that the app was used today. Cheap and idempotent within a day.
+    func recordUsageToday(now: Date = Date(), calendar: Calendar = .current) {
+        let today = Self.dayStamp(for: now, calendar: calendar)
+        var days = defaults.stringArray(forKey: Self.daysUsedKey) ?? []
+        guard !days.contains(today) else { return }
+
+        days.append(today)
+        // Only the count matters, so keep this from growing without bound.
+        let trimmed: [String] = Array(days.suffix(30))
+        defaults.set(trimmed, forKey: Self.daysUsedKey)
+    }
+
+    var distinctDaysUsed: Int {
+        defaults.stringArray(forKey: Self.daysUsedKey)?.count ?? 0
+    }
+
+    func shouldRequestReview(completedCalculations: Int) -> Bool {
+        ReviewPromptPolicy.shouldRequestReview(
+            completedCalculations: completedCalculations,
+            distinctDaysUsed: distinctDaysUsed,
+            lastPromptedVersion: defaults.string(forKey: Self.lastPromptedVersionKey),
+            currentVersion: Self.currentVersion
+        )
+    }
+
+    /// Called once the prompt has been asked for, so this release does not ask
+    /// again. Recorded even though the system may choose not to show anything —
+    /// we have spent our one ask for this version either way.
+    func recordPromptShown() {
+        defaults.set(Self.currentVersion, forKey: Self.lastPromptedVersionKey)
+    }
+
+    private static func dayStamp(for date: Date, calendar: Calendar) -> String {
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        return "\(parts.year ?? 0)-\(parts.month ?? 0)-\(parts.day ?? 0)"
+    }
+
+    private static var currentVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+    }
+}
+
+// Caches whether haptics are switched off, so the key-press path does not touch
+// UserDefaults on every tap. The stored value is only changed from Settings, and
+// UserDefaults posts a notification when it does.
+@MainActor
+final class IOSHapticsPreference {
+    static let shared = IOSHapticsPreference()
+
+    private static let key = "settings.haptics.disabled"
+    private static let legacyKey = "settings.haptics.actions"
+
+    private(set) var isDisabled: Bool
+    private var observer: NSObjectProtocol?
+
+    private init() {
+        isDisabled = Self.readFromDefaults()
+        // Covers changes made inside the app. Changes made in the Settings app
+        // are a separate process and do not post here, which is why the scene
+        // also refreshes this on becoming active.
+        observer = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: UserDefaults.standard,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.refresh()
+            }
+        }
+    }
+
+    deinit {
+        if let observer {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    func refresh() {
+        isDisabled = Self.readFromDefaults()
+    }
+
+    private static func readFromDefaults() -> Bool {
+        let defaults = UserDefaults.standard
+
+        if defaults.object(forKey: key) != nil {
+            return defaults.bool(forKey: key)
+        }
+
+        // Older builds stored the inverse under a different key.
+        if let legacyUsesActionHaptics = defaults.object(forKey: legacyKey) as? Bool {
+            return !legacyUsesActionHaptics
+        }
+
+        return false
+    }
 }
 
 // Snapshot of a hardware-keyboard press, decoupled from UIKit so the SwiftUI
@@ -218,6 +334,7 @@ struct EnterCalcIOSApp: App {
                 Button(localized("history.copyOperation")) {
                     actionContext?.copyOperation()
                 }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
                 .disabled(actionContext?.canCopyOperation != true)
             }
 
@@ -249,18 +366,62 @@ struct EnterCalcIOSApp: App {
 
             CommandGroup(after: .toolbar) {
                 Button {
-                    NotificationCenter.default.post(name: .enterCalcIOSToggleHistoryPanel, object: nil)
+                    actionContext?.toggleHistoryPanel?()
                 } label: {
                     Label(localized("history.toggle"), systemImage: "clock.arrow.circlepath")
                 }
                 .keyboardShortcut("h", modifiers: [.command, .shift])
+                .disabled(actionContext?.toggleHistoryPanel == nil)
 
                 Button {
-                    NotificationCenter.default.post(name: .enterCalcIOSToggleRoundingPanel, object: nil)
+                    actionContext?.toggleRoundingPanel?()
                 } label: {
                     Label(localized("rounding.toggle"), systemImage: "slider.horizontal.below.rectangle")
                 }
                 .keyboardShortcut("r", modifiers: [.command])
+                .disabled(actionContext?.toggleRoundingPanel == nil)
+
+                Divider()
+
+                // Also the only way to resize the display without touch: the
+                // split between display and keypad is otherwise drag-only.
+                Button {
+                    actionContext?.growDisplayArea?()
+                } label: {
+                    Label(localized("display.grow"), systemImage: "arrow.up.and.down")
+                }
+                .keyboardShortcut(.upArrow, modifiers: [.shift])
+                .disabled(actionContext?.growDisplayArea == nil)
+
+                Button {
+                    actionContext?.shrinkDisplayArea?()
+                } label: {
+                    Label(localized("display.shrink"), systemImage: "arrow.up.and.down")
+                }
+                .keyboardShortcut(.downArrow, modifiers: [.shift])
+                .disabled(actionContext?.shrinkDisplayArea == nil)
+
+                Divider()
+
+                // The arrow names the page to go to: Shift + Right shows the page
+                // on the right, as Ctrl + Right does for Spaces. #83 first had
+                // it follow the swipe's finger direction instead, which read as
+                // inverted on a keyboard in QA.
+                Button {
+                    actionContext?.goToPreviousScreen?()
+                } label: {
+                    Label(localized("screen.previous"), systemImage: "chevron.left")
+                }
+                .keyboardShortcut(.leftArrow, modifiers: [.shift])
+                .disabled(actionContext?.goToPreviousScreen == nil)
+
+                Button {
+                    actionContext?.goToNextScreen?()
+                } label: {
+                    Label(localized("screen.next"), systemImage: "chevron.right")
+                }
+                .keyboardShortcut(.rightArrow, modifiers: [.shift])
+                .disabled(actionContext?.goToNextScreen == nil)
             }
         }
     }
@@ -276,7 +437,6 @@ struct EnterCalcIOSView: View {
             usesScientificNotation: true,
             numberFormatStyleRawValue: NumberFormatStyle.detected().rawValue,
             usesAlternativeKeypad: false,
-            usesEnterKeySymbol: true,
             disablesSwipeDownToRound: false,
             disablesButtonSound: false,
             keypadHeightMultiplier: 1.0
@@ -286,10 +446,26 @@ struct EnterCalcIOSView: View {
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.requestReview) private var requestReview
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotionEnabled
     @ScaledMetric(relativeTo: .largeTitle) private var displayDynamicTypeScale: CGFloat = 1.0
     @State private var activeOverlay: IOSOverlayPane? = nil
     @State private var showSettingsSheet: Bool = false
+    /// Live hold-and-drag reassignment of a configurable key, if one is running.
+    @State private var functionChooser: FunctionKeyChooserSession? = nil
+    // Currency-mode tool settings (#92). Session state rather than a stored
+    // preference: they belong to the calculation in progress, the same way the
+    // currency symbol itself does.
+    // Rates and edited presets are kept across launches (#124). The VAT rate
+    // starts on the region's standard rate until one is chosen.
+    @AppStorage(RateToolPreferences.vatRateKey) private var storedVATRate = ""
+    @AppStorage(RateToolPreferences.vatPresetOverridesKey) private var storedVATPresetOverrides = ""
+    @AppStorage(RateToolPreferences.tipRateKey) private var storedTipRate = ""
+    @AppStorage(RateToolPreferences.tipPresetOverridesKey) private var storedTipPresetOverrides = ""
+    @StateObject private var rateEditor = RateEditor()
+    @State private var sessionVATRate: Decimal?
+    @State private var sessionTipRate: Decimal?
+    @State private var vatRemovesTax: Bool = false
     @State private var counterRotatesForUpsideDownPortrait: Bool = false
     @State private var flashCopy: Bool = false
     @State private var showCopyToast: Bool = false
@@ -308,6 +484,10 @@ struct EnterCalcIOSView: View {
     @State private var previousScreenCount: Int = 1
     @State private var keypadResizeGestureStartMultiplier: Double = 1.0
     @State private var isResizingKeypadHeight: Bool = false
+    // The height the keypad multiplier is relative to, captured while laying out
+    // the resize handle so a keyboard step can be expressed in points. Zero in
+    // landscape, where the keypad is pinned and there is nothing to resize.
+    @State private var lastKeypadResizeReferenceHeight: CGFloat = 0
     @State private var historyOverlayResizeGestureStartHeight: CGFloat = 0
     @State private var isResizingHistoryOverlay: Bool = false
     @State private var liveHistoryOverlayHeight: CGFloat? = nil
@@ -322,10 +502,11 @@ struct EnterCalcIOSView: View {
     @AppStorage("settings.numberFormat.scientific") private var preferredScientificNotation: Bool = true
     @AppStorage("settings.numberFormat.style") private var preferredNumberFormatRaw: String = NumberFormatStyle.detected().rawValue
     @AppStorage("settings.keypad.alternative") private var preferredUsesAlternativeKeypad: Bool = false
-    @AppStorage("settings.equals.enterKeySymbol") private var preferredUsesEnterKeySymbol: Bool = true
     @AppStorage("settings.rounding.disableSwipeDown") private var preferredDisablesSwipeDownToRound: Bool = false
     @AppStorage("settings.keypadHeightMultiplier") private var preferredKeypadHeightMultiplier: Double = 1.0
     @AppStorage("settings.reduceMotion.enabled") private var preferredReduceMotionEnabled: Bool = false
+    @AppStorage("settings.currency.symbol") private var preferredCurrencySymbol: String = CurrencyCatalog.detected().symbol
+    @AppStorage("settings.functionKeys.assignments") private var preferredFunctionKeyAssignmentsRaw: String = ""
 
     private var activeScreen: CalculatorScreenSession {
         screenStore.activeScreen
@@ -347,15 +528,19 @@ struct EnterCalcIOSView: View {
             usesScientificNotation: preferredScientificNotation,
             numberFormatStyleRawValue: preferredNumberFormatRaw,
             usesAlternativeKeypad: preferredUsesAlternativeKeypad,
-            usesEnterKeySymbol: preferredUsesEnterKeySymbol,
             disablesSwipeDownToRound: preferredDisablesSwipeDownToRound,
             disablesButtonSound: false,
-            keypadHeightMultiplier: keypadHeightMultiplier
+            keypadHeightMultiplier: keypadHeightMultiplier,
+            currencySymbol: preferredCurrencySymbol,
+            functionKeyAssignments: CalculatorFunctionKeyAssignments(serialized: preferredFunctionKeyAssignmentsRaw)
         )
     }
 
     private var equalsButtonTitle: String {
-        activeScreen.settings.usesEnterKeySymbol ? localized("key.enter") : "="
+        EqualsKeyLabel.usesEnterWord(
+            usesAlternativeKeypad: activeScreen.settings.usesAlternativeKeypad,
+            resolvedLocalizationCode: resolvedLocalizationCode(for: activeScreen.settings.languageCode)
+        ) ? localized("key.enter") : EqualsKeyLabel.symbol
     }
 
     private var clearButtonTitle: String {
@@ -375,13 +560,21 @@ struct EnterCalcIOSView: View {
             copy: { copyCurrentResultToPasteboard(from: viewModel) },
             copyOperation: { copyCurrentOperationToPasteboard(from: viewModel) },
             canCopyOperation: viewModel.hasOperationToCopy,
-            paste: { viewModel.pasteFromPasteboard() },
-            undo: { viewModel.undo() },
-            redo: { viewModel.redo() },
+            // Menu commands that change the display close an open VAT/Tip pane
+            // first, the same as typing does, so the pane can't drift from it.
+            paste: { closeToolPane(); viewModel.pasteFromPasteboard() },
+            undo: { closeToolPane(); viewModel.undo() },
+            redo: { closeToolPane(); viewModel.redo() },
             canUndo: viewModel.canUndo,
             canRedo: viewModel.canRedo,
-            clear: { viewModel.clearEntry() },
-            clearAll: { viewModel.clearAll() }
+            clear: { closeToolPane(); viewModel.clearEntry() },
+            clearAll: { closeToolPane(); viewModel.clearAll() },
+            toggleHistoryPanel: currentDeviceFamily() == .pad ? { toggleOverlay(.history) } : nil,
+            toggleRoundingPanel: currentDeviceFamily() == .pad ? { toggleOverlay(.rounding) } : nil,
+            growDisplayArea: { adjustDisplayHeightFromKeyboard(byPoints: Self.keyboardDisplayResizeStep) },
+            shrinkDisplayArea: { adjustDisplayHeightFromKeyboard(byPoints: -Self.keyboardDisplayResizeStep) },
+            goToNextScreen: { goToNextScreenFromKeyboard() },
+            goToPreviousScreen: { goToPreviousScreenFromKeyboard() }
         )
     }
 
@@ -397,6 +590,48 @@ struct EnterCalcIOSView: View {
         activeScreen.settings.usesAlternativeKeypad
     }
 
+    // The rate in use belongs to this window (or iPad scene) for the session,
+    // so changing it in one window never rewrites another window's display.
+    // The stored value is only the default a new window starts from.
+    private var vatRate: Decimal {
+        get { sessionVATRate ?? RateToolPreferences.rate(fromStored: storedVATRate, fallback: VATRateCatalog.defaultRate()) }
+        nonmutating set {
+            sessionVATRate = newValue
+            storedVATRate = RateToolPreferences.storedText(for: newValue)
+        }
+    }
+
+    private var tipRate: Decimal {
+        get { sessionTipRate ?? RateToolPreferences.rate(fromStored: storedTipRate, fallback: RateToolPreferences.defaultTipRate) }
+        nonmutating set {
+            sessionTipRate = newValue
+            storedTipRate = RateToolPreferences.storedText(for: newValue)
+        }
+    }
+
+    private func ratePresets(defaults: [Decimal], storedOverrides: String) -> RatePresets {
+        RatePresets(
+            defaults: defaults,
+            overrides: RatePresetOverrides(serialized: storedOverrides),
+            decimalSeparator: activeScreen.viewModel.numberFormatStyle.decimalSeparator
+        )
+    }
+
+    private var vatPresets: RatePresets {
+        ratePresets(defaults: VATRateCatalog.presets(), storedOverrides: storedVATPresetOverrides)
+    }
+
+    private var tipPresets: RatePresets {
+        ratePresets(defaults: TipBreakdown.presetRates, storedOverrides: storedTipPresetOverrides)
+    }
+
+    /// Saves a long-pressed preset's new value, or restores its default.
+    private func editPreset(_ slot: Int, to rate: Decimal?, in presets: RatePresets, store: (String) -> Void) {
+        var overrides = presets.overrides
+        overrides.set(rate, forSlot: slot, default: presets.defaults.indices.contains(slot) ? presets.defaults[slot] : nil)
+        store(overrides.serialized)
+    }
+
     private var reduceMotionEnabled: Bool {
         systemReduceMotionEnabled || preferredReduceMotionEnabled
     }
@@ -409,6 +644,12 @@ struct EnterCalcIOSView: View {
         isResizingKeypadHeight || liveHistoryOverlayHeight != nil
     }
 
+    /// Long enough to read as a crossfade, short enough not to hold up the
+    /// page change itself.
+    static let themeTransitionDuration: Double = 0.28
+
+    // The alternative keypad has no configurable keys, so unlike `basicRows`
+    // it needs nothing from the screen.
     private var legacyRows: [[IOSCalcButton]] {
         [
             [
@@ -441,12 +682,12 @@ struct EnterCalcIOSView: View {
         ]
     }
 
-    private var basicRows: [[IOSCalcButton]] {
+    private func basicRows(for screen: CalculatorScreenSession) -> [[IOSCalcButton]] {
         [
             [
                 .function(clearButtonTitle, action: { _ in self.handleContextualClear() }),
-                .function("( )", action: { $0.inputParentheses() }),
-                .function("%", action: { $0.applyPercent() }),
+                configurableKeypadButton(for: .parenthesesKey, screen: screen),
+                configurableKeypadButton(for: .percentKey, screen: screen),
                 .operation("÷", action: { $0.setOperator(.divide) })
             ],
             [
@@ -466,23 +707,154 @@ struct EnterCalcIOSView: View {
         ]
     }
 
-    private var mainRows: [[IOSCalcButton]] {
-        usesAlternativeKeypad ? legacyRows : basicRows
+    private func mainRows(for screen: CalculatorScreenSession) -> [[IOSCalcButton]] {
+        screen.settings.usesAlternativeKeypad ? legacyRows : basicRows(for: screen)
     }
 
-    private var actionRowButtons: [IOSActionRowButton] {
-        guard !usesAlternativeKeypad else { return [] }
-        return [
-            IOSActionRowButton(symbol: "arrow.uturn.backward", accessibilityLabelKey: "undo", action: { $0.viewModel.undo() }),
-            IOSActionRowButton(symbol: "arrow.uturn.forward", accessibilityLabelKey: "redo", action: { $0.viewModel.redo() }),
-            IOSActionRowButton(symbol: "plusminus", accessibilityLabelKey: "toggleSign", action: { $0.viewModel.toggleSign() }),
-            IOSActionRowButton(symbol: "slider.horizontal.below.rectangle", accessibilityLabelKey: "rounding.toggle", action: { _ in toggleOverlay(.rounding) }),
-            IOSActionRowButton(symbol: "delete.left", accessibilityLabelKey: "backspace", action: { $0.viewModel.backspace() })
-        ]
+    // MARK: - Configurable function keys (#67)
+
+    /// Which functions the page currently shows. Per page, so two pages can be
+    /// set up for different work.
+    func functionKeyAssignments(for screen: CalculatorScreenSession) -> CalculatorFunctionKeyAssignments {
+        screen.settings.functionKeyAssignments
     }
 
-    private var flattenedMainButtons: [IOSCalcButton] {
-        mainRows.flatMap { $0 }
+    /// The active page's layout, for the chooser overlay — which only ever
+    /// belongs to the page the user is interacting with.
+    var functionKeyAssignments: CalculatorFunctionKeyAssignments {
+        functionKeyAssignments(for: activeScreen)
+    }
+
+    /// Only the default keypad has configurable keys. The alternative keypad
+    /// has no action row and already carries fixed 1/x, x² and √x keys, so
+    /// reassigning its two large keys could put the same function on screen
+    /// twice.
+    func supportsConfigurableFunctionKeys(for screen: CalculatorScreenSession) -> Bool {
+        !screen.settings.usesAlternativeKeypad
+    }
+
+    var supportsConfigurableFunctionKeys: Bool {
+        supportsConfigurableFunctionKeys(for: activeScreen)
+    }
+
+    private func actionRowSlots(for screen: CalculatorScreenSession) -> [CalculatorFunctionSlot] {
+        supportsConfigurableFunctionKeys(for: screen) ? CalculatorFunctionSlot.actionRowSlots : []
+    }
+
+    func functionKeyLabel(_ function: CalculatorFunctionKey) -> String {
+        localized(function.accessibilityLabelKey)
+    }
+
+    func performFunction(_ function: CalculatorFunctionKey, on screen: CalculatorScreenSession) {
+        switch function {
+        case .undo: screen.viewModel.undo()
+        case .redo: screen.viewModel.redo()
+        case .toggleSign: screen.viewModel.toggleSign()
+        case .currency: screen.viewModel.toggleCurrencySymbol(screen.settings.currencySymbol)
+        case .rounding: toggleOverlay(.rounding)
+        case .backspace: screen.viewModel.backspace()
+        case .squareRoot: screen.viewModel.squareRoot()
+        case .square: screen.viewModel.square()
+        case .reciprocal: screen.viewModel.reciprocal()
+        case .parentheses: screen.viewModel.inputParentheses()
+        case .percent: screen.viewModel.applyPercent()
+        }
+    }
+
+    private func configurableKeypadButton(for slot: CalculatorFunctionSlot, screen: CalculatorScreenSession) -> IOSCalcButton {
+        let function = functionKeyAssignments(for: screen)[slot]
+        return .configurable(
+            slot: slot,
+            function: function,
+            currencySymbol: screen.settings.currencySymbol,
+            accessibilityLabel: functionKeyLabel(function)
+        )
+    }
+
+    func openFunctionChooser(for slot: CalculatorFunctionSlot, anchor: CGRect, dragging: Bool) {
+        guard supportsConfigurableFunctionKeys else { return }
+        DebugLog.emit("functionKeys", "chooser opened for \(slot.rawValue)")
+        animateIfAllowed(.easeOut(duration: 0.14)) {
+            functionChooser = FunctionKeyChooserSession(
+                slot: slot,
+                anchor: anchor,
+                dragLocation: dragging ? CGPoint(x: anchor.midX, y: anchor.midY) : nil
+            )
+        }
+        triggerActionFeedback()
+    }
+
+    func updateFunctionChooserDrag(_ location: CGPoint) {
+        guard functionChooser != nil else { return }
+        functionChooser?.dragLocation = location
+    }
+
+    func highlightFunctionChooserOption(_ function: CalculatorFunctionKey?) {
+        guard functionChooser?.highlighted != function else { return }
+        functionChooser?.highlighted = function
+        if function != nil { triggerActionFeedback() }
+    }
+
+    /// Lifting a finger that is already over an option commits it. Lifting
+    /// anywhere else leaves the chooser on screen so the option can be tapped
+    /// instead — the hold does not have to become a drag.
+    func releaseFunctionChooser() {
+        guard let session = functionChooser else { return }
+        if let function = session.highlighted {
+            commitFunctionChooser(function)
+            return
+        }
+
+        // No longer a drag, so the panel stops tracking a finger and waits.
+        functionChooser?.dragLocation = nil
+        functionChooser?.highlighted = nil
+    }
+
+    func commitFunctionChooser(_ function: CalculatorFunctionKey) {
+        guard let session = functionChooser else { return }
+        updateActiveScreenSettings { $0.functionKeyAssignments.assign(function, to: session.slot) }
+        triggerActionFeedback(emphasized: true)
+        DebugLog.emit("functionKeys", "\(session.slot.rawValue) = \(function.rawValue); layout = \(describeFunctionKeyLayout())")
+        dismissFunctionChooser()
+    }
+
+    func describeFunctionKeyLayout() -> String {
+        let assignments = functionKeyAssignments
+        return CalculatorFunctionSlot.allCases
+            .map { "\($0.rawValue):\(assignments[$0].rawValue)" }
+            .joined(separator: " ")
+    }
+
+    func dismissFunctionChooser() {
+        animateIfAllowed(.easeOut(duration: 0.14)) {
+            functionChooser = nil
+        }
+    }
+
+    @ViewBuilder
+    func functionChooserOverlay() -> some View {
+        if let session = functionChooser {
+            ZStack {
+                // Catches the tap that dismisses a chooser opened without a
+                // drag (VoiceOver's "Change function" action).
+                Color.black.opacity(0.001)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { dismissFunctionChooser() }
+
+                CalculatorFunctionKeyChooser(
+                    session: session,
+                    assignments: functionKeyAssignments,
+                    palette: palette,
+                    currencySymbol: activeScreen.settings.currencySymbol,
+                    title: localized("functionKey.chooser.title"),
+                    label: { functionKeyLabel($0) },
+                    onHighlight: { highlightFunctionChooserOption($0) },
+                    onCommit: { commitFunctionChooser($0) }
+                )
+            }
+            .transition(.opacity)
+        }
     }
 
     var body: some View {
@@ -513,6 +885,10 @@ struct EnterCalcIOSView: View {
                 overlayPanels(metrics: metrics, containerSize: geometry.size, safeAreaInsets: geometry.safeAreaInsets)
                     .rotationEffect(.degrees(counterRotatesForUpsideDownPortrait ? 180 : 0))
 
+                functionChooserOverlay()
+                    .rotationEffect(.degrees(counterRotatesForUpsideDownPortrait ? 180 : 0))
+                    .zIndex(3)
+
                 if showCopyToast && !(metrics.mode == .phonePortrait && counterRotatesForUpsideDownPortrait) {
                     copyToastOverlay(metrics: metrics, safeAreaInsets: geometry.safeAreaInsets)
                         .rotationEffect(.degrees(counterRotatesForUpsideDownPortrait ? 180 : 0))
@@ -521,7 +897,9 @@ struct EnterCalcIOSView: View {
                 }
 
                 IOSHardwareKeyCaptureView(
-                    isEnabled: scenePhase == .active && !showSettingsSheet,
+                    // A rate being typed needs the keyboard focus for its text
+                    // field (#124), so the calculator's key capture steps aside.
+                    isEnabled: scenePhase == .active && !showSettingsSheet && !rateEditor.isEditing,
                     onKeyPress: handleHardwareKey
                 )
                 .frame(width: 1, height: 1)
@@ -530,6 +908,12 @@ struct EnterCalcIOSView: View {
                 .accessibilityHidden(true)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            // Pages can carry different themes, and switching between a dark
+            // one and a light one used to be a hard cut (#83). Animating on the
+            // resolved theme lets every colour-driven modifier below crossfade
+            // instead — background, keys and text together, rather than the
+            // background alone, which would look worse than the hard cut.
+            .animation(reduceMotionEnabled ? nil : .easeInOut(duration: Self.themeTransitionDuration), value: activeTheme)
             .preferredColorScheme(activeTheme.preferredColorScheme)
             .focusedSceneValue(\.calculatorActions, actionContext)
             .transaction { transaction in
@@ -540,6 +924,7 @@ struct EnterCalcIOSView: View {
             }
             .onAppear {
                 syncSystemSettingsMetadata()
+                ReviewPromptTracker.shared.recordUsageToday()
                 normalizePreferredLanguageIfNeeded()
                 syncHomeScreenFromStoredSettings()
                 applyActiveScreenConfiguration()
@@ -553,6 +938,11 @@ struct EnterCalcIOSView: View {
                 stopDisplayShimmerParallaxMotion()
                 stopDeviceOrientationObservation()
             }
+            // Leaving currency mode takes its tools with it, so a panel is
+            // never left open over a calculator that is no longer in the mode.
+            .onValueChange(of: activeScreen.viewModel.activeCurrencySymbol) { _ in
+                dismissCurrencyToolsIfNeeded()
+            }
             .onValueChange(of: scenePhase) { newPhase in
                 guard newPhase == .active else {
                     stopDisplayShimmerParallaxMotion()
@@ -560,6 +950,10 @@ struct EnterCalcIOSView: View {
                 }
 
                 syncSystemSettingsMetadata()
+                // The haptics preference lives in the Settings bundle, so it is
+                // changed by the Settings app rather than in this process and no
+                // change notification arrives. Re-read it on the way back in.
+                IOSHapticsPreference.shared.refresh()
                 if isDefaultLocalizationSelection(activeScreen.settings.languageCode) {
                     applyActiveScreenConfiguration()
                 }
@@ -583,6 +977,21 @@ struct EnterCalcIOSView: View {
             }
             .onValueChange(of: preferredScientificNotation) { _ in
                 syncHomeScreenFromStoredSettings()
+            }
+            // An open rate edit belongs to the panel; closing the panel by any
+            // route (✕, trash, the scrim, leaving Currency mode) abandons it.
+            // Any overlay change cancels it, including switching straight
+            // between VAT and Tip, which share the editor.
+            .onValueChange(of: activeOverlay) { _ in
+                rateEditor.cancel()
+            }
+            // A preset opened for editing by press-and-hold gets the same
+            // haptic as the other long-press actions, such as the function-key
+            // chooser (#124).
+            .onValueChange(of: rateEditor.target) { target in
+                if case .preset = target {
+                    triggerActionFeedback()
+                }
             }
             .onValueChange(of: preferredNumberFormatRaw) { _ in
                 syncHomeScreenFromStoredSettings()
@@ -626,8 +1035,8 @@ struct EnterCalcIOSView: View {
                     selectedLanguage: activeLanguageBinding,
                     usesScientificNotation: activeScientificNotationBinding,
                     selectedNumberFormat: activeNumberFormatBinding,
+                    selectedCurrencySymbol: activeCurrencySymbolBinding,
                     usesAlternativeKeypad: activeAlternativeKeypadBinding,
-                    usesEnterKeySymbol: activeEnterKeySymbolBinding,
                     disablesSwipeDownToRound: activeDisableSwipeDownToRoundBinding,
                     availableLanguages: availableLanguageOptions(),
                     counterRotatesForUpsideDownPortrait: counterRotatesForUpsideDownPortrait
@@ -640,19 +1049,12 @@ struct EnterCalcIOSView: View {
                 updateDisplayShimmerParallax()
                 reconcileDisplayLayoutAfterOrientationChange()
             }
-            .onReceive(NotificationCenter.default.publisher(for: .enterCalcIOSToggleRoundingPanel)) { _ in
-                #if canImport(UIKit)
-                guard UIDevice.current.userInterfaceIdiom == .pad else { return }
-                #endif
-                toggleOverlay(.rounding)
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .enterCalcIOSToggleHistoryPanel)) { _ in
-                #if canImport(UIKit)
-                guard UIDevice.current.userInterfaceIdiom == .pad else { return }
-                #endif
-                toggleOverlay(.history)
-            }
         }
+        // The only keyboard this screen raises is the rate alert's (#124), and
+        // nothing here needs to stay above it. Without this the layout measured
+        // a screen shortened by the keyboard and lifted the VAT/Tip panel over
+        // the calculator; now the keyboard simply covers the bottom.
+        .ignoresSafeArea(.keyboard, edges: .bottom)
     }
 }
 
@@ -694,20 +1096,25 @@ private extension EnterCalcIOSView {
         )
     }
 
+    var activeCurrencySymbolBinding: Binding<String> {
+        Binding(
+            get: { activeScreen.settings.currencySymbol },
+            set: { newValue in
+                updateActiveScreenSettings { $0.currencySymbol = newValue }
+                // Re-label a value already on screen so the change is visible
+                // immediately rather than only on the next entry.
+                if activeScreen.viewModel.activeCurrencySymbol != nil {
+                    activeScreen.viewModel.inputCurrencySymbol(newValue)
+                }
+            }
+        )
+    }
+
     var activeAlternativeKeypadBinding: Binding<Bool> {
         Binding(
             get: { activeScreen.settings.usesAlternativeKeypad },
             set: { newValue in
                 updateActiveScreenSettings { $0.usesAlternativeKeypad = newValue }
-            }
-        )
-    }
-
-    var activeEnterKeySymbolBinding: Binding<Bool> {
-        Binding(
-            get: { activeScreen.settings.usesEnterKeySymbol },
-            set: { newValue in
-                updateActiveScreenSettings { $0.usesEnterKeySymbol = newValue }
             }
         )
     }
@@ -740,6 +1147,15 @@ private extension EnterCalcIOSView {
     func handleHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
         resetLandscapeDisplayScroll(for: activeScreen)
 
+        // VAT and Tip apply live to the display, so any key on the calculator
+        // while one is open — typing, or a shortcut such as ⌘V, ⌘Z or
+        // ⌘Delete — closes it first: the result stays, and the key then does
+        // what it always does (#124). Escape just closes the pane.
+        if activeOverlay == .vat || activeOverlay == .tip {
+            closeToolPane()
+            if event.keyCode == .keyboardEscape { return true }
+        }
+
         let unsupportedModifiers = event.modifierFlags.intersection([.control])
         guard unsupportedModifiers.isEmpty else {
             DebugLog.emit(
@@ -760,7 +1176,14 @@ private extension EnterCalcIOSView {
             }
             switch chars.lowercased() {
             case "c":
-                copyCurrentResultToPasteboard(from: viewModel)
+                // Handled here as well as in the menu, because this capture
+                // view sees hardware-keyboard events first — the same reason
+                // ⌘C is handled here rather than left to the Copy menu item.
+                if event.modifierFlags.contains(.shift) {
+                    copyCurrentOperationToPasteboard(from: viewModel)
+                } else {
+                    copyCurrentResultToPasteboard(from: viewModel)
+                }
                 return true
             case "v":
                 pasteFromPasteboard(into: viewModel)
@@ -777,6 +1200,29 @@ private extension EnterCalcIOSView {
                 return true
             default:
                 return false
+            }
+        }
+
+        // Shift + arrows are menu commands (page switching and display
+        // resizing). Handled here as well, for the same reason as ⇧⌘C above:
+        // otherwise the bare-arrow cases below would take them as a caret move
+        // or open the rounding overlay before the menu ever saw them.
+        if event.modifierFlags.intersection([.shift, .alternate]) == .shift {
+            switch event.keyCode {
+            case .keyboardLeftArrow:
+                goToPreviousScreenFromKeyboard()
+                return true
+            case .keyboardRightArrow:
+                goToNextScreenFromKeyboard()
+                return true
+            case .keyboardUpArrow:
+                adjustDisplayHeightFromKeyboard(byPoints: Self.keyboardDisplayResizeStep)
+                return true
+            case .keyboardDownArrow:
+                adjustDisplayHeightFromKeyboard(byPoints: -Self.keyboardDisplayResizeStep)
+                return true
+            default:
+                break
             }
         }
 
@@ -959,9 +1405,10 @@ private extension EnterCalcIOSView {
             preferredScientificNotation = updated.usesScientificNotation
             preferredNumberFormatRaw = updated.numberFormatStyleRawValue
             preferredUsesAlternativeKeypad = updated.usesAlternativeKeypad
-            preferredUsesEnterKeySymbol = updated.usesEnterKeySymbol
             preferredDisablesSwipeDownToRound = updated.disablesSwipeDownToRound
             preferredKeypadHeightMultiplier = updated.keypadHeightMultiplier
+            preferredCurrencySymbol = updated.currencySymbol
+            preferredFunctionKeyAssignmentsRaw = updated.functionKeyAssignments.serialized
             screenStore.syncHomeScreenSettings(updated)
         } else {
             activeScreen.replaceSettings(updated)
@@ -972,6 +1419,28 @@ private extension EnterCalcIOSView {
         let screen = activeScreen
         screen.applyCalculatorSettings()
         applyLanguage(screen.settings.languageCode, refreshing: screen.viewModel)
+    }
+
+    /// Shift + Right. Moving past the last page opens a new one, matching what
+    /// swiping in the same direction already does — the shortcut is not a
+    /// second, more limited way to get around.
+    func goToNextScreenFromKeyboard() {
+        guard !isInteractionDisabled else { return }
+
+        if screenStore.activeIndex < screenStore.screenCount - 1 {
+            navigateToScreen(at: screenStore.activeIndex + 1)
+        } else if screenStore.canCreateScreen {
+            createScreenAfterActive()
+        }
+    }
+
+    /// Shift + Left. There is nothing before the first page, so this stops
+    /// rather than wrapping.
+    func goToPreviousScreenFromKeyboard() {
+        guard !isInteractionDisabled else { return }
+        guard screenStore.activeIndex > 0 else { return }
+
+        navigateToScreen(at: screenStore.activeIndex - 1)
     }
 
     func navigateToScreen(at index: Int) {
@@ -1060,6 +1529,65 @@ private extension EnterCalcIOSView {
                         onCopyEntry: { entry in copyHistoryEntryResultToPasteboard(entry, from: activeScreen.viewModel) },
                         onCopyOperationEntry: { entry in copyHistoryEntryOperationToPasteboard(entry, from: activeScreen.viewModel) }
                     )
+                }
+            } else if activeOverlay == .vat {
+                roundingOverlayPanel(metrics: metrics) {
+                    CurrencyVATPanel(
+                        value: activeScreen.viewModel.toolBase(for: .vat),
+                        rate: vatRate,
+                        presets: vatPresets,
+                        currencyFractionDigits: currencyFractionDigits,
+                        isRemoving: vatRemovesTax,
+                        palette: palette,
+                        localized: { localized($0) },
+                        format: { activeScreen.viewModel.formattedCurrencyAmount($0, fractionDigits: currencyFractionDigits) },
+                        formatRate: { activeScreen.viewModel.formattedValue(RateEntry.roundedForDisplay($0), includingCurrency: false) },
+                        onRateChange: { vatRate = $0; triggerActionFeedback() },
+                        rateEditor: rateEditor,
+                        onPresetEdited: { slot, rate in
+                            editPreset(slot, to: rate, in: vatPresets) { storedVATPresetOverrides = $0 }
+                        },
+                        onDirectionChange: { vatRemovesTax = $0; triggerActionFeedback() },
+                        onResult: { result in
+                            let viewModel = activeScreen.viewModel
+                            viewModel.applyLiveToolResult(result, tool: .vat, base: viewModel.toolBase(for: .vat), describedBy: vatSummary())
+                        },
+                        onRemove: {
+                            activeScreen.viewModel.removeLiveToolResult(.vat)
+                            dismissActiveOverlay()
+                        },
+                        onDismiss: { dismissActiveOverlay() }
+                    )
+                    .padding(.bottom, roundingPanelBottomInset(mode: metrics.mode, isUpsideDown: counterRotatesForUpsideDownPortrait, safeAreaBottom: safeAreaInsets.bottom))
+                }
+            } else if activeOverlay == .tip {
+                roundingOverlayPanel(metrics: metrics) {
+                    CurrencyTipPanel(
+                        bill: activeScreen.viewModel.toolBase(for: .tip),
+                        rate: tipRate,
+                        presets: tipPresets,
+                        currencyFractionDigits: currencyFractionDigits,
+                        palette: palette,
+                        localized: { localized($0) },
+                        format: { activeScreen.viewModel.formattedCurrencyAmount($0, fractionDigits: currencyFractionDigits) },
+                        formatRate: { activeScreen.viewModel.formattedValue(RateEntry.roundedForDisplay($0), includingCurrency: false) },
+                        onRateChange: { tipRate = $0; triggerActionFeedback() },
+                        rateEditor: rateEditor,
+                        onPresetEdited: { slot, rate in
+                            editPreset(slot, to: rate, in: tipPresets) { storedTipPresetOverrides = $0 }
+                        },
+                        onResult: { result in
+                            let viewModel = activeScreen.viewModel
+                            viewModel.applyLiveToolResult(result, tool: .tip, base: viewModel.toolBase(for: .tip), describedBy: tipSummary())
+                        },
+                        onTipOff: { activeScreen.viewModel.removeLiveToolResult(.tip, clearingOperationLine: true) },
+                        onRemove: {
+                            activeScreen.viewModel.removeLiveToolResult(.tip)
+                            dismissActiveOverlay()
+                        },
+                        onDismiss: { dismissActiveOverlay() }
+                    )
+                    .padding(.bottom, roundingPanelBottomInset(mode: metrics.mode, isUpsideDown: counterRotatesForUpsideDownPortrait, safeAreaBottom: safeAreaInsets.bottom))
                 }
             } else if activeOverlay == .rounding {
                 roundingOverlayPanel(metrics: metrics) {
@@ -1480,7 +2008,20 @@ private extension EnterCalcIOSView {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         } else {
             pager
+                .overlay(alignment: .bottom) {
+                    fixedPaginationOverlay(metrics: metrics)
+                }
         }
+    }
+
+    /// One set of page dots over the pager, in the space every page reserves
+    /// at its bottom, so the dots stay fixed while pages slide beneath them.
+    @ViewBuilder
+    func fixedPaginationOverlay(metrics: IOSLayoutMetrics) -> some View {
+        fadingPaginationIndicator(metrics: metrics, isVisible: screenStore.screenCount > 1)
+            .frame(height: metrics.pageIndicatorHeight, alignment: .top)
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, metrics.bottomPadding)
     }
 
     @ViewBuilder
@@ -1502,6 +2043,18 @@ private extension EnterCalcIOSView {
             dotSize: metrics.pageIndicatorDotSize,
             spacing: metrics.pageIndicatorSpacing
         )
+    }
+
+    /// The page dots, always laid out and faded in only while there is more than
+    /// one page. Hidden dots are not announced. The dots never take touches:
+    /// they are display-only, and in portrait they sit over the pager, where
+    /// they would otherwise swallow a swipe that starts on them.
+    func fadingPaginationIndicator(metrics: IOSLayoutMetrics, isVisible: Bool) -> some View {
+        paginationIndicator(metrics: metrics)
+            .opacity(isVisible ? 1 : 0)
+            .animation(reduceMotionEnabled ? nil : .easeInOut(duration: 0.25), value: isVisible)
+            .allowsHitTesting(false)
+            .accessibilityHidden(!isVisible)
     }
 
     @ViewBuilder
@@ -1598,10 +2151,8 @@ private extension EnterCalcIOSView {
 
             Spacer(minLength: metrics.sectionSpacing)
 
-            if showsPaginationIndicator {
-                paginationIndicator(metrics: metrics)
-                    .frame(maxWidth: .infinity, alignment: buttonAlignment)
-            }
+            fadingPaginationIndicator(metrics: metrics, isVisible: showsPaginationIndicator)
+                .frame(maxWidth: .infinity, alignment: buttonAlignment)
 
             Spacer(minLength: metrics.sectionSpacing)
 
@@ -1650,16 +2201,16 @@ private extension EnterCalcIOSView {
     @ViewBuilder
     func pageContentWithPagination<Content: View>(
         metrics: IOSLayoutMetrics,
-        showsPaginationIndicator: Bool,
         @ViewBuilder content: @escaping () -> Content
     ) -> some View {
         GeometryReader { geometry in
             let usesLandscapeNavigationRail = metrics.usesLandscapeNavigationRail
-            let paginationSpacing = showsPaginationIndicator ? metrics.pageIndicatorVerticalSpacing : 0
-            let bottomFooterHeight = showsPaginationIndicator
-                ? 0
-                : (metrics.mode == .phonePortrait ? metrics.portraitBottomReserveWithoutPagination : 0)
-            let paginationReserve = showsPaginationIndicator ? metrics.pageIndicatorHeight + paginationSpacing : 0
+            // The dots' space is always reserved, even with a single page, so
+            // the calculator keeps one size as pages come and go. The dots are
+            // not drawn here: one fixed set sits over the pager in this space
+            // (`fixedPaginationOverlay`), so they stay put while pages slide.
+            let paginationSpacing = metrics.pageIndicatorVerticalSpacing
+            let paginationReserve = metrics.pageIndicatorHeight + paginationSpacing
 
             if usesLandscapeNavigationRail {
                 content()
@@ -1668,22 +2219,21 @@ private extension EnterCalcIOSView {
                 VStack(spacing: paginationSpacing) {
                     content()
                         .frame(maxWidth: .infinity, alignment: .top)
-                        .frame(height: max(0, geometry.size.height - paginationReserve - bottomFooterHeight), alignment: .top)
+                        .frame(height: max(0, geometry.size.height - paginationReserve), alignment: .top)
 
-                    if showsPaginationIndicator {
-                        paginationIndicator(metrics: metrics)
-                    } else if bottomFooterHeight > 0 {
-                        Color.clear
-                            .frame(height: bottomFooterHeight)
-                    }
+                    Color.clear
+                        .frame(height: metrics.pageIndicatorHeight)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
     }
 
-    func paginationBottomInset(metrics: IOSLayoutMetrics, showsPaginationIndicator: Bool) -> CGFloat {
-        guard metrics.mode == .phonePortrait, showsPaginationIndicator else {
+    /// Room kept under the calculator for the page dots. Reserved whether or
+    /// not the dots are showing, so adding or closing the last extra page does
+    /// not resize the calculator.
+    func paginationBottomInset(metrics: IOSLayoutMetrics) -> CGFloat {
+        guard metrics.mode == .phonePortrait else {
             return 0
         }
 
@@ -1702,11 +2252,7 @@ private extension EnterCalcIOSView {
 
     @ViewBuilder
     func screenBody(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession) -> some View {
-        let showsPaginationIndicator = screenStore.screenCount > 1
-        let paginationBottomInset = paginationBottomInset(
-            metrics: metrics,
-            showsPaginationIndicator: showsPaginationIndicator
-        )
+        let paginationBottomInset = paginationBottomInset(metrics: metrics)
 
         switch metrics.mode {
         case .phoneLandscape:
@@ -1716,7 +2262,7 @@ private extension EnterCalcIOSView {
                         titlebarHeader(metrics: metrics, screen: screen)
                     }
 
-                    pageContentWithPagination(metrics: metrics, showsPaginationIndicator: showsPaginationIndicator) {
+                    pageContentWithPagination(metrics: metrics) {
                         HStack(spacing: metrics.outerPadding) {
                             landscapeHistoryPane(metrics: metrics, screen: screen)
                                 .frame(width: metrics.historyPanelWidth)
@@ -1736,7 +2282,7 @@ private extension EnterCalcIOSView {
                         titlebarHeader(metrics: metrics, screen: screen)
                     }
 
-                    pageContentWithPagination(metrics: metrics, showsPaginationIndicator: showsPaginationIndicator) {
+                    pageContentWithPagination(metrics: metrics) {
                         calculatorSurface(metrics: metrics, screen: screen, paginationBottomInset: paginationBottomInset)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     }
@@ -1751,7 +2297,7 @@ private extension EnterCalcIOSView {
                     titlebarHeader(metrics: metrics, screen: screen)
                 }
 
-                pageContentWithPagination(metrics: metrics, showsPaginationIndicator: showsPaginationIndicator) {
+                pageContentWithPagination(metrics: metrics) {
                     calculatorSurface(metrics: metrics, screen: screen, paginationBottomInset: paginationBottomInset)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
@@ -1761,7 +2307,7 @@ private extension EnterCalcIOSView {
             .padding(.bottom, metrics.bottomPadding)
         case .padWide:
             if metrics.usesInlineLandscapeHistory {
-                pageContentWithPagination(metrics: metrics, showsPaginationIndicator: showsPaginationIndicator) {
+                pageContentWithPagination(metrics: metrics) {
                     HStack(spacing: metrics.outerPadding) {
                         landscapeHistoryPane(metrics: metrics, screen: screen)
                             .frame(width: metrics.historyPanelWidth)
@@ -1775,7 +2321,7 @@ private extension EnterCalcIOSView {
                 .padding(.bottom, metrics.bottomPadding)
                 .padding(.horizontal, metrics.outerPadding)
             } else {
-                pageContentWithPagination(metrics: metrics, showsPaginationIndicator: showsPaginationIndicator) {
+                pageContentWithPagination(metrics: metrics) {
                     calculatorSurface(metrics: metrics, screen: screen, paginationBottomInset: paginationBottomInset)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
@@ -2421,7 +2967,12 @@ private extension EnterCalcIOSView {
                     )
                     .opacity(isBasicSpaceInUse ? 0 : 1)
                     .animation(reduceMotionEnabled ? nil : .easeInOut(duration: 0.5), value: isBasicSpaceInUse)
-                    .allowsHitTesting(false)
+                    // The row carries the VAT and TIP buttons in currency
+                    // mode, so it has to take taps then; the label inside opts
+                    // out individually so tapping the display still copies. In
+                    // Basic mode there is nothing to hit, and a fully faded row
+                    // is never tappable.
+                    .allowsHitTesting(activeScreen.viewModel.activeCurrencySymbol != nil && !isBasicSpaceInUse)
                 }
             }
             .overlay(alignment: .top) {
@@ -2444,13 +2995,91 @@ private extension EnterCalcIOSView {
         }
     }
 
+    // Currency mode is derived state, not a separate selection: the calculator
+    // is in it exactly when a currency symbol is showing.
+    var currentModeLabelKey: String {
+        activeScreen.viewModel.activeCurrencySymbol == nil ? "calculator.mode.basic" : "calculator.mode.currency"
+    }
+
+    /// Compact outlined pill, deliberately unlike a keypad key: it opens a tool
+    /// rather than entering anything.
+    func currencyToolButton(metrics: IOSLayoutMetrics, titleKey: String, pane: IOSOverlayPane, opacity: Double) -> some View {
+        let isActive = activeOverlay == pane
+        return Button {
+            toggleOverlay(pane)
+        } label: {
+            Text(localized(titleKey))
+                .font(EnterCalcFont.appFont(size: metrics.memoryFontSize))
+                // An open panel's pill is inverted (filled with the text colour)
+                // rather than tinted blue, which was hard to read on the display.
+                .foregroundStyle((isActive ? palette.surface : palette.textPrimary).opacity(opacity))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(isActive ? palette.textPrimary.opacity(opacity) : Color.clear)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5)
+                        .strokeBorder(
+                            (isActive ? palette.textPrimary : palette.textSecondary).opacity(isActive ? opacity : opacity * 0.7),
+                            lineWidth: 1
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isActive ? [.isSelected] : [])
+    }
+
+    /// Decimals for amounts in the active currency: 2 for most, 0 for the yen.
+    var currencyFractionDigits: Int {
+        CurrencyCatalog.fractionDigits(forSymbol: activeScreen.viewModel.activeCurrencySymbol ?? "")
+    }
+
+    /// The operation line left behind after a tool writes its result, so the
+    /// display says where the number came from.
+    func vatSummary() -> String {
+        let viewModel = activeScreen.viewModel
+        return viewModel.toolOperationLine(
+            base: viewModel.toolBase(for: .vat),
+            label: localized("currency.vat.short"),
+            rate: vatRate,
+            isRemoving: vatRemovesTax
+        )
+    }
+
+    func tipSummary() -> String {
+        let viewModel = activeScreen.viewModel
+        return viewModel.toolOperationLine(base: viewModel.toolBase(for: .tip), label: localized("currency.tip.short"), rate: tipRate)
+    }
+
+    /// Leaving currency mode takes the tools with it, so a panel is never left
+    /// open over a calculator that is no longer in currency mode.
+    func dismissCurrencyToolsIfNeeded() {
+        guard activeScreen.viewModel.activeCurrencySymbol == nil else { return }
+        guard activeOverlay == .vat || activeOverlay == .tip else { return }
+        dismissActiveOverlay()
+    }
+
     func memoryControls(metrics: IOSLayoutMetrics, opacity: Double) -> some View {
-        return Text(localized("calculator.mode.basic"))
-            .font(EnterCalcFont.appFont(size: metrics.memoryFontSize))
-            .foregroundStyle(palette.textPrimary.opacity(opacity))
+        let showsCurrencyTools = activeScreen.viewModel.activeCurrencySymbol != nil
+        return HStack(spacing: 8) {
+            Text(localized(currentModeLabelKey))
+                .font(EnterCalcFont.appFont(size: metrics.memoryFontSize))
+                .foregroundStyle(palette.textPrimary.opacity(opacity))
+                .lineLimit(1)
+                // Keeps tapping the display area a copy action, as before.
+                .allowsHitTesting(false)
+
+            Spacer(minLength: 4)
+
+            if showsCurrencyTools {
+                currencyToolButton(metrics: metrics, titleKey: "currency.vat.short", pane: .vat, opacity: opacity)
+                currencyToolButton(metrics: metrics, titleKey: "currency.tip.short", pane: .tip, opacity: opacity)
+            }
+        }
             .frame(maxWidth: .infinity, minHeight: metrics.memoryHeight, maxHeight: metrics.memoryHeight, alignment: .leading)
             .padding(.horizontal, metrics.displayHorizontalPadding)
-            .lineLimit(1)
             .clipped()
     }
 
@@ -2631,6 +3260,22 @@ private extension EnterCalcIOSView {
         CalculatorButtonSound.playEnterClick()
     }
 
+    // Asks for a review only after a completed calculation, so the prompt lands
+    // on a finished task rather than interrupting one. The work is deferred so
+    // it stays off the press-to-display path, and the gate is a couple of
+    // integer comparisons before that.
+    func requestReviewIfEarned(for screen: CalculatorScreenSession) {
+        let completed = screen.viewModel.completedCalculationCount
+        guard ReviewPromptTracker.shared.shouldRequestReview(completedCalculations: completed) else {
+            return
+        }
+
+        ReviewPromptTracker.shared.recordPromptShown()
+        DispatchQueue.main.async {
+            requestReview()
+        }
+    }
+
     func prepareActionFeedbackGenerators() {
 #if canImport(UIKit)
         IOSActionHaptics.keyPressImpact.prepare()
@@ -2682,28 +3327,41 @@ private extension EnterCalcIOSView {
     }
 
     func keypad(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, buttonHeight: CGFloat) -> some View {
-        let actionColumns = Array(repeating: GridItem(.flexible(), spacing: metrics.gridSpacing), count: 5)
+        let slots = actionRowSlots(for: screen)
+        let actionColumns = Array(repeating: GridItem(.flexible(), spacing: metrics.gridSpacing), count: max(slots.count, 1))
         let isLandscapeMode = metrics.mode == .phoneLandscape || metrics.mode == .padWide
         let compactActionHeight = max(18, buttonHeight / 3)
-        let showsCompactActionRow = !screen.settings.usesAlternativeKeypad
+        let showsCompactActionRow = !slots.isEmpty
+        let assignments = functionKeyAssignments(for: screen)
 
         return VStack(spacing: metrics.gridSpacing) {
             if showsCompactActionRow {
                 LazyVGrid(columns: actionColumns, spacing: metrics.gridSpacing) {
-                    ForEach(Array(actionRowButtons.enumerated()), id: \.offset) { _, button in
+                    ForEach(slots) { slot in
+                        let function = assignments[slot]
                         IOSCompactActionButton(
-                            button: button,
-                            accessibilityLabel: localized(button.accessibilityLabelKey),
+                            button: IOSActionRowButton(slot: slot, function: function),
+                            accessibilityLabel: functionKeyLabel(function),
+                            currencySymbol: screen.settings.currencySymbol,
+                            changeActionName: localized("functionKey.change"),
+                            holdHint: localized("functionKey.hint"),
                             palette: palette,
                             height: compactActionHeight,
                             reduceMotionEnabled: reduceMotionEnabled,
+                            isConfigurable: supportsConfigurableFunctionKeys(for: screen),
+                            isHighlighted: function == .currency && screen.viewModel.activeCurrencySymbol != nil,
                             pressFeedback: triggerActionFeedback,
                             action: {
-                                button.action(screen)
+                                performFunction(function, on: screen)
                                 if isLandscapeMode {
                                     resetLandscapeDisplayScroll(for: screen)
                                 }
-                            }
+                            },
+                            onChooserOpen: { slot, anchor, dragging in
+                                openFunctionChooser(for: slot, anchor: anchor, dragging: dragging)
+                            },
+                            onChooserDrag: { updateFunctionChooserDrag($0) },
+                            onChooserRelease: { releaseFunctionChooser() }
                         )
                     }
                 }
@@ -2713,7 +3371,7 @@ private extension EnterCalcIOSView {
             GeometryReader { keypadGeometry in
                 let spacing = metrics.gridSpacing
                 let cellWidth = max(0, (keypadGeometry.size.width - spacing * 3) / 4)
-                let rows = mainRows
+                let rows = mainRows(for: screen)
 
                 VStack(spacing: spacing) {
                     ForEach(rows.indices, id: \.self) { rowIndex in
@@ -2728,14 +3386,33 @@ private extension EnterCalcIOSView {
                                     buttonHeight: buttonHeight,
                                     pressFeedback: triggerKeyPressFeedback,
                                     action: {
-                                        button.action(screen.viewModel)
+                                        // Only the calculation is timed, so the
+                                        // scroll reset and review gate below do
+                                        // not count towards `keypad result`.
+                                        InputLatencySignpost.measuring(InputLatencySignpost.resultInterval) {
+                                            if let function = button.function {
+                                                performFunction(function, on: screen)
+                                            } else {
+                                                button.action(screen.viewModel)
+                                            }
+                                        }
                                         if isLandscapeMode {
                                             resetLandscapeDisplayScroll(for: screen)
                                         }
+                                        requestReviewIfEarned(for: screen)
                                     },
                                     reduceMotionEnabled: reduceMotionEnabled,
+                                    isConfigurable: supportsConfigurableFunctionKeys(for: screen) && button.slot != nil,
+                                    changeActionName: localized("functionKey.change"),
+                                    holdHint: localized("functionKey.hint"),
+                                    onChooserOpen: { slot, anchor, dragging in
+                                        openFunctionChooser(for: slot, anchor: anchor, dragging: dragging)
+                                    },
+                                    onChooserDrag: { updateFunctionChooserDrag($0) },
+                                    onChooserRelease: { releaseFunctionChooser() },
                                     operatorRevealProgress: operatorRevealProgress,
-                                    operatorAnimFadeOpacity: operatorAnimFadeOpacity
+                                    operatorAnimFadeOpacity: operatorAnimFadeOpacity,
+                                    isHighlighted: button.function == .currency && screen.viewModel.activeCurrencySymbol != nil
                                 )
                                 .frame(width: cellWidth * CGFloat(button.columnSpan) + spacing * CGFloat(button.columnSpan - 1))
                             }
@@ -2789,6 +3466,8 @@ private extension EnterCalcIOSView {
                 isResizingKeypadHeight = false
             }
 
+        let resizeReferenceHeight = max(metrics.keypadHeight + metrics.displayHeight, 1)
+
         return ZStack {
             RoundedRectangle(cornerRadius: 0.5, style: .continuous)
                 .fill(lineColor)
@@ -2810,14 +3489,38 @@ private extension EnterCalcIOSView {
         .frame(height: max(height, 36))
         .contentShape(Rectangle())
         .highPriorityGesture(dragGesture)
-        .accessibilityLabel(Text("Resize keypad"))
-        .accessibilityHint(Text("Drag up or down to resize the keypad"))
+        .accessibilityLabel(Text(localized("keypad.resize.label")))
+        .accessibilityHint(Text(localized("keypad.resize.hint")))
+        // Remembered so the Shift + Up/Down menu commands can step by points.
+        .onChange(of: resizeReferenceHeight, initial: true) { _, newValue in
+            lastKeypadResizeReferenceHeight = newValue
+        }
     }
 
     func cancelKeypadResize(screen: CalculatorScreenSession) {
         let finalMultiplierText = String(format: "%.3f", normalizedKeypadHeightMultiplier(for: screen))
         DebugLog.emit("UI", "Keypad resize cancelled screen:\(screen.id) finalMultiplier:\(finalMultiplierText)")
         isResizingKeypadHeight = false
+    }
+
+    /// One press of Shift + Up/Down, in points so the step feels the same at any
+    /// size. Matches macOS.
+    static let keyboardDisplayResizeStep: CGFloat = 20
+
+    /// Grows (positive) or shrinks (negative) the display, taking the space from
+    /// the keypad. The split is otherwise drag-only, so without this a hardware
+    /// keyboard or VoiceOver user cannot change it at all.
+    func adjustDisplayHeightFromKeyboard(byPoints points: CGFloat) {
+        // Landscape pins the keypad to full height, so there is nothing to move.
+        guard lastKeypadResizeReferenceHeight > 1 else { return }
+
+        let current = normalizedKeypadHeightMultiplier(for: activeScreen)
+        // A bigger display means a smaller keypad, hence the inverted sign.
+        let proposed = current - Double(points / lastKeypadResizeReferenceHeight)
+        let clamped = clamp(proposed, to: 0.5...1.0)
+        guard abs(clamped - current) > 0.0001 else { return }
+
+        updateActiveScreenSettings { $0.keypadHeightMultiplier = clamped }
     }
 
     func normalizedKeypadHeightMultiplier(for screen: CalculatorScreenSession) -> Double {
@@ -2860,6 +3563,11 @@ private extension EnterCalcIOSView {
     func toggleOverlay(_ overlay: IOSOverlayPane) {
         let wasActiveOverlay = activeOverlay
 
+        if (overlay == .vat || overlay == .tip), wasActiveOverlay != overlay {
+            seedSessionRates()
+            pressEnterForPendingCalculation()
+        }
+
         if wasActiveOverlay == .rounding,
            (overlay != .rounding || wasActiveOverlay == overlay) {
             activeScreen.viewModel.commitResultRoundingInteraction()
@@ -2875,6 +3583,33 @@ private extension EnterCalcIOSView {
         if activeOverlay != .history {
             resetHistoryOverlayResizeState()
         }
+    }
+
+    /// Closes the VAT or Tip pane, if one is open, before something else
+    /// changes the display.
+    func closeToolPane() {
+        if activeOverlay == .vat || activeOverlay == .tip {
+            dismissActiveOverlay()
+        }
+    }
+
+    /// Captures the stored default rates into this scene's own state the first
+    /// time a pane opens, so another scene changing the default can never
+    /// change, and live-apply, this scene's rate.
+    func seedSessionRates() {
+        if sessionVATRate == nil { sessionVATRate = vatRate }
+        if sessionTipRate == nil { sessionTipRate = tipRate }
+    }
+
+    /// Opening VAT or Tip over an unfinished sum (`10 + 5`) presses Enter for
+    /// the person first, exactly as the Enter key would: the result, its
+    /// history entry, the Enter sound and haptic, and the review gate.
+    func pressEnterForPendingCalculation() {
+        let screen = activeScreen
+        guard screen.viewModel.hasPendingCalculation else { return }
+        screen.viewModel.evaluate()
+        triggerKeyPressFeedback(for: .equals)
+        requestReviewIfEarned(for: screen)
     }
 
     func animateIfAllowed(_ animation: Animation, _ updates: @escaping () -> Void) {
@@ -3137,8 +3872,8 @@ private struct IOSSettingsSheet: View {
     @Binding var selectedLanguage: String
     @Binding var usesScientificNotation: Bool
     @Binding var selectedNumberFormat: String
+    @Binding var selectedCurrencySymbol: String
     @Binding var usesAlternativeKeypad: Bool
-    @Binding var usesEnterKeySymbol: Bool
     @Binding var disablesSwipeDownToRound: Bool
     let availableLanguages: [LanguageOption]
     let counterRotatesForUpsideDownPortrait: Bool
@@ -3146,8 +3881,8 @@ private struct IOSSettingsSheet: View {
     @State private var draftLanguage: String
     @State private var draftScientificNotation: Bool
     @State private var draftNumberFormat: NumberFormatStyle
+    @State private var draftCurrencySymbol: String
     @State private var draftUsesAlternativeKeypad: Bool
-    @State private var draftUsesEnterKeySymbol: Bool
     @State private var draftDisablesSwipeDownToRound: Bool
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -3161,8 +3896,8 @@ private struct IOSSettingsSheet: View {
         selectedLanguage: Binding<String>,
         usesScientificNotation: Binding<Bool>,
         selectedNumberFormat: Binding<String>,
+        selectedCurrencySymbol: Binding<String>,
         usesAlternativeKeypad: Binding<Bool>,
-        usesEnterKeySymbol: Binding<Bool>,
         disablesSwipeDownToRound: Binding<Bool>,
         availableLanguages: [LanguageOption],
         counterRotatesForUpsideDownPortrait: Bool
@@ -3173,8 +3908,8 @@ private struct IOSSettingsSheet: View {
         self._selectedLanguage = selectedLanguage
         self._usesScientificNotation = usesScientificNotation
         self._selectedNumberFormat = selectedNumberFormat
+        self._selectedCurrencySymbol = selectedCurrencySymbol
         self._usesAlternativeKeypad = usesAlternativeKeypad
-        self._usesEnterKeySymbol = usesEnterKeySymbol
         self._disablesSwipeDownToRound = disablesSwipeDownToRound
         self.availableLanguages = availableLanguages
         self.counterRotatesForUpsideDownPortrait = counterRotatesForUpsideDownPortrait
@@ -3182,8 +3917,8 @@ private struct IOSSettingsSheet: View {
         _draftLanguage = State(initialValue: selectedLanguage.wrappedValue)
         _draftScientificNotation = State(initialValue: usesScientificNotation.wrappedValue)
         _draftNumberFormat = State(initialValue: NumberFormatStyle(rawValue: selectedNumberFormat.wrappedValue) ?? NumberFormatStyle.detected())
+        _draftCurrencySymbol = State(initialValue: selectedCurrencySymbol.wrappedValue)
         _draftUsesAlternativeKeypad = State(initialValue: usesAlternativeKeypad.wrappedValue)
-        _draftUsesEnterKeySymbol = State(initialValue: usesEnterKeySymbol.wrappedValue)
         _draftDisablesSwipeDownToRound = State(initialValue: disablesSwipeDownToRound.wrappedValue)
     }
 
@@ -3210,8 +3945,8 @@ private struct IOSSettingsSheet: View {
         selectedLanguage = draftLanguage
         usesScientificNotation = draftScientificNotation
         selectedNumberFormat = draftNumberFormat.rawValue
+        selectedCurrencySymbol = draftCurrencySymbol
         usesAlternativeKeypad = draftUsesAlternativeKeypad
-        usesEnterKeySymbol = draftUsesEnterKeySymbol
         disablesSwipeDownToRound = draftDisablesSwipeDownToRound
     }
 
@@ -3265,6 +4000,11 @@ private struct IOSSettingsSheet: View {
                                 Text(language.displayName).tag(language.code)
                             }
                         }
+                        Picker(localized("settings.currency.symbol"), selection: $draftCurrencySymbol) {
+                            ForEach(CurrencyCatalog.all) { option in
+                                Text(option.symbol).tag(option.symbol)
+                            }
+                        }
                     }
 
                     Section(localized("settings.userInterface")) {
@@ -3275,22 +4015,28 @@ private struct IOSSettingsSheet: View {
                         }
                         Toggle(localized("settings.numberFormat.scientific"), isOn: $draftScientificNotation)
                         Toggle(localized("settings.percent.classicBehavior"), isOn: $draftUsesAlternativeKeypad)
-                        Toggle(
-                            localized("settings.equals.enterKeySymbol"),
-                            isOn: Binding(
-                                get: { !draftUsesEnterKeySymbol },
-                                set: { draftUsesEnterKeySymbol = !$0 }
-                            )
-                        )
                         Toggle(localized("settings.rounding.disableSwipeDown"), isOn: $draftDisablesSwipeDownToRound)
                     }
 
                     Section(localized("settings.credits")) {
+                        // Plain system font, not the app font: the only bundled
+                        // non-thin weight is SemiBold, which reads as bold for
+                        // standing text and does not match the setting rows
+                        // above. This is supporting copy, not emphasis.
                         Text(creditAttributedString())
-                            .font(EnterCalcFont.appFont(size: settingsAboutTextSize))
-                        Text(String(format: localized("settings.credits.version"), versionString))
-                            .font(EnterCalcFont.appFont(size: settingsAboutTextSize))
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: settingsAboutTextSize))
+                        // Version and the feedback link share a row: both are
+                        // "about this app", and it keeps the section to two rows.
+                        HStack(spacing: 12) {
+                            Text(String(format: localized("settings.credits.version"), versionString))
+                                .font(.system(size: settingsAboutTextSize))
+                                .foregroundStyle(.secondary)
+
+                            Spacer(minLength: 0)
+
+                            Link(localized("settings.feedback"), destination: SupportLinks.supportURL)
+                                .font(.system(size: settingsAboutTextSize))
+                        }
                     }
                 }
                 .scrollContentBackground(.hidden)
@@ -4154,6 +4900,8 @@ private enum AppTheme: String, CaseIterable {
 private enum IOSOverlayPane {
     case history
     case rounding
+    case vat
+    case tip
 }
 
 // Coarse layout buckets that drive metric selection below.
@@ -4217,7 +4965,6 @@ private struct IOSLayoutMetrics {
     let pageIndicatorDotSize: CGFloat
     let pageIndicatorSpacing: CGFloat
     let pageIndicatorVerticalSpacing: CGFloat
-    let portraitBottomReserveWithoutPagination: CGFloat
     let usesTitlebarHeader: Bool
     let usesInlineLandscapeHistory: Bool
     let titlebarLeadingInset: CGFloat
@@ -4241,7 +4988,6 @@ private struct IOSLayoutMetrics {
             && size.height >= landscapeScreenHeight * 0.97
         isPadWindow = deviceFamily == .pad
         let pageIndicatorReserve: CGFloat = isPadWindow ? 18 : 0
-        let needsLegacyPhoneBottomReserve = !isPadWindow && !isGeometryLandscape && size.height <= 750 && safeAreaInsets.bottom < 10
 
         if usesWidePadLayout {
             mode = .padWide
@@ -4297,7 +5043,6 @@ private struct IOSLayoutMetrics {
             pageIndicatorDotSize = 7
             pageIndicatorSpacing = 8
             pageIndicatorVerticalSpacing = isPadWindow ? 10 : sectionSpacing
-            portraitBottomReserveWithoutPagination = needsLegacyPhoneBottomReserve ? 24 : (isPadWindow ? 12 : 0)
             usesTitlebarHeader = isPadWindow
             usesInlineLandscapeHistory = false
             titlebarLeadingInset = isPadWindow ? 84 : 0
@@ -4348,7 +5093,6 @@ private struct IOSLayoutMetrics {
             pageIndicatorDotSize = 6
             pageIndicatorSpacing = 6
             pageIndicatorVerticalSpacing = isPadWindow ? 1 : sectionSpacing
-            portraitBottomReserveWithoutPagination = 0
             usesTitlebarHeader = isPadWindow
             usesInlineLandscapeHistory = !isPadWindow
             titlebarLeadingInset = isPadWindow ? 54 : 0
@@ -4399,7 +5143,6 @@ private struct IOSLayoutMetrics {
             pageIndicatorDotSize = 7
             pageIndicatorSpacing = 8
             pageIndicatorVerticalSpacing = sectionSpacing
-            portraitBottomReserveWithoutPagination = 0
             usesTitlebarHeader = false
             usesInlineLandscapeHistory = true
             titlebarLeadingInset = 0
@@ -4507,19 +5250,12 @@ private extension EnterCalcIOSView {
         defaults.set(systemSettingsVersionString(), forKey: "settings.about.version")
     }
 
+    // Read once and cached: this is consulted on every key press, and it was
+    // re-registering a defaults domain and doing several dictionary lookups
+    // each time. The value only changes from Settings, which posts a change
+    // notification, so there is nothing to poll for.
     func actionHapticsDisabled() -> Bool {
-        let defaults = UserDefaults.standard
-        defaults.register(defaults: ["settings.haptics.disabled": false])
-
-        if defaults.object(forKey: "settings.haptics.disabled") != nil {
-            return defaults.bool(forKey: "settings.haptics.disabled")
-        }
-
-        if let legacyUsesActionHaptics = defaults.object(forKey: "settings.haptics.actions") as? Bool {
-            return !legacyUsesActionHaptics
-        }
-
-        return false
+        IOSHapticsPreference.shared.isDisabled
     }
 
     func systemSettingsVersionString() -> String {
@@ -4624,6 +5360,15 @@ private struct IOSCalcButton {
     let kind: Kind
     let action: (CalculatorViewModel) -> Void
     let columnSpan: Int
+    /// Drawn instead of `title` when the assigned function is an SF Symbol.
+    var symbolName: String? = nil
+    /// Set when the user can reassign this key by pressing and holding it.
+    var slot: CalculatorFunctionSlot? = nil
+    /// The function this key runs, when it comes from a slot.
+    var function: CalculatorFunctionKey? = nil
+    /// Overrides the title as the VoiceOver label, so a reassigned key
+    /// announces the function's name rather than its glyph.
+    var accessibilityLabel: String? = nil
 
     static func digit(_ title: String) -> IOSCalcButton {
         IOSCalcButton(title: title, kind: .digit, action: { $0.inputDigit(title) }, columnSpan: 1)
@@ -4643,6 +5388,42 @@ private struct IOSCalcButton {
 
     static func equals(title: String = "⏎", columnSpan: Int = 1) -> IOSCalcButton {
         IOSCalcButton(title: title, kind: .equals, action: { $0.evaluate() }, columnSpan: max(1, columnSpan))
+    }
+
+    /// A keypad key whose function the user chose. `action` is unused — the
+    /// keypad routes these through the view's function dispatcher, because
+    /// some functions (rounding) need more than the view model.
+    static func configurable(
+        slot: CalculatorFunctionSlot,
+        function: CalculatorFunctionKey,
+        currencySymbol: String,
+        accessibilityLabel: String
+    ) -> IOSCalcButton {
+        var title: String
+        var symbolName: String?
+
+        switch function.presentation {
+        case .symbol(let name):
+            title = ""
+            symbolName = name
+        case .text(let glyph):
+            title = glyph
+            symbolName = nil
+        case .currencySymbol:
+            title = currencySymbol
+            symbolName = nil
+        }
+
+        return IOSCalcButton(
+            title: title,
+            kind: .function,
+            action: { _ in },
+            columnSpan: 1,
+            symbolName: symbolName,
+            slot: slot,
+            function: function,
+            accessibilityLabel: accessibilityLabel
+        )
     }
 
     private static let highlightedTitles: Set<String> = []
@@ -4673,11 +5454,11 @@ private struct IOSCalcButton {
     }
 }
 
-// Model for a button in the secondary action row (copy, undo, history, etc.).
+// Model for a button in the secondary action row. Which function it runs is
+// the user's choice (#67), so it carries the slot as well as the function.
 private struct IOSActionRowButton {
-    let symbol: String
-    let accessibilityLabelKey: String
-    let action: (CalculatorScreenSession) -> Void
+    let slot: CalculatorFunctionSlot
+    let function: CalculatorFunctionKey
 }
 
 // Compact icon button for the action row. Plays a brief scale "pop" on press
@@ -4685,12 +5466,24 @@ private struct IOSActionRowButton {
 private struct IOSCompactActionButton: View {
     let button: IOSActionRowButton
     let accessibilityLabel: String
+    let currencySymbol: String
+    let changeActionName: String
+    let holdHint: String
     let palette: Palette
     let height: CGFloat
     let reduceMotionEnabled: Bool
+    let isConfigurable: Bool
+    /// Shown in the accent colour while the mode it toggles is on: the
+    /// currency key in Currency mode, since All Clear does not leave it.
+    var isHighlighted: Bool = false
     let pressFeedback: () -> Void
     let action: () -> Void
+    let onChooserOpen: (CalculatorFunctionSlot, CGRect, Bool) -> Void
+    let onChooserDrag: (CGPoint) -> Void
+    let onChooserRelease: () -> Void
     @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
+    @State private var suppressesTap: Bool = false
+    @State private var globalFrame: CGRect = .zero
     @State private var pressPopScale: CGFloat = 1.0
     @State private var pointerIsDown: Bool = false
     @State private var pressPopGeneration: Int = 0
@@ -4701,20 +5494,42 @@ private struct IOSCompactActionButton: View {
 
     var body: some View {
         Button {
-            pressFeedback()
+            // The same press that opened the chooser must not also run the
+            // function it is about to replace.
+            guard !suppressesTap else { return }
+            // Result first, feedback second — see IOSKeypadButton.handleTap.
             action()
+            pressFeedback()
         } label: {
-            Image(systemName: button.symbol)
-                .font(EnterCalcFont.appFont(size: boundedIconFontSize))
-                .foregroundStyle(palette.textPrimary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .contentShape(Rectangle())
-                .scaleEffect(reduceMotionEnabled ? 1.0 : pressPopScale)
+            FunctionKeyGlyph(
+                function: button.function,
+                currencySymbol: currencySymbol,
+                fontSize: boundedIconFontSize,
+                color: isHighlighted ? palette.accentText : palette.textPrimary
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .scaleEffect(reduceMotionEnabled ? 1.0 : pressPopScale)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text(accessibilityLabel))
+        .accessibilityHint(isConfigurable ? Text(holdHint) : Text(""))
+        .accessibilityActions {
+            // Only a configurable key offers the action, so VoiceOver never
+            // lists one that would do nothing.
+            if isConfigurable {
+                Button(changeActionName) { onChooserOpen(button.slot, globalFrame, false) }
+            }
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
+        .background(
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { globalFrame = proxy.frame(in: .global) }
+                    .onChange(of: proxy.frame(in: .global)) { _, updated in globalFrame = updated }
+            }
+        )
         .simultaneousGesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in
@@ -4727,10 +5542,19 @@ private struct IOSCompactActionButton: View {
                     pointerIsDown = false
                 }
         )
+        .functionKeyHold(
+            slot: button.slot,
+            isEnabled: isConfigurable,
+            suppressesTap: $suppressesTap,
+            onOpen: { slot, anchor in onChooserOpen(slot, anchor, true) },
+            onDrag: onChooserDrag,
+            onRelease: onChooserRelease
+        )
         .background(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(palette.buttonFunction)
+                .fill(isHighlighted ? palette.accent : palette.buttonFunction)
         )
+        .accessibilityAddTraits(isHighlighted ? [.isSelected] : [])
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .frame(height: height)
     }
@@ -4774,15 +5598,26 @@ private struct IOSKeypadButton: View {
     let pressFeedback: (IOSCalcButton.Kind) -> Void
     let action: () -> Void
     let reduceMotionEnabled: Bool
+    var isConfigurable: Bool = false
+    var changeActionName: String = ""
+    var holdHint: String = ""
+    var onChooserOpen: ((CalculatorFunctionSlot, CGRect, Bool) -> Void)? = nil
+    var onChooserDrag: ((CGPoint) -> Void)? = nil
+    var onChooserRelease: (() -> Void)? = nil
     @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
     var operatorRevealProgress: Double = 0.0
     var operatorAnimFadeOpacity: Double = 1.0
+    /// Accent fill while the mode this key toggles is on (the currency key in
+    /// Currency mode).
+    var isHighlighted: Bool = false
     @State private var isPressed: Bool = false
     @State private var touchCancelledBySwipe: Bool = false
     @State private var shimmerProgress: CGFloat = 0
     @State private var shimmerVisible: Bool = false
     @State private var pressPopScale: CGFloat = 1.0
     @State private var pressPopGeneration: Int = 0
+    @State private var suppressesTap: Bool = false
+    @State private var globalFrame: CGRect = .zero
     private static let popGrowDuration: TimeInterval = 0.05
     private static let popSpringResponse: Double = 0.18
     private static let popSpringDamping: Double = 0.62
@@ -4806,9 +5641,6 @@ private struct IOSKeypadButton: View {
         static let signToggle = SignToggleLabelTuning()
     }
 
-    private static let horizontalSwipeCancellationDistance: CGFloat = 8
-    private static let horizontalSwipeDominanceRatio: CGFloat = 1.15
-    private static let tapCommitDistance: CGFloat = 22
     private static let pressedScale: CGFloat = 0.97
 
     private var isEqualsButton: Bool { button.kind == .equals }
@@ -4835,19 +5667,46 @@ private struct IOSKeypadButton: View {
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .contentShape(RoundedRectangle(cornerRadius: scaledCornerRadius, style: .continuous))
                 .gesture(pressGesture(in: geometry.size))
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear
+                            .onAppear { globalFrame = proxy.frame(in: .global) }
+                            .onChange(of: proxy.frame(in: .global)) { _, updated in globalFrame = updated }
+                    }
+                )
+                .modifier(
+                    OptionalFunctionKeyHold(
+                        slot: configurableSlot,
+                        suppressesTap: $suppressesTap,
+                        onOpen: { slot, anchor in onChooserOpen?(slot, anchor, true) },
+                        onDrag: { onChooserDrag?($0) },
+                        onRelease: { onChooserRelease?() }
+                    )
+                )
                 .accessibilityElement()
-                .accessibilityLabel(Text(button.title))
+                .accessibilityLabel(Text(button.accessibilityLabel ?? button.title))
                 .accessibilityAddTraits(.isButton)
+                .accessibilityHint(configurableSlot == nil ? Text("") : Text(holdHint))
                 .accessibilityAction {
                     handleTap()
+                }
+                .accessibilityActions {
+                    if let slot = configurableSlot {
+                        Button(changeActionName) { onChooserOpen?(slot, globalFrame, false) }
+                    }
                 }
         }
         .frame(height: buttonHeight)
     }
 
+    /// The slot this key occupies, when reassignment is available here.
+    private var configurableSlot: CalculatorFunctionSlot? {
+        isConfigurable ? button.slot : nil
+    }
+
     private var buttonSurface: some View {
         labelView
-            .foregroundStyle(button.foregroundColor(palette: palette))
+            .foregroundStyle(isHighlighted ? palette.accentText : button.foregroundColor(palette: palette))
             .frame(maxWidth: .infinity, minHeight: buttonHeight, maxHeight: buttonHeight)
             .background(buttonBackground)
             .scaleEffect(reduceMotionEnabled ? 1.0 : pressPopScale)
@@ -4909,10 +5768,11 @@ private struct IOSKeypadButton: View {
 
         let isInsideButton = contains(location: value.location, in: size)
         let isTapEligible = isTapEligible(translation: value.translation)
-        let shouldBePressed = isInsideButton && isTapEligible && !touchCancelledBySwipe
-        if shouldBePressed && !isPressed {
-            triggerPressPopAnimation()
-        }
+        let shouldBePressed = isInsideButton && isTapEligible && !touchCancelledBySwipe && !suppressesTap
+        // Only the pressed highlight shows while the finger is down. The pop
+        // waits for the tap to be accepted (`handleTap`): played on touch-down
+        // it ran in full under every swipe that started on a key, even though
+        // the swipe never entered the key (#122).
         isPressed = shouldBePressed
     }
 
@@ -4920,6 +5780,7 @@ private struct IOSKeypadButton: View {
         let shouldCommit = contains(location: value.location, in: size)
             && isTapEligible(translation: value.translation)
             && !touchCancelledBySwipe
+            && !suppressesTap
 
         isPressed = false
         touchCancelledBySwipe = false
@@ -4934,17 +5795,32 @@ private struct IOSKeypadButton: View {
     }
 
     private func isTapEligible(translation: CGSize) -> Bool {
-        hypot(translation.width, translation.height) <= Self.tapCommitDistance
+        hypot(translation.width, translation.height) <= CalculatorPagerGestureIntent.keyTapAllowance
     }
 
+    /// A key gives up its press only once the pager would take the gesture.
+    /// It used to give up after 8pt of sideways travel, which dropped digits
+    /// when typing fast: a finger slides a little as it lifts toward the next
+    /// key (#122).
     private func isHorizontalSwipeIntent(translation: CGSize) -> Bool {
-        abs(translation.width) > Self.horizontalSwipeCancellationDistance
-            && abs(translation.width) > abs(translation.height) * Self.horizontalSwipeDominanceRatio
+        CalculatorPagerGestureIntent.isPagingIntent(translation: translation, axis: .horizontal)
     }
 
     private func handleTap() {
-        pressFeedback(button.kind)
+        // Bracketed for #90: the outer interval is the whole press handler, from
+        // the tap being recognised to the last side effect returning. The
+        // calculation alone is bracketed inside `action` (see `keypad`). The
+        // gap between them is what confirmation and bookkeeping cost on the
+        // main thread — precisely what the issue suspects.
+        let state = InputLatencySignpost.beginPress()
+        defer { InputLatencySignpost.endPress(state) }
+
+        // The calculation runs first so the display updates as early as
+        // possible; feedback is what the press *confirms*, not what it does, so
+        // it must not sit in front of the result.
         action()
+        pressFeedback(button.kind)
+        triggerPressPopAnimation()
         guard !reduceMotionEnabled else {
             shimmerVisible = false
             return
@@ -4997,14 +5873,31 @@ private struct IOSKeypadButton: View {
                     .fill(gradColor)
                     .opacity(overlayOpacity)
             }
+        } else if isHighlighted {
+            RoundedRectangle(cornerRadius: cr, style: .continuous)
+                .fill(palette.accent)
         } else {
             RoundedRectangle(cornerRadius: cr, style: .continuous)
                 .fill(button.backgroundStyle(palette: palette))
         }
     }
 
+    // A key whose assigned function is an SF Symbol draws the symbol; every
+    // other key keeps the glyph rendering it has always had.
     @ViewBuilder
     private var labelView: some View {
+        if let symbolName = button.symbolName {
+            // Sized like the text glyphs rather than like the vector assets,
+            // which carry their own padding and so need the larger box.
+            Image(systemName: symbolName)
+                .font(EnterCalcFont.thinAppFont(size: symbolBaseSize))
+        } else {
+            glyphLabelView
+        }
+    }
+
+    @ViewBuilder
+    private var glyphLabelView: some View {
         switch button.title {
         case "1/x":
             let iconWidth = boundedIconSquareSize
@@ -5042,7 +5935,7 @@ private struct IOSKeypadButton: View {
                 .frame(width: iconFrameWidth, height: iconFrameHeight)
                 .scaleEffect(x: iconScaleX, y: iconScaleY)
                 .offset(x: iconOffsetX, y: iconOffsetY)
-        case "²√x":
+        case "²√x", "√x":
             let iconWidth = boundedIconSquareSize
             let iconHeight = boundedIconSquareSize
             let iconFrameWidth = iconWidth

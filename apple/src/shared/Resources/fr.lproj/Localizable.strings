@@ -16,16 +16,20 @@
 "settings.language.defaultOption" = "Par défaut (%@)";
 "settings.userInterface" = "Interface utilisateur";
 "settings.numberFormat.style" = "Style des nombres";
+"settings.currency.symbol" = "Symbole monétaire";
 "settings.numberFormat.scientific" = "Utiliser la notation scientifique";
 "settings.percent.classicBehavior" = "Utiliser le clavier alternatif";
 "settings.buttonSound.disabled" = "Désactiver le son des boutons";
 "settings.credits" = "À propos";
+"settings.feedback" = "Commentaires";
 "settings.credits.version" = "Version %@";
 "mac.about.windowTitle" = "À propos de %@";
 "settings.credit.part1" = "© 2026 Tipli AI, LLC. EnterCalc est open source et publié sous licence MIT. Contribuez au projet sur ";
 "settings.credit.linkText" = "GitHub";
 "settings.credit.middle" = ".";
 "calculator.mode.basic" = "Basique";
+"calculator.mode.currency" = "Devise";
+"calculator.currency.toggle" = "Activer la devise";
 "history.title" = "Historique";
 "history.empty" = "L’historique est encore à écrire.";
 "history.emptyAfterClear" = "";
@@ -34,6 +38,10 @@
 "key.enter" = "Entrée";
 "settings.rounding.disableSwipeDown" = "Désactiver le balayage vers le bas pour arrondir";
 "rounding.toggle" = "Afficher/masquer le panneau d'arrondi";
+"display.grow" = "Agrandir l'affichage";
+"display.shrink" = "Réduire l'affichage";
+"keypad.resize.label" = "Redimensionner le clavier";
+"keypad.resize.hint" = "Faites glisser, ou appuyez sur Maj plus les flèches haut et bas, pour redimensionner l'affichage";
 "rounding.title" = "Arrondir le résultat";
 "rounding.remove" = "Supprimer l'arrondi";
 "copy" = "Copier";
@@ -50,3 +58,45 @@
 "screen.pageStatus" = "Écran %1$@ sur %2$@";
 "window.new" = "Ouvrir une nouvelle fenêtre";
 "history.toggle" = "Afficher/Masquer l'historique";
+
+/* Page switching shortcuts (issue #83) */
+"screen.next" = "Écran suivant";
+"screen.previous" = "Écran précédent";
+
+/* Touches de fonction configurables (ticket #67) */
+"function.squareRoot" = "Racine carrée";
+"function.square" = "Carré";
+"function.reciprocal" = "Inverse";
+"function.parentheses" = "Parenthèses";
+"function.percent" = "Pourcentage";
+"functionKey.chooser.title" = "Choisir une fonction";
+"functionKey.change" = "Changer de fonction";
+"functionKey.hint" = "Maintenez appuyé pour changer cette touche";
+
+/* Outils du mode devise : TVA et pourboire (ticket #92) */
+"currency.vat.title" = "TVA";
+"currency.vat.add" = "Ajouter la TVA";
+"currency.vat.remove" = "Retirer la TVA";
+"currency.vat.rate" = "Taux d’imposition";
+"currency.vat.rate.decrease" = "Diminuer le taux";
+"currency.vat.rate.increase" = "Augmenter le taux";
+"currency.vat.net" = "Hors TVA";
+"currency.vat.amount" = "TVA";
+"currency.vat.gross" = "TTC";
+"currency.tip.title" = "Pourboire";
+"currency.tip.rate" = "Pourboire";
+"currency.tip.amount" = "Pourboire";
+"currency.tip.total" = "Total";
+"currency.tool.close" = "Fermer";
+
+/* Typed rates and editable presets on the VAT and Tip panels (issue #124) */
+"currency.rate.type" = "Saisir un taux";
+"currency.rate.editPreset" = "Modifier le préréglage";
+"currency.rate.presetHint" = "Maintenez enfoncé pour saisir une nouvelle valeur pour ce préréglage";
+"currency.rate.done" = "OK";
+"currency.rate.cancel" = "Annuler";
+"currency.vat.clear" = "Supprimer la TVA";
+"currency.tip.clear" = "Supprimer le pourboire";
+"currency.vat.short" = "TVA";
+"currency.tip.short" = "Pourboire";
+"currency.tip.off" = "Désactivé";

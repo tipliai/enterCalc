@@ -51,10 +51,12 @@ struct CalculatorWindowView: View {
         case history
         case rounding
         case settings
+        case vat
+        case tip
     }
 
     @ObservedObject var viewModel: CalculatorViewModel
-    @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var systemAppearance = SystemAppearanceMonitor.shared
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotionEnabled
     @Environment(\.openWindow) private var openWindow
@@ -87,6 +89,7 @@ struct CalculatorWindowView: View {
     @State private var keypadResizeGestureStartMultiplier: Double = 1.0
     @State private var liveKeypadHeightMultiplier: Double? = nil
     @State private var operationTextMeasuredHeight: CGFloat = 0
+    @State private var lastDefaultKeypadHeight: CGFloat = 0
 
     private let minimumWindowWidthPoints: CGFloat = 280
     private let minimumWindowHeightPoints: CGFloat = 452
@@ -96,6 +99,19 @@ struct CalculatorWindowView: View {
     private let historySpacing: CGFloat = 6
     private let calculatorContentCoordinateSpace = "calculatorContent"
     @State private var windowSettings: CalculatorScreenSettings
+    /// Live hold-and-drag reassignment of a configurable key, if one is running.
+    @State private var functionChooser: FunctionKeyChooserSession? = nil
+    // Currency-mode tool settings (#92, #124).
+    // Rates and edited presets are kept across launches and shared with iOS's
+    // keys (#124). The VAT rate starts on the region's standard rate.
+    @AppStorage(RateToolPreferences.vatRateKey) private var storedVATRate = ""
+    @AppStorage(RateToolPreferences.vatPresetOverridesKey) private var storedVATPresetOverrides = ""
+    @AppStorage(RateToolPreferences.tipRateKey) private var storedTipRate = ""
+    @AppStorage(RateToolPreferences.tipPresetOverridesKey) private var storedTipPresetOverrides = ""
+    @StateObject private var rateEditor = RateEditor()
+    @State private var sessionVATRate: Decimal?
+    @State private var sessionTipRate: Decimal?
+    @State private var vatRemovesTax: Bool = false
     @AppStorage("window.width") private var storedWindowWidth: Double = 0
     @AppStorage("window.height") private var storedWindowHeight: Double = 0
     @AppStorage("window.historyOpen") private var storedHistoryOpen: Bool = false
@@ -112,8 +128,28 @@ struct CalculatorWindowView: View {
 
     private var palette: Palette { currentTheme.palette(using: colorScheme, increasedContrast: colorSchemeContrast == .increased) }
 
+    // Color scheme this window is actually drawing in. Resolved from the theme
+    // itself rather than the ambient environment so that selecting `system`
+    // repaints the SwiftUI content in step with the native window chrome instead
+    // of waiting for the next event that happens to re-resolve the environment.
+    private var colorScheme: ColorScheme {
+        currentTheme.preferredColorScheme ?? systemAppearance.colorScheme
+    }
+
     private var currentTheme: AppTheme {
         AppTheme(rawValue: windowSettings.themeRawValue) ?? .system
+    }
+
+    // "Enter" is an English word; every other language uses the symbol, as does
+    // the alternative keypad regardless of language.
+    private var equalsButtonTitle: String {
+        let usesEnterWord = EqualsKeyLabel.usesEnterWord(
+            usesAlternativeKeypad: windowSettings.usesAlternativeKeypad,
+            resolvedLocalizationCode: resolvedLocalizationCode(for: windowSettings.languageCode)
+        )
+        return usesEnterWord
+            ? macLocalized("key.enter", bundle: currentLocalizationBundle)
+            : EqualsKeyLabel.symbol
     }
 
     private var currentNumberFormatStyle: NumberFormatStyle {
@@ -150,13 +186,15 @@ struct CalculatorWindowView: View {
             copy: { copyCurrentResultToPasteboard() },
             copyOperation: { copyCurrentOperationToPasteboard() },
             canCopyOperation: viewModel.hasOperationToCopy,
-            paste: { viewModel.pasteFromPasteboard() },
-            undo: { viewModel.undo() },
-            redo: { viewModel.redo() },
+            // Menu commands that change the display close an open VAT/Tip pane
+            // first, the same as typing does, so the pane can't drift from it.
+            paste: { closeToolPane(); viewModel.pasteFromPasteboard() },
+            undo: { closeToolPane(); viewModel.undo() },
+            redo: { closeToolPane(); viewModel.redo() },
             canUndo: viewModel.canUndo,
             canRedo: viewModel.canRedo,
-            clear: { viewModel.clearEntry() },
-            clearAll: { viewModel.clearAll() }
+            clear: { closeToolPane(); viewModel.clearEntry() },
+            clearAll: { closeToolPane(); viewModel.clearAll() }
         )
     }
 
@@ -186,6 +224,14 @@ struct CalculatorWindowView: View {
         activeOverlay == .history
     }
 
+    private var showVATOverlay: Bool {
+        activeOverlay == .vat
+    }
+
+    private var showTipOverlay: Bool {
+        activeOverlay == .tip
+    }
+
     private var showRoundingOverlay: Bool {
         activeOverlay == .rounding
     }
@@ -213,8 +259,12 @@ struct CalculatorWindowView: View {
             }
             .padding(8)
             .background(surfaceColor)
+            .overlay { functionChooserOverlay }
             .environment(\.macLocalizationBundle, currentLocalizationBundle)
-            .preferredColorScheme(currentTheme.preferredColorScheme)
+            // Always an explicit scheme (never nil) so nested views that read
+            // `@Environment(\.colorScheme)` — the settings sheet and overlays —
+            // resolve to the same appearance this window computed.
+            .preferredColorScheme(colorScheme)
             .background(CalculatorWindowResolver { window in
                 guard windowReference !== window else {
                     return
@@ -243,6 +293,9 @@ struct CalculatorWindowView: View {
 
                 applyCurrentWindowSettings()
             }
+            .onChange(of: viewModel.activeCurrencySymbol) { _, _ in
+                dismissCurrencyToolsIfNeeded()
+            }
             .onChange(of: scenePhase) { _, newPhase in
                 guard newPhase == .active, isDefaultLocalizationSelection(windowSettings.languageCode) else {
                     return
@@ -268,6 +321,16 @@ struct CalculatorWindowView: View {
                 let isFocusedWindow = windowReference?.isKeyWindow == true || windowReference?.isMainWindow == true
                 guard isFocusedWindow else { return }
                 toggleRoundingOverlay()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .enterCalcGrowDisplayArea)) { _ in
+                let isFocusedWindow = windowReference?.isKeyWindow == true || windowReference?.isMainWindow == true
+                guard isFocusedWindow else { return }
+                _ = adjustDisplayHeightFromKeyboard(byPoints: Self.keyboardDisplayResizeStep)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .enterCalcShrinkDisplayArea)) { _ in
+                let isFocusedWindow = windowReference?.isKeyWindow == true || windowReference?.isMainWindow == true
+                guard isFocusedWindow else { return }
+                _ = adjustDisplayHeightFromKeyboard(byPoints: -Self.keyboardDisplayResizeStep)
             }
             .onChange(of: geo.size.width) { _, width in
                 currentWidth = width
@@ -331,6 +394,9 @@ struct CalculatorWindowView: View {
                     keypadArea
                         .frame(maxWidth: .infinity, minHeight: keypadHeight, maxHeight: keypadHeight, alignment: .top)
                 }
+                .onChange(of: defaultKeypadHeight, initial: true) { _, newValue in
+                    lastDefaultKeypadHeight = newValue
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
@@ -376,6 +442,18 @@ struct CalculatorWindowView: View {
                                 .frame(width: geo.size.width, alignment: .top)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                                 .allowsHitTesting(activeOverlay == .history)
+                                .transition(.opacity)
+                        } else if showVATOverlay {
+                            vatOverlay()
+                                .frame(width: geo.size.width, alignment: .top)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                                .allowsHitTesting(activeOverlay == .vat)
+                                .transition(.opacity)
+                        } else if showTipOverlay {
+                            tipOverlay()
+                                .frame(width: geo.size.width, alignment: .top)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                                .allowsHitTesting(activeOverlay == .tip)
                                 .transition(.opacity)
                         } else if showRoundingOverlay {
                             roundingOverlay()
@@ -435,6 +513,7 @@ struct CalculatorWindowView: View {
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
+            .accessibilityLabel(Text(macLocalized("settings.title", bundle: currentLocalizationBundle)))
             .fixedSize()
             .buttonStyle(.plain)
             .contentShape(Rectangle())
@@ -464,6 +543,7 @@ struct CalculatorWindowView: View {
                 hovering ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
             }
             .help(macLocalized("history.toggle", bundle: currentLocalizationBundle))
+            .accessibilityLabel(Text(macLocalized("history.toggle", bundle: currentLocalizationBundle)))
 
             Button {
                 storeWindowSize()
@@ -486,6 +566,7 @@ struct CalculatorWindowView: View {
                 hovering ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
             }
             .help(macLocalized("window.new", bundle: currentLocalizationBundle))
+            .accessibilityLabel(Text(macLocalized("window.new", bundle: currentLocalizationBundle)))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -763,13 +844,28 @@ struct CalculatorWindowView: View {
             .allowsHitTesting(false)
     }
 
+    // Currency mode is derived state, not a separate selection: the calculator
+    // is in it exactly when a currency symbol is showing.
+    private var currentModeLabelKey: String {
+        viewModel.activeCurrencySymbol == nil ? "calculator.mode.basic" : "calculator.mode.currency"
+    }
+
     private func memoryControls(opacity: Double) -> some View {
-        return Text(macLocalized("calculator.mode.basic", bundle: currentLocalizationBundle))
-            .font(EnterCalcFont.appFont(size: 12))
-            .foregroundStyle(primaryForeground.opacity(opacity))
+        return HStack(spacing: 6) {
+            Text(macLocalized(currentModeLabelKey, bundle: currentLocalizationBundle))
+                .font(EnterCalcFont.appFont(size: 12))
+                .foregroundStyle(primaryForeground.opacity(opacity))
+                .lineLimit(1)
+
+            Spacer(minLength: 4)
+
+            if viewModel.activeCurrencySymbol != nil {
+                currencyToolButton(titleKey: "currency.vat.short", pane: .vat, opacity: opacity)
+                currencyToolButton(titleKey: "currency.tip.short", pane: .tip, opacity: opacity)
+            }
+        }
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: 16, alignment: .leading)
-            .lineLimit(1)
             .clipped()
             .animation(reduceMotionEnabled ? nil : .easeInOut(duration: 0.18), value: opacity)
             .anchorPreference(
@@ -815,6 +911,72 @@ struct CalculatorWindowView: View {
         keypadGrid
     }
 
+    // MARK: - Function key chooser
+
+    func openFunctionChooser(for slot: CalculatorFunctionSlot, anchor: CGRect, dragging: Bool) {
+        guard supportsConfigurableFunctionKeys else { return }
+        DebugLog.emit("functionKeys", "chooser opened for \(slot.rawValue)")
+        withAnimation(reduceMotionEnabled ? nil : .easeOut(duration: 0.14)) {
+            functionChooser = FunctionKeyChooserSession(
+                slot: slot,
+                anchor: anchor,
+                dragLocation: dragging ? CGPoint(x: anchor.midX, y: anchor.midY) : nil
+            )
+        }
+    }
+
+    func highlightFunctionChooserOption(_ function: CalculatorFunctionKey?) {
+        guard functionChooser?.highlighted != function else { return }
+        functionChooser?.highlighted = function
+    }
+
+    func commitFunctionChooser(_ function: CalculatorFunctionKey) {
+        guard let session = functionChooser else { return }
+        updateWindowSettings { $0.functionKeyAssignments.assign(function, to: session.slot) }
+        // The accessibility tree exposes no readable label for these keys, so
+        // this is the only way QA can confirm which function landed where.
+        DebugLog.emit("functionKeys", "\(session.slot.rawValue) = \(function.rawValue); layout = \(describeFunctionKeyLayout())")
+        dismissFunctionChooser()
+    }
+
+    func describeFunctionKeyLayout() -> String {
+        let assignments = functionKeyAssignments
+        return CalculatorFunctionSlot.allCases
+            .map { "\($0.rawValue):\(assignments[$0].rawValue)" }
+            .joined(separator: " ")
+    }
+
+    func dismissFunctionChooser() {
+        withAnimation(reduceMotionEnabled ? nil : .easeOut(duration: 0.14)) {
+            functionChooser = nil
+        }
+    }
+
+    @ViewBuilder
+    var functionChooserOverlay: some View {
+        if let session = functionChooser {
+            ZStack {
+                // Catches the click that dismisses a chooser opened without a
+                // drag (VoiceOver's "Change Function" action).
+                Color.black.opacity(0.001)
+                    .contentShape(Rectangle())
+                    .onTapGesture { dismissFunctionChooser() }
+
+                CalculatorFunctionKeyChooser(
+                    session: session,
+                    assignments: functionKeyAssignments,
+                    palette: palette,
+                    currencySymbol: windowSettings.currencySymbol,
+                    title: macLocalized("functionKey.chooser.title", bundle: currentLocalizationBundle),
+                    label: { functionKeyLabel($0) },
+                    onHighlight: { highlightFunctionChooserOption($0) },
+                    onCommit: { commitFunctionChooser($0) }
+                )
+            }
+            .transition(.opacity)
+        }
+    }
+
     private var keypadGrid: some View {
         GeometryReader { geo in
             let usesAlternativeKeypad = windowSettings.usesAlternativeKeypad
@@ -828,17 +990,26 @@ struct CalculatorWindowView: View {
 
             VStack(spacing: spacing) {
                 if !usesAlternativeKeypad {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: 5), spacing: spacing) {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: max(compactButtons.count, 1)), spacing: spacing) {
                         ForEach(compactButtons.indices, id: \.self) { index in
                             let button = compactButtons[index]
                             CompactActionButton(
-                                symbol: button.symbol,
+                                slot: button.slot,
+                                function: button.function,
+                                currencySymbol: windowSettings.currencySymbol,
                                 accessibilityLabel: button.accessibilityLabel,
+                                changeActionName: macLocalized("functionKey.change", bundle: currentLocalizationBundle),
+                                holdHint: macLocalized("functionKey.hint", bundle: currentLocalizationBundle),
                                 isBare: button.isBare,
                                 height: compactActionHeight,
                                 disabled: button.action == nil,
+                                isConfigurable: supportsConfigurableFunctionKeys,
                                 palette: palette,
-                                action: { button.action?() }
+                                action: { button.action?() },
+                                onChooserOpen: { slot, anchor, dragging in
+                                    openFunctionChooser(for: slot, anchor: anchor, dragging: dragging)
+                                },
+                                isHighlighted: button.function == .currency && viewModel.activeCurrencySymbol != nil
                             )
                         }
                     }
@@ -854,7 +1025,28 @@ struct CalculatorWindowView: View {
                         HStack(spacing: spacing) {
                             ForEach(row.indices, id: \.self) { buttonIndex in
                                 let button = row[buttonIndex]
-                                CalculatorButton(title: button.title, kind: button.kind, height: cellHeight, disablesButtonSound: windowSettings.disablesButtonSound, action: button.action, enabled: button.enabled, palette: palette, operatorRevealProgress: operatorRevealProgress, operatorAnimFadeOpacity: operatorAnimFadeOpacity, reduceMotionEnabled: reduceMotionEnabled)
+                                CalculatorButton(
+                                    title: button.title,
+                                    kind: button.kind,
+                                    height: cellHeight,
+                                    disablesButtonSound: windowSettings.disablesButtonSound,
+                                    action: button.action,
+                                    enabled: button.enabled,
+                                    palette: palette,
+                                    symbolName: button.symbolName,
+                                    accessibilityLabelOverride: button.accessibilityLabel,
+                                    slot: supportsConfigurableFunctionKeys ? button.slot : nil,
+                                    changeActionName: macLocalized("functionKey.change", bundle: currentLocalizationBundle),
+                                    holdHint: macLocalized("functionKey.hint", bundle: currentLocalizationBundle),
+                                    onChooserOpen: { slot, anchor, dragging in
+                                        openFunctionChooser(for: slot, anchor: anchor, dragging: dragging)
+                                    },
+                                    operatorRevealProgress: operatorRevealProgress,
+                                    operatorAnimFadeOpacity: operatorAnimFadeOpacity,
+                                    reduceMotionEnabled: reduceMotionEnabled,
+                                    isHighlighted: viewModel.activeCurrencySymbol != nil
+                                        && button.slot.map { functionKeyAssignments[$0] == .currency } == true
+                                )
                                     .frame(width: cellWidth * CGFloat(button.columnSpan) + spacing * CGFloat(button.columnSpan - 1))
                             }
                         }
@@ -1196,6 +1388,190 @@ struct CalculatorWindowView: View {
             .padding(.bottom, -8)
     }
 
+    // The rate in use belongs to this window (or iPad scene) for the session,
+    // so changing it in one window never rewrites another window's display.
+    // The stored value is only the default a new window starts from.
+    private var vatRate: Decimal {
+        get { sessionVATRate ?? RateToolPreferences.rate(fromStored: storedVATRate, fallback: VATRateCatalog.defaultRate()) }
+        nonmutating set {
+            sessionVATRate = newValue
+            storedVATRate = RateToolPreferences.storedText(for: newValue)
+        }
+    }
+
+    private var tipRate: Decimal {
+        get { sessionTipRate ?? RateToolPreferences.rate(fromStored: storedTipRate, fallback: RateToolPreferences.defaultTipRate) }
+        nonmutating set {
+            sessionTipRate = newValue
+            storedTipRate = RateToolPreferences.storedText(for: newValue)
+        }
+    }
+
+    private func ratePresets(defaults: [Decimal], storedOverrides: String) -> RatePresets {
+        RatePresets(
+            defaults: defaults,
+            overrides: RatePresetOverrides(serialized: storedOverrides),
+            decimalSeparator: viewModel.numberFormatStyle.decimalSeparator
+        )
+    }
+
+    private var vatPresets: RatePresets {
+        ratePresets(defaults: VATRateCatalog.presets(), storedOverrides: storedVATPresetOverrides)
+    }
+
+    private var tipPresets: RatePresets {
+        ratePresets(defaults: TipBreakdown.presetRates, storedOverrides: storedTipPresetOverrides)
+    }
+
+    /// Saves a long-pressed preset's new value, or restores its default.
+    private func editPreset(_ slot: Int, to rate: Decimal?, in presets: RatePresets, store: (String) -> Void) {
+        var overrides = presets.overrides
+        overrides.set(rate, forSlot: slot, default: presets.defaults.indices.contains(slot) ? presets.defaults[slot] : nil)
+        store(overrides.serialized)
+    }
+
+    /// Decimals for amounts in the active currency: 2 for most, 0 for the yen.
+    private var currencyFractionDigits: Int {
+        CurrencyCatalog.fractionDigits(forSymbol: viewModel.activeCurrencySymbol ?? "")
+    }
+
+    private func vatOverlay() -> some View {
+        CurrencyVATPanel(
+            value: viewModel.toolBase(for: .vat),
+            rate: vatRate,
+            presets: vatPresets,
+            currencyFractionDigits: currencyFractionDigits,
+            isRemoving: vatRemovesTax,
+            palette: palette,
+            localized: { macLocalized($0, bundle: currentLocalizationBundle) },
+            format: { viewModel.formattedCurrencyAmount($0, fractionDigits: currencyFractionDigits) },
+            formatRate: { viewModel.formattedValue(RateEntry.roundedForDisplay($0), includingCurrency: false) },
+            onRateChange: { vatRate = max($0, 0) },
+            rateEditor: rateEditor,
+            onPresetEdited: { slot, rate in
+                editPreset(slot, to: rate, in: vatPresets) { storedVATPresetOverrides = $0 }
+            },
+            onDirectionChange: { vatRemovesTax = $0 },
+            onResult: { result in
+                viewModel.applyLiveToolResult(result, tool: .vat, base: viewModel.toolBase(for: .vat), describedBy: vatSummary())
+            },
+            onRemove: {
+                viewModel.removeLiveToolResult(.vat)
+                setActiveOverlay(nil)
+            },
+            onDismiss: { setActiveOverlay(nil) }
+        )
+        .modifier(MacToolPaneBackground(color: memoryOverlayBackgroundColor))
+    }
+
+    private func tipOverlay() -> some View {
+        CurrencyTipPanel(
+            bill: viewModel.toolBase(for: .tip),
+            rate: tipRate,
+            presets: tipPresets,
+            currencyFractionDigits: currencyFractionDigits,
+            palette: palette,
+            localized: { macLocalized($0, bundle: currentLocalizationBundle) },
+            format: { viewModel.formattedCurrencyAmount($0, fractionDigits: currencyFractionDigits) },
+            formatRate: { viewModel.formattedValue(RateEntry.roundedForDisplay($0), includingCurrency: false) },
+            onRateChange: { tipRate = max($0, 0) },
+            rateEditor: rateEditor,
+            onPresetEdited: { slot, rate in
+                editPreset(slot, to: rate, in: tipPresets) { storedTipPresetOverrides = $0 }
+            },
+            onResult: { result in
+                viewModel.applyLiveToolResult(result, tool: .tip, base: viewModel.toolBase(for: .tip), describedBy: tipSummary())
+            },
+            onTipOff: { viewModel.removeLiveToolResult(.tip, clearingOperationLine: true) },
+            onRemove: {
+                viewModel.removeLiveToolResult(.tip)
+                setActiveOverlay(nil)
+            },
+            onDismiss: { setActiveOverlay(nil) }
+        )
+        .modifier(MacToolPaneBackground(color: memoryOverlayBackgroundColor))
+    }
+
+    /// The operation line left behind after a tool writes its result, so the
+    /// display says where the number came from.
+    private func vatSummary() -> String {
+        viewModel.toolOperationLine(
+            base: viewModel.toolBase(for: .vat),
+            label: macLocalized("currency.vat.short", bundle: currentLocalizationBundle),
+            rate: vatRate,
+            isRemoving: vatRemovesTax
+        )
+    }
+
+    private func tipSummary() -> String {
+        viewModel.toolOperationLine(
+            base: viewModel.toolBase(for: .tip),
+            label: macLocalized("currency.tip.short", bundle: currentLocalizationBundle),
+            rate: tipRate
+        )
+    }
+
+    /// Compact outlined pill, deliberately unlike a keypad key: it opens a tool
+    /// rather than entering anything.
+    /// Closes the VAT or Tip pane, if one is open, before something else
+    /// changes the display.
+    private func closeToolPane() {
+        if activeOverlay == .vat || activeOverlay == .tip {
+            setActiveOverlay(nil)
+        }
+    }
+
+    /// Captures the stored default rates into this window's own state the first
+    /// time a pane opens, so another window changing the default can never
+    /// change, and live-apply, this window's rate.
+    private func seedSessionRates() {
+        if sessionVATRate == nil { sessionVATRate = vatRate }
+        if sessionTipRate == nil { sessionTipRate = tipRate }
+    }
+
+    /// Opening VAT or Tip over an unfinished sum (`10 + 5`) presses Enter for
+    /// the person first, exactly as the Enter key would: the result, its
+    /// history entry and the Enter sound.
+    private func pressEnterForPendingCalculation() {
+        guard viewModel.hasPendingCalculation else { return }
+        MacButtonSoundFeedback.playIfNeeded(disabled: windowSettings.disablesButtonSound, isEnterKey: true)
+        viewModel.evaluate()
+    }
+
+    private func currencyToolButton(titleKey: String, pane: OverlayPane, opacity: Double) -> some View {
+        let isActive = activeOverlay == pane
+        return Button {
+            if !isActive {
+                seedSessionRates()
+                pressEnterForPendingCalculation()
+            }
+            setActiveOverlay(isActive ? nil : pane)
+        } label: {
+            Text(macLocalized(titleKey, bundle: currentLocalizationBundle))
+                .font(EnterCalcFont.appFont(size: 11))
+                // An open panel's pill is shown as a solid grey pill with white
+                // text, matching the iOS inverted pill as it appears behind the
+                // panel's scrim. A literal inversion (a light pill with dark
+                // text) is unreadable on the Mac's dark display.
+                .foregroundStyle(isActive ? Color.white : primaryForeground.opacity(opacity))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 1)
+                .background(
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(isActive ? Color.gray : Color.clear)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4)
+                        .strokeBorder(
+                            isActive ? Color.gray : palette.textSecondary.opacity(opacity * 0.7),
+                            lineWidth: 1
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isActive ? [.isSelected] : [])
+    }
+
     private func roundingOverlay() -> some View {
         MacRoundingPanel(
             palette: palette,
@@ -1223,6 +1599,12 @@ struct CalculatorWindowView: View {
     private func setActiveOverlay(_ overlay: OverlayPane?) {
         if activeOverlay == .rounding, overlay != .rounding {
             viewModel.commitResultRoundingInteraction()
+        }
+        // An open rate edit belongs to its panel; any overlay change abandons
+        // it, including switching straight between VAT and Tip, which share
+        // the editor.
+        if overlay != activeOverlay {
+            rateEditor.cancel()
         }
 
         if reduceMotionEnabled {
@@ -1330,8 +1712,18 @@ struct CalculatorWindowView: View {
         return true
     }
 
+    /// Shift + Up/Down are the display-resize menu shortcuts. The local key
+    /// monitor sees events before the menu does, so it has to leave these alone
+    /// or it would consume them — Shift + Down otherwise opened the rounding
+    /// overlay instead of resizing.
+    private func isDisplayResizeShortcut(_ event: NSEvent) -> Bool {
+        guard event.modifierFlags.contains(.shift) else { return false }
+        return event.keyCode == 125 || event.keyCode == 126
+    }
+
     private func handleRoundingOverlayKey(_ event: NSEvent) -> Bool {
         guard showRoundingOverlay else { return false }
+        if isDisplayResizeShortcut(event) { return false }
 
         switch event.keyCode {
         case 126, 36, 76:
@@ -1402,15 +1794,40 @@ struct CalculatorWindowView: View {
             closeRoundingOverlay()
         case .settings:
             closeSettingsOverlay()
+        case .vat, .tip:
+            setActiveOverlay(nil)
         case nil:
             break
         }
+    }
+
+    /// Leaving currency mode takes its tools with it, so a panel is never left
+    /// open over a calculator that is no longer in the mode.
+    private func dismissCurrencyToolsIfNeeded() {
+        guard viewModel.activeCurrencySymbol == nil else { return }
+        guard activeOverlay == .vat || activeOverlay == .tip else { return }
+        setActiveOverlay(nil)
     }
 
     // Routes a hardware-keyboard event to a calculator action. Returns true when
     // handled so the event is consumed. Active overlays get first refusal.
     @discardableResult
     private func handleKey(_ event: NSEvent) -> Bool {
+        // While a VAT or Tip rate is being typed, every key belongs to its text
+        // field rather than to the calculator (#124).
+        if rateEditor.isEditing {
+            return false
+        }
+
+        // VAT and Tip apply live to the display, so any key on the calculator
+        // while one is open — typing, or a shortcut such as ⌘V, ⌘Z or
+        // ⌘Delete — closes it first: the result stays, and the key then does
+        // what it always does. Escape just closes the pane.
+        if activeOverlay == .vat || activeOverlay == .tip {
+            closeToolPane()
+            if event.keyCode == 53 { return true }
+        }
+
         let chars = event.charactersIgnoringModifiers ?? ""
         let inputChars = event.characters ?? chars
         let insertFunctionCharacter = Character(UnicodeScalar(NSInsertFunctionKey)!)
@@ -1431,7 +1848,14 @@ struct CalculatorWindowView: View {
             }
             switch chars.lowercased() {
             case "c":
-                copyCurrentResultToPasteboard()
+                // The monitor sees events before the menus do, so the Copy
+                // Operation menu item's ⇧⌘C would never reach it — the same
+                // trap that swallowed the display-resize shortcuts in #110.
+                if event.modifierFlags.contains(.shift) {
+                    copyCurrentOperationToPasteboard()
+                } else {
+                    copyCurrentResultToPasteboard()
+                }
                 return true
             case "v":
                 viewModel.pasteFromPasteboard()
@@ -1473,6 +1897,8 @@ struct CalculatorWindowView: View {
         if isInsertKey {
             DebugLog.emit("KEY", "macOS insert detected but blocked by active overlay:\(String(describing: activeOverlay))")
         }
+
+        if isDisplayResizeShortcut(event) { return false }
 
         // Keypad support by keyCode
         switch event.keyCode {
@@ -1590,24 +2016,38 @@ struct CalculatorWindowView: View {
         let action: () -> Void
         let enabled: Bool
         let columnSpan: Int
+        /// Drawn instead of `title` when the assigned function is an SF Symbol.
+        let symbolName: String?
+        /// Set when the user can reassign this key by pressing and holding it.
+        let slot: CalculatorFunctionSlot?
+        /// Overrides the title as the VoiceOver label, so a reassigned key
+        /// announces the function's name rather than its glyph.
+        let accessibilityLabel: String?
 
         init(
             title: String,
             kind: CalculatorButton.Kind,
             action: @escaping () -> Void,
             enabled: Bool,
-            columnSpan: Int = 1
+            columnSpan: Int = 1,
+            symbolName: String? = nil,
+            slot: CalculatorFunctionSlot? = nil,
+            accessibilityLabel: String? = nil
         ) {
             self.title = title
             self.kind = kind
             self.action = action
             self.enabled = enabled
             self.columnSpan = columnSpan
+            self.symbolName = symbolName
+            self.slot = slot
+            self.accessibilityLabel = accessibilityLabel
         }
     }
 
     private struct CompactActionItem {
-        let symbol: String
+        let slot: CalculatorFunctionSlot
+        let function: CalculatorFunctionKey
         let accessibilityLabel: String
         let isBare: Bool
         let action: (() -> Void)?
@@ -1656,10 +2096,10 @@ struct CalculatorWindowView: View {
             ButtonItem(title: "0", kind: .number, action: { viewModel.inputDigit("0") }, enabled: isEnabled(title: "0", kind: .number)),
             ButtonItem(title: ".", kind: .number, action: { viewModel.inputDecimal() }, enabled: isEnabled(title: ".", kind: .number)),
             ButtonItem(
-                title: windowSettings.usesEnterKeySymbol ? macLocalized("key.enter", bundle: currentLocalizationBundle) : "=",
+                title: equalsButtonTitle,
                 kind: .accent,
                 action: { viewModel.evaluate() },
-                enabled: isEnabled(title: windowSettings.usesEnterKeySymbol ? macLocalized("key.enter", bundle: currentLocalizationBundle) : "=", kind: .accent)
+                enabled: isEnabled(title: equalsButtonTitle, kind: .accent)
             )
         ]
     }
@@ -1678,8 +2118,8 @@ struct CalculatorWindowView: View {
 
         return [
             ButtonItem(title: clearButtonTitle, kind: .function, action: { self.handleContextualClear() }, enabled: isEnabled(title: clearButtonTitle, kind: .function)),
-            ButtonItem(title: "( )", kind: .function, action: { viewModel.inputParentheses() }, enabled: isEnabled(title: "( )", kind: .function)),
-            ButtonItem(title: "%", kind: .function, action: { viewModel.applyPercent() }, enabled: isEnabled(title: "%", kind: .function)),
+            configurableKeypadButton(for: .parenthesesKey, errorMode: errorMode),
+            configurableKeypadButton(for: .percentKey, errorMode: errorMode),
             ButtonItem(title: "÷", kind: .operation, action: { viewModel.setOperator(.divide) }, enabled: isEnabled(title: "÷", kind: .operation)),
             ButtonItem(title: "7", kind: .number, action: { viewModel.inputDigit("7") }, enabled: isEnabled(title: "7", kind: .number)),
             ButtonItem(title: "8", kind: .number, action: { viewModel.inputDigit("8") }, enabled: isEnabled(title: "8", kind: .number)),
@@ -1696,24 +2136,94 @@ struct CalculatorWindowView: View {
             ButtonItem(title: ".", kind: .number, action: { viewModel.inputDecimal() }, enabled: isEnabled(title: ".", kind: .number)),
             ButtonItem(title: "0", kind: .number, action: { viewModel.inputDigit("0") }, enabled: isEnabled(title: "0", kind: .number)),
             ButtonItem(
-                title: windowSettings.usesEnterKeySymbol ? macLocalized("key.enter", bundle: currentLocalizationBundle) : "=",
+                title: equalsButtonTitle,
                 kind: .accent,
                 action: { viewModel.evaluate() },
-                enabled: isEnabled(title: windowSettings.usesEnterKeySymbol ? macLocalized("key.enter", bundle: currentLocalizationBundle) : "=", kind: .accent),
+                enabled: isEnabled(title: equalsButtonTitle, kind: .accent),
                 columnSpan: 2
             )
         ]
     }
 
+    // MARK: - Configurable function keys (#67)
+
+    /// Which functions this window currently shows. Held per window, the same
+    /// way every other window preference is: an open window keeps its own
+    /// layout, and a new window starts from the most recently persisted one.
+    var functionKeyAssignments: CalculatorFunctionKeyAssignments {
+        windowSettings.functionKeyAssignments
+    }
+
+    /// Only the default keypad has configurable keys. The alternative keypad has
+    /// no action row and already carries fixed 1/x, x² and √x keys, so
+    /// reassigning its two large keys could put the same function on screen
+    /// twice.
+    var supportsConfigurableFunctionKeys: Bool {
+        !windowSettings.usesAlternativeKeypad
+    }
+
+    func functionKeyLabel(_ function: CalculatorFunctionKey) -> String {
+        macLocalized(function.accessibilityLabelKey, bundle: currentLocalizationBundle)
+    }
+
+    func performFunction(_ function: CalculatorFunctionKey) {
+        switch function {
+        case .undo: viewModel.undo()
+        case .redo: viewModel.redo()
+        case .toggleSign: viewModel.toggleSign()
+        case .currency: viewModel.toggleCurrencySymbol(windowSettings.currencySymbol)
+        case .rounding: toggleRoundingOverlay()
+        case .backspace: viewModel.backspace()
+        case .squareRoot: viewModel.squareRoot()
+        case .square: viewModel.square()
+        case .reciprocal: viewModel.reciprocal()
+        case .parentheses: viewModel.inputParentheses()
+        case .percent: viewModel.applyPercent()
+        }
+    }
+
     private func compactActionRowButtons() -> [CompactActionItem] {
-        guard !windowSettings.usesAlternativeKeypad else { return [] }
-        return [
-            CompactActionItem(symbol: "arrow.uturn.backward", accessibilityLabel: macLocalized("undo", bundle: currentLocalizationBundle), isBare: false, action: { viewModel.undo() }),
-            CompactActionItem(symbol: "arrow.uturn.forward", accessibilityLabel: macLocalized("redo", bundle: currentLocalizationBundle), isBare: false, action: { viewModel.redo() }),
-            CompactActionItem(symbol: "plusminus", accessibilityLabel: macLocalized("toggleSign", bundle: currentLocalizationBundle), isBare: false, action: { viewModel.toggleSign() }),
-            CompactActionItem(symbol: "slider.horizontal.below.rectangle", accessibilityLabel: macLocalized("rounding.toggle", bundle: currentLocalizationBundle), isBare: false, action: { toggleRoundingOverlay() }),
-            CompactActionItem(symbol: "delete.left", accessibilityLabel: macLocalized("backspace", bundle: currentLocalizationBundle), isBare: false, action: { viewModel.backspace() })
-        ]
+        guard supportsConfigurableFunctionKeys else { return [] }
+        let assignments = functionKeyAssignments
+        return CalculatorFunctionSlot.actionRowSlots.map { slot in
+            let function = assignments[slot]
+            return CompactActionItem(
+                slot: slot,
+                function: function,
+                accessibilityLabel: functionKeyLabel(function),
+                isBare: false,
+                action: { performFunction(function) }
+            )
+        }
+    }
+
+    /// A large keypad key whose function the user chose.
+    private func configurableKeypadButton(for slot: CalculatorFunctionSlot, errorMode: Bool) -> ButtonItem {
+        let function = functionKeyAssignments[slot]
+        var title: String
+        var symbolName: String?
+
+        switch function.presentation {
+        case .symbol(let name):
+            title = ""
+            symbolName = name
+        case .text(let glyph):
+            title = glyph
+            symbolName = nil
+        case .currencySymbol:
+            title = windowSettings.currencySymbol
+            symbolName = nil
+        }
+
+        return ButtonItem(
+            title: title,
+            kind: .function,
+            action: { performFunction(function) },
+            enabled: !errorMode || function.isEnabledInErrorState,
+            symbolName: symbolName,
+            slot: slot,
+            accessibilityLabel: functionKeyLabel(function)
+        )
     }
 
     private func handleContextualClear() {
@@ -1752,15 +2262,25 @@ private struct MemoryControlsBoundsKey: PreferenceKey {
 }
 
 private struct CompactActionButton: View {
-    let symbol: String
+    let slot: CalculatorFunctionSlot
+    let function: CalculatorFunctionKey
+    let currencySymbol: String
     let accessibilityLabel: String
+    let changeActionName: String
+    let holdHint: String
     let isBare: Bool
     let height: CGFloat
     let disabled: Bool
+    let isConfigurable: Bool
     let palette: Palette
     let action: () -> Void
+    let onChooserOpen: (CalculatorFunctionSlot, CGRect, Bool) -> Void
+    /// Shown in the accent colour while the mode it toggles is on: the
+    /// currency key in Currency mode, since All Clear does not leave it.
+    var isHighlighted: Bool = false
     @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
     @State private var hovering: Bool = false
+    @State private var globalFrame: CGRect = .zero
 
     private var cornerRadius: CGFloat { min(max(height * 0.28, 5), 10) }
 
@@ -1770,14 +2290,35 @@ private struct CompactActionButton: View {
                 Color.clear
             } else {
                 Button(action: action) {
-                    Image(systemName: symbol)
-                        .font(EnterCalcFont.appFont(size: boundedIconFontSize))
-                        .foregroundStyle(palette.textPrimary)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .contentShape(Rectangle())
+                    FunctionKeyGlyph(
+                        function: function,
+                        currencySymbol: currencySymbol,
+                        fontSize: boundedIconFontSize,
+                        color: isHighlighted ? palette.accentText : palette.textPrimary
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text(accessibilityLabel))
+                .accessibilityHint(isConfigurable ? Text(holdHint) : Text(""))
+                .accessibilityActions {
+                    // Only a configurable key offers the action, so VoiceOver
+                    // never lists one that would do nothing.
+                    if isConfigurable {
+                        Button(changeActionName) { onChooserOpen(slot, globalFrame, false) }
+                    }
+                }
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear
+                            .onAppear { globalFrame = proxy.frame(in: .global) }
+                            .onChange(of: proxy.frame(in: .global)) { _, updated in globalFrame = updated }
+                    }
+                )
+                .secondaryClickToOpenFunctionChooser(slot: isConfigurable ? slot : nil) { slot in
+                    onChooserOpen(slot, globalFrame, false)
+                }
                 .background(background)
                 .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
                 .overlay(
@@ -1811,7 +2352,7 @@ private struct CompactActionButton: View {
             Color.clear
         } else {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(palette.buttonOperation)
+                .fill(isHighlighted ? palette.accent : palette.buttonOperation)
         }
     }
 }
@@ -1833,12 +2374,22 @@ private struct CompactActionButton: View {
         let action: () -> Void
         let enabled: Bool
         let palette: Palette
+        var symbolName: String? = nil
+        var accessibilityLabelOverride: String? = nil
+        var slot: CalculatorFunctionSlot? = nil
+        var changeActionName: String = ""
+        var holdHint: String = ""
+        var onChooserOpen: ((CalculatorFunctionSlot, CGRect, Bool) -> Void)? = nil
         var operatorRevealProgress: Double = 0.0
         var operatorAnimFadeOpacity: Double = 1.0
         var reduceMotionEnabled: Bool = false
+        /// Accent fill while the mode this key toggles is on (the currency key
+        /// in Currency mode).
+        var isHighlighted: Bool = false
         @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
 
         @State private var hovering: Bool = false
+        @State private var globalFrame: CGRect = .zero
         @State private var shimmerProgress: CGFloat = 0
         @State private var shimmerVisible: Bool = false
         @State private var pressPopScale: CGFloat = 1.0
@@ -1858,7 +2409,23 @@ private struct CompactActionButton: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(PlainButtonStyle())
-            .accessibilityLabel(Text(title))
+            .accessibilityLabel(Text(accessibilityLabelOverride ?? title))
+            .accessibilityHint(slot == nil ? Text("") : Text(holdHint))
+            .accessibilityActions {
+                if let slot {
+                    Button(changeActionName) { onChooserOpen?(slot, globalFrame, false) }
+                }
+            }
+            .background(
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear { globalFrame = proxy.frame(in: .global) }
+                        .onChange(of: proxy.frame(in: .global)) { _, updated in globalFrame = updated }
+                }
+            )
+            .secondaryClickToOpenFunctionChooser(slot: slot) { slot in
+                onChooserOpen?(slot, globalFrame, false)
+            }
             .background(buttonBackground)
             .foregroundStyle(foregroundColor)
             .opacity(enabled ? 1.0 : 0.35)
@@ -1976,6 +2543,7 @@ private struct CompactActionButton: View {
         }
 
         private var foregroundColor: Color {
+            if isHighlighted { return palette.accentText }
             switch kind {
             case .accent:
                 return palette.accentText
@@ -2019,7 +2587,7 @@ private struct CompactActionButton: View {
                 }
             } else {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(backgroundStyle)
+                    .fill(isHighlighted ? AnyShapeStyle(palette.accent) : backgroundStyle)
             }
         }
 
@@ -2050,9 +2618,14 @@ private struct CompactActionButton: View {
             kind == .accent && title != "="
         }
 
+        // A key whose assigned function is an SF Symbol draws the symbol; every
+        // other key keeps the glyph rendering it has always had.
         @ViewBuilder
         private var labelView: some View {
-            if title == "1/x" {
+            if let symbolName {
+                Image(systemName: symbolName)
+                    .font(EnterCalcFont.thinAppFont(size: primaryFontSize))
+            } else if title == "1/x" {
                 let iconWidth = boundedIconSquareSize
                 let iconHeight = boundedIconSquareSize
                 let iconFrameWidth = iconWidth
@@ -2387,8 +2960,8 @@ private struct SettingsSheet: View {
     @Binding var selectedLanguage: String
     @Binding var usesScientificNotation: Bool
     @Binding var selectedNumberFormat: NumberFormatStyle
+    @Binding var selectedCurrencySymbol: String
     @Binding var usesAlternativeKeypad: Bool
-    @Binding var usesEnterKeySymbol: Bool
     @Binding var disablesSwipeDownToRound: Bool
     @Binding var disablesButtonSound: Bool
     let availableLanguages: [LanguageOption]
@@ -2446,6 +3019,14 @@ private struct SettingsSheet: View {
                         .pickerStyle(.menu)
                         .font(.system(size: settingsBodySize))
 
+                        Picker(macLocalized("settings.currency.symbol", bundle: localizationBundle), selection: $selectedCurrencySymbol) {
+                            ForEach(CurrencyCatalog.all) { option in
+                                Text(option.symbol).tag(option.symbol)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .font(.system(size: settingsBodySize))
+
                         Picker(macLocalized("settings.numberFormat.style", bundle: localizationBundle), selection: $selectedNumberFormat) {
                             ForEach(NumberFormatStyle.allCases, id: \.self) { style in
                                 Text(style.example).tag(style)
@@ -2462,18 +3043,29 @@ private struct SettingsSheet: View {
                             .font(.system(size: settingsBodySize))
                         Toggle(macLocalized("settings.percent.classicBehavior", bundle: localizationBundle), isOn: $usesAlternativeKeypad)
                             .font(.system(size: settingsBodySize))
-                        Toggle(
-                            macLocalized("settings.equals.enterKeySymbol", bundle: localizationBundle),
-                            isOn: Binding(
-                                get: { !usesEnterKeySymbol },
-                                set: { usesEnterKeySymbol = !$0 }
-                            )
-                        )
-                        .font(.system(size: settingsBodySize))
                         Toggle(macLocalized("settings.buttonSound.disabled", bundle: localizationBundle), isOn: $disablesButtonSound)
                             .font(.system(size: settingsBodySize))
                         Toggle(macLocalized("settings.rounding.disableSwipeDown", bundle: localizationBundle), isOn: $disablesSwipeDownToRound)
                             .font(.system(size: settingsBodySize))
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(macLocalized("settings.credits", bundle: localizationBundle))
+                            .font(.system(size: settingsSectionSize))
+                        // Version and the rating link share a row, matching iOS.
+                        HStack(spacing: 12) {
+                            Text(MacAboutContent.appVersionText(bundle: localizationBundle))
+                                .font(.system(size: settingsBodySize))
+                                .foregroundStyle(.secondary)
+
+                            Spacer(minLength: 0)
+
+                            Link(
+                                macLocalized("settings.feedback", bundle: localizationBundle),
+                                destination: SupportLinks.supportURL
+                            )
+                            .font(.system(size: settingsBodySize))
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -2580,9 +3172,11 @@ private struct MacRoundingPanel: View {
             }
             .frame(height: 26)
         }
-        .padding(.horizontal, 5)
+        // Content lines up with the keypad: 8pt in from the window's sides and
+        // 10pt up from its bottom, the same as the VAT and Tip panes.
+        .padding(.horizontal, 8)
         .padding(.top, 0)
-        .padding(.bottom, 8)
+        .padding(.bottom, 10)
         .frame(maxWidth: .infinity, alignment: .top)
         .fixedSize(horizontal: false, vertical: true)
         .background(overlayBackgroundColor)
@@ -2825,16 +3419,21 @@ private extension CalculatorWindowView {
                     viewModel.setNumberFormatStyle(newValue)
                 }
             ),
+            selectedCurrencySymbol: Binding(
+                get: { windowSettings.currencySymbol },
+                set: { newValue in
+                    updateWindowSettings { $0.currencySymbol = newValue }
+                    // Re-label a value already on screen so the change is
+                    // visible immediately rather than only on the next entry.
+                    if viewModel.activeCurrencySymbol != nil {
+                        viewModel.inputCurrencySymbol(newValue)
+                    }
+                }
+            ),
             usesAlternativeKeypad: Binding(
                 get: { windowSettings.usesAlternativeKeypad },
                 set: { newValue in
                     updateWindowSettings { $0.usesAlternativeKeypad = newValue }
-                }
-            ),
-            usesEnterKeySymbol: Binding(
-                get: { windowSettings.usesEnterKeySymbol },
-                set: { newValue in
-                    updateWindowSettings { $0.usesEnterKeySymbol = newValue }
                 }
             ),
             disablesSwipeDownToRound: Binding(
@@ -3015,9 +3614,36 @@ private extension CalculatorWindowView {
         persistWindowSettings(updated)
     }
 
+    /// One press of Shift + Up/Down. Points rather than a fraction of the
+    /// multiplier so the step feels the same at any window size.
+    static let keyboardDisplayResizeStep: CGFloat = 20
+
+    /// Grows (positive) or shrinks (negative) the display by `points`, taking
+    /// the space from the keypad. Returns false when already at the limit so the
+    /// key is not swallowed and the system can give its usual feedback.
+    func adjustDisplayHeightFromKeyboard(byPoints points: CGFloat) -> Bool {
+        // Before first layout there is nothing to measure against.
+        let reference = lastDefaultKeypadHeight
+        guard reference > 1 else { return false }
+
+        let current = activeKeypadHeightMultiplier()
+        // A bigger display means a smaller keypad, hence the inverted sign.
+        let proposed = current - Double(points / reference)
+        let clamped = min(max(proposed, Self.minimumKeypadHeightMultiplier), Self.maximumKeypadHeightMultiplier)
+        guard abs(clamped - current) > 0.0001 else { return false }
+
+        // Not animated: the step should land immediately, like dragging does.
+        liveKeypadHeightMultiplier = nil
+        updateWindowSettings { $0.keypadHeightMultiplier = clamped }
+        return true
+    }
+
+    static let minimumKeypadHeightMultiplier: Double = 0.5
+    static let maximumKeypadHeightMultiplier: Double = 1.0
+
     func activeKeypadHeightMultiplier() -> Double {
         let liveOrStored = liveKeypadHeightMultiplier ?? windowSettings.keypadHeightMultiplier
-        return min(max(liveOrStored, 0.5), 1.0)
+        return min(max(liveOrStored, Self.minimumKeypadHeightMultiplier), Self.maximumKeypadHeightMultiplier)
     }
 
     func persistWindowSettings(_ settings: CalculatorScreenSettings) {
@@ -3025,6 +3651,10 @@ private extension CalculatorWindowView {
     }
 
     func applyCurrentWindowSettings() {
+        // Re-read the system setting on the same triggers that reapply the rest
+        // of the window state, so a missed appearance notification self-corrects
+        // the next time the window appears or becomes key.
+        systemAppearance.refresh()
         applyTheme(currentTheme)
         applyLanguage(windowSettings.languageCode)
         viewModel.setScientificNotationEnabled(windowSettings.usesScientificNotation)
@@ -3081,6 +3711,65 @@ private extension CalculatorWindowView {
     }
 }
 
+// Publishes the system-wide Light/Dark setting so the `system` theme can resolve
+// its palette without going through `@Environment(\.colorScheme)`.
+//
+// The environment value reflects the appearance actually applied to the window,
+// which the other themes override directly (`applyTheme`). When that override is
+// removed, AppKit does not necessarily re-resolve the hosting view's effective
+// appearance before SwiftUI reads it again, so the ambient value can stay on the
+// previous theme while native chrome has already moved to the system one.
+// Reading the global-domain setting sidesteps that entirely: it is the user's
+// system preference, so it cannot report back an override this app applied.
+private final class SystemAppearanceMonitor: ObservableObject {
+    // Every calculator window resolves the same system setting, so they share one
+    // monitor rather than each registering its own notification observer.
+    static let shared = SystemAppearanceMonitor()
+
+    @Published private(set) var colorScheme: ColorScheme
+
+    private let defaults: UserDefaults
+    private var observer: NSObjectProtocol?
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        colorScheme = Self.resolveColorScheme(from: defaults)
+
+        observer = DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            // The global domain is updated slightly after this notification is
+            // delivered, so re-read on the next runloop pass.
+            DispatchQueue.main.async {
+                self?.refresh()
+            }
+        }
+    }
+
+    deinit {
+        if let observer {
+            DistributedNotificationCenter.default().removeObserver(observer)
+        }
+    }
+
+    func refresh() {
+        let resolved = Self.resolveColorScheme(from: defaults)
+        guard resolved != colorScheme else { return }
+        colorScheme = resolved
+    }
+
+    private static func resolveColorScheme(from defaults: UserDefaults) -> ColorScheme {
+        // Read through the global domain rather than `string(forKey:)` so the
+        // value is not served from this process's cached registration domain.
+        let rawValue = defaults.persistentDomain(forName: UserDefaults.globalDomain)?["AppleInterfaceStyle"] as? String
+        let resolved = SystemAppearance.colorScheme(forInterfaceStyle: rawValue)
+        DebugLog.emit("Theme", "system appearance AppleInterfaceStyle=\(rawValue ?? "nil") resolved=\(resolved)")
+        return resolved
+    }
+}
+
 // Tiny representable view used purely to obtain the hosting NSWindow, which
 // SwiftUI doesn't otherwise expose, for sizing and appearance updates.
 private struct CalculatorWindowResolver: NSViewRepresentable {
@@ -3098,5 +3787,30 @@ private struct CalculatorWindowResolver: NSViewRepresentable {
         DispatchQueue.main.async { [weak nsView] in
             onResolve(nsView?.window)
         }
+    }
+}
+
+/// The rounding pane's background treatment, shared by the VAT and Tip panes:
+/// the fill runs past the window's content inset to the edges, with rounded
+/// top corners, so all three panes sit the same way.
+private struct MacToolPaneBackground: ViewModifier {
+    let color: Color
+
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: .infinity, alignment: .top)
+            .fixedSize(horizontal: false, vertical: true)
+            .background(color)
+            .clipShape(
+                UnevenRoundedRectangle(
+                    topLeadingRadius: 10,
+                    bottomLeadingRadius: 0,
+                    bottomTrailingRadius: 0,
+                    topTrailingRadius: 10,
+                    style: .continuous
+                )
+            )
+            .padding(.horizontal, -8)
+            .padding(.bottom, -8)
     }
 }

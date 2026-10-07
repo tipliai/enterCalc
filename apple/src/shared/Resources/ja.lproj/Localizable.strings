@@ -16,16 +16,20 @@
 "settings.language.defaultOption" = "デフォルト（%@）";
 "settings.userInterface" = "ユーザーインターフェース";
 "settings.numberFormat.style" = "数値スタイル";
+"settings.currency.symbol" = "通貨記号";
 "settings.numberFormat.scientific" = "科学表記を使用";
 "settings.percent.classicBehavior" = "代替キーパッドを使用";
 "settings.buttonSound.disabled" = "ボタン音を無効にする";
 "settings.credits" = "このアプリについて";
+"settings.feedback" = "フィードバック";
 "settings.credits.version" = "バージョン %@";
 "mac.about.windowTitle" = "%@について";
 "settings.credit.part1" = "© 2026 Tipli AI, LLC. EnterCalc はオープンソースで、MIT ライセンスのもとで公開されています。プロジェクトへの貢献は ";
 "settings.credit.linkText" = "GitHub";
 "settings.credit.middle" = " からお願いします。";
 "calculator.mode.basic" = "基本";
+"calculator.mode.currency" = "通貨";
+"calculator.currency.toggle" = "通貨を切り替え";
 "history.title" = "履歴";
 "history.empty" = "まだ履歴はありません";
 "history.emptyAfterClear" = "";
@@ -34,6 +38,10 @@
 "key.enter" = "入力";
 "settings.rounding.disableSwipeDown" = "下スワイプで丸める操作を無効にする";
 "rounding.toggle" = "丸めパネルを表示/非表示";
+"display.grow" = "表示を大きくする";
+"display.shrink" = "表示を小さくする";
+"keypad.resize.label" = "キーパッドのサイズ変更";
+"keypad.resize.hint" = "ドラッグするか、Shift と上下矢印キーで表示サイズを変更します";
 "rounding.title" = "結果を丸める";
 "rounding.remove" = "丸めを解除";
 "copy" = "コピー";
@@ -50,3 +58,45 @@
 "screen.pageStatus" = "画面 %1$@ / %2$@";
 "window.new" = "新しいウィンドウを開く";
 "history.toggle" = "履歴パネルを表示/非表示";
+
+/* Page switching shortcuts (issue #83) */
+"screen.next" = "次の画面";
+"screen.previous" = "前の画面";
+
+/* カスタマイズ可能なファンクションキー (Issue #67) */
+"function.squareRoot" = "平方根";
+"function.square" = "2乗";
+"function.reciprocal" = "逆数";
+"function.parentheses" = "かっこ";
+"function.percent" = "パーセント";
+"functionKey.chooser.title" = "機能を選択";
+"functionKey.change" = "機能を変更";
+"functionKey.hint" = "長押しすると、このキーを変更できます";
+
+/* 通貨モードのツール: 消費税とチップ (Issue #92) */
+"currency.vat.title" = "消費税";
+"currency.vat.add" = "消費税を加算";
+"currency.vat.remove" = "消費税を差し引く";
+"currency.vat.rate" = "税率";
+"currency.vat.rate.decrease" = "税率を下げる";
+"currency.vat.rate.increase" = "税率を上げる";
+"currency.vat.net" = "税抜";
+"currency.vat.amount" = "消費税";
+"currency.vat.gross" = "税込";
+"currency.tip.title" = "チップ";
+"currency.tip.rate" = "チップ";
+"currency.tip.amount" = "チップ";
+"currency.tip.total" = "合計";
+"currency.tool.close" = "閉じる";
+
+/* Typed rates and editable presets on the VAT and Tip panels (issue #124) */
+"currency.rate.type" = "割合を入力";
+"currency.rate.editPreset" = "プリセットを編集";
+"currency.rate.presetHint" = "長押ししてこのプリセットに新しい値を入力";
+"currency.rate.done" = "完了";
+"currency.rate.cancel" = "キャンセル";
+"currency.vat.clear" = "消費税を解除";
+"currency.tip.clear" = "チップを解除";
+"currency.vat.short" = "消費税";
+"currency.tip.short" = "チップ";
+"currency.tip.off" = "オフ";

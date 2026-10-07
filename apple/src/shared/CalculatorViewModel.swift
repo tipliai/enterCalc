@@ -135,7 +135,11 @@ public final class CalculatorViewModel: ObservableObject {
         let activeCurrencySymbol: String?
         let isPendingEntryClearedByClearButton: Bool
         let shouldPreserveTypedCurrencyInput: Bool
+        let resultUsesPercentToken: Bool
         let displayEditCursorIndex: Int?
+        /// Which VAT/Tip result is on the display, so undo and redo bring back
+        /// the base it was worked out from along with the display.
+        let toolApplication: ToolApplication?
     }
 
     // Published state: what the UI renders. `display` is the large result line,
@@ -153,6 +157,11 @@ public final class CalculatorViewModel: ObservableObject {
     @Published public private(set) var isResultRoundingEnabled: Bool = false
     @Published public private(set) var resultRoundingPrecision: Int = 4
     @Published public private(set) var activeCurrencySymbol: String?
+    /// Monotonic count of calculations carried through to a result, used to
+    /// judge whether the app is genuinely in use. Deliberately outside the undo
+    /// snapshot and unaffected by clearing history: it records what the person
+    /// did, not what the calculator currently shows.
+    public private(set) var completedCalculationCount: Int = 0
     @Published public private(set) var displayEditCursorIndex: Int?
     private var currentErrorKey: String? = nil
 
@@ -174,6 +183,9 @@ public final class CalculatorViewModel: ObservableObject {
     private var roundingInteractionInitialEnabled: Bool?
     private var roundingInteractionInitialPrecision: Int?
     private var shouldPreserveTypedCurrencyInput = false
+    // Set when an evaluation produced a percentage of a percentage (9% + 9%), so
+    // the result line renders "18%" over the stored decimal 0.18.
+    private var resultUsesPercentToken = false
 
     public init(numberFormatStyle: NumberFormatStyle = .western, usesScientificNotation: Bool = true) {
         self.numberFormatStyle = numberFormatStyle
@@ -355,7 +367,9 @@ public final class CalculatorViewModel: ObservableObject {
         return f
     }()
 
-    private var currentValue: Decimal {
+    /// The value currently on screen. Public so tools that operate on it —
+    /// the VAT and tip panels — read exactly what the display shows.
+    public var currentValue: Decimal {
         parseStoredNumber(currentInput) ?? 0
     }
 
@@ -474,6 +488,34 @@ public final class CalculatorViewModel: ObservableObject {
         completeUndoableChange(from: snapshot)
     }
 
+    /// Drops the active currency symbol, returning the calculator to plain
+    /// number entry. The entered value itself is untouched.
+    public func clearCurrencySymbol() {
+        guard activeCurrencySymbol != nil else { return }
+        let snapshot = beginUndoableChange()
+        finishDirectDisplayEditingIfNeeded()
+        isPendingEntryClearedByClearButton = false
+        activeCurrencySymbol = nil
+        shouldPreserveTypedCurrencyInput = false
+        refreshCurrentSessionDisplayTokens()
+        completeUndoableChange(from: snapshot)
+    }
+
+    /// Backs the on-screen currency key: the first press enters currency mode
+    /// with `symbol`, the next one leaves it.
+    ///
+    /// Any active symbol clears, not just a matching one. A symbol typed on a
+    /// hardware keyboard is entered the same way as one from the key, so the
+    /// key stays a reliable way out of currency mode regardless of how it was
+    /// entered.
+    public func toggleCurrencySymbol(_ symbol: String) {
+        if activeCurrencySymbol == nil {
+            inputCurrencySymbol(symbol)
+        } else {
+            clearCurrencySymbol()
+        }
+    }
+
     // Inserts the locale decimal separator, guarding against a second separator
     // in the same operand.
     public func inputDecimal() {
@@ -531,7 +573,13 @@ public final class CalculatorViewModel: ObservableObject {
         let snapshot = beginUndoableChange()
         finishDirectDisplayEditingIfNeeded()
         isPendingEntryClearedByClearButton = false
-        let operandToken = currentToken
+        // A percent-of-percent result displays as "18%" over a stored 0.18.
+        // Applying % again works from that value, not the token, so the result
+        // is 0.18% rather than a doubled-up "18%%".
+        let operandToken = resultUsesPercentToken
+            ? displayString(for: currentInput, useActiveCurrency: false)
+            : currentToken
+        resultUsesPercentToken = false
         let percentOperandToken = activeCurrencySymbol == nil
             ? operandToken
             : displayString(for: currentInput, useActiveCurrency: false)
@@ -612,6 +660,7 @@ public final class CalculatorViewModel: ObservableObject {
         lastOperand = nil
         lastResultSummary = ""
         expression = ""
+        resultUsesPercentToken = false
         shouldResetInputOnNextDigit = false
         justEvaluated = false
         isErrorState = false
@@ -626,7 +675,10 @@ public final class CalculatorViewModel: ObservableObject {
         shouldPreserveTypedCurrencyInput = false
         isResultRoundingEnabled = false
         resultRoundingPrecision = 4
-        activeCurrencySymbol = nil
+        // Currency mode deliberately survives All Clear. It is a mode the user
+        // switched on, not part of the calculation being cleared, so clearing
+        // the entry should not silently drop it. The currency key is the way
+        // out of it.
         displayEditCursorIndex = nil
     }
 
@@ -832,6 +884,13 @@ public final class CalculatorViewModel: ObservableObject {
     // Computes the result (=). Expression mode evaluates the full token stream
     // (auto-closing open parentheses) with operator precedence; otherwise it
     // finishes the pending binary operation. Repeated equals does not replay.
+    /// Whether an operation is still waiting for Enter, e.g. `10 + 5` before =.
+    /// The VAT and Tip panes press Enter first in that case, so they work from
+    /// the result (15) rather than the number being typed (5).
+    public var hasPendingCalculation: Bool {
+        !isErrorState && (pendingOperator != nil || (isExpressionMode && !expressionTokens.isEmpty))
+    }
+
     public func evaluate() {
         guard !isErrorState else { return }
         let snapshot = beginUndoableChange()
@@ -907,9 +966,6 @@ public final class CalculatorViewModel: ObservableObject {
                 // No right-hand operand was entered after the operator; finalize
                 // the existing accumulated value without duplicating the operand.
                 evaluateTrailingPendingOperatorAsStandaloneResult()
-            } else if shouldFinalizeCurrencyPendingPercentAsStandaloneResult {
-                finalizeCurrencyPendingPercentAsStandaloneResult()
-                updateDisplay()
             } else if evaluatePendingExpressionWithDisplayedPrecedence() {
                 // handled inside helper
             } else {
@@ -1290,6 +1346,139 @@ public final class CalculatorViewModel: ObservableObject {
         completeUndoableChange(from: snapshot)
     }
 
+    /// Which Currency-mode tool last wrote the display, and from what (#124).
+    public enum Tool: Equatable, Sendable {
+        case vat
+        case tip
+    }
+
+    private struct ToolApplication: Equatable {
+        let tool: Tool
+        let base: Decimal
+        /// The amount the result left, compared by value so a change of
+        /// number format alone doesn't lose track of it.
+        let value: Decimal
+        let summary: String
+        /// `undoRevision` right after the result was first applied.
+        let revision: Int
+    }
+
+    private var toolApplication: ToolApplication?
+    /// Counts every change to the undo history. Unlike the stack's depth it
+    /// keeps moving once the stack is at its cap, so it tells whether a tool's
+    /// result is still the latest step.
+    private var undoRevision = 0
+
+    /// The amount a VAT or Tip panel works from. While the display still shows
+    /// that tool's own result, reopening the panel works from the amount it
+    /// started with, so choosing another rate replaces the VAT or tip rather
+    /// than adding it again on top. Anything typed since then starts afresh.
+    public func toolBase(for tool: Tool) -> Decimal {
+        if let application = liveToolApplication, application.tool == tool {
+            return application.base
+        }
+        return currentValue
+    }
+
+    private var liveToolApplication: ToolApplication? {
+        guard let application = toolApplication,
+              expression.isEmpty, pendingOperator == nil,
+              currentValue == application.value,
+              lastResultSummary == application.summary else { return nil }
+        return application
+    }
+
+    /// Writes a VAT or Tip result to the display as soon as the panel opens,
+    /// and again whenever its rate changes. The first write is one undo step
+    /// back to the original amount; later adjustments replace that result in
+    /// place rather than adding undo steps.
+    public func applyLiveToolResult(_ value: Decimal, tool: Tool, base: Decimal, describedBy summary: String) {
+        let revision: Int
+        if let live = liveToolApplication, live.tool == tool {
+            writeToolResult(value, describedBy: summary)
+            revision = live.revision
+        } else {
+            applyToolResult(value, describedBy: summary)
+            revision = undoRevision
+        }
+        toolApplication = ToolApplication(
+            tool: tool, base: base, value: currentValue, summary: lastResultSummary, revision: revision
+        )
+    }
+
+    /// The operation line a VAT or Tip result leaves on the display, starting
+    /// from the amount it was worked out from, without the currency symbol:
+    /// `100 + VAT(10%) =`, or with `−`
+    /// when VAT is backed out of a gross price. `label` is the short tool name
+    /// (VAT, TIP, MwSt., …).
+    public func toolOperationLine(base: Decimal, label: String, rate: Decimal, isRemoving: Bool = false) -> String {
+        // No symbol, like every currency operation line.
+        let amount = formattedValue(base, includingCurrency: false)
+        let rateText = formattedValue(RateEntry.roundedForDisplay(rate), includingCurrency: false)
+        return "\(amount) \(isRemoving ? "−" : "+") \(label)(\(rateText)%) ="
+    }
+
+    /// The VAT or Tip pane's trash button: takes the tool's result back off the
+    /// display, the way the rounding pane's trash removes rounding. While the
+    /// result is still the latest change this is an undo, so the display comes
+    /// back exactly as it was (and redo can bring the result back with its
+    /// base); otherwise the original amount is written back as a new step.
+    ///
+    /// With `clearingOperationLine`, as when the Tip slider is moved to Off,
+    /// the operation line is cleared too, as an undoable step, even if the
+    /// amount had one of its own before — the amount is left on its own. Off
+    /// is always a new step rather than an undo, so Undo brings the tip back.
+    public func removeLiveToolResult(_ tool: Tool, clearingOperationLine: Bool = false) {
+        if let live = liveToolApplication, live.tool == tool {
+            if !clearingOperationLine, undoRevision == live.revision {
+                undo()
+            } else {
+                applyToolResult(live.base, describedBy: "")
+                toolApplication = nil
+            }
+        }
+        if clearingOperationLine, expression.isEmpty, pendingOperator == nil, !lastResultSummary.isEmpty {
+            let snapshot = beginUndoableChange()
+            lastResultSummary = ""
+            updateDisplay()
+            completeUndoableChange(from: snapshot)
+        }
+    }
+
+    /// Replaces what is on screen with a figure produced by one of the
+    /// Currency-mode tools (#92).
+    ///
+    /// Modelled on `reuse(_:)`: the value lands as a completed result, so the
+    /// next digit starts a fresh entry rather than appending to it, and the
+    /// whole thing is a single undo step. The currency symbol is left alone —
+    /// a VAT or tip figure is still money.
+    public func applyToolResult(_ value: Decimal, describedBy summary: String) {
+        let snapshot = beginUndoableChange()
+        writeToolResult(value, describedBy: summary)
+        completeUndoableChange(from: snapshot)
+    }
+
+    private func writeToolResult(_ value: Decimal, describedBy summary: String) {
+        currentInput = decimalNumberString(from: value)
+        shouldPreserveTypedCurrencyInput = false
+        isResultRoundingEnabled = false
+        lastResultSummary = summary
+        accumulator = nil
+        pendingOperator = nil
+        lastOperator = nil
+        lastOperand = nil
+        expression = ""
+        currentToken = displayString(for: currentInput, useActiveCurrency: false)
+        accumulatorToken = nil
+        lastOperandToken = nil
+        shouldResetInputOnNextDigit = true
+        justEvaluated = true
+        isErrorState = false
+        currentErrorKey = nil
+        isPendingEntryClearedByClearButton = false
+        updateDisplay()
+    }
+
     public func clearHistory() {
         let snapshot = beginUndoableChange()
         history.removeAll()
@@ -1382,6 +1571,7 @@ public final class CalculatorViewModel: ObservableObject {
         apply(snapshot: snapshot)
         suppressHistoryTracking = false
         redoStack.append(current)
+        undoRevision += 1
     }
 
     public func redo() {
@@ -1392,6 +1582,7 @@ public final class CalculatorViewModel: ObservableObject {
         suppressHistoryTracking = false
         undoStack.append(current)
         trimToRecentSnapshots(&undoStack, maxCount: Limits.maxUndoDepth)
+        undoRevision += 1
     }
 
     // MARK: - Private helpers
@@ -2021,10 +2212,13 @@ public final class CalculatorViewModel: ObservableObject {
             return
         }
         let resultText = format(result)
+        let percentResultToken = operationYieldsPercentResult(pending: pending, lhsToken: lhsToken, rhsToken: rhsToken)
+            ? percentTokenString(forStoredValue: result)
+            : nil
 
         if addToHistory {
             let exp = completedPendingExpression(lhsToken: lhsToken, pending: pending, rhsToken: rhsToken)
-            appendHistory(expression: exp, result: resultText)
+            appendHistory(expression: exp, result: resultText, displayResultOverride: percentResultToken)
             lastResultSummary = exp + " ="
             expression = ""
             pendingOperator = nil
@@ -2046,14 +2240,22 @@ public final class CalculatorViewModel: ObservableObject {
 
         currentInput = resultText
         accumulator = result
-        accumulatorToken = displayString(for: resultText, useActiveCurrency: false)
-        currentToken = displayString(for: resultText, useActiveCurrency: false)
+        // The percent form is a display token only: `currentInput` keeps the
+        // decimal so anything calculated from this result stays correct.
+        accumulatorToken = percentResultToken ?? displayString(for: resultText, useActiveCurrency: false)
+        currentToken = accumulatorToken ?? displayString(for: resultText, useActiveCurrency: false)
+        resultUsesPercentToken = percentResultToken != nil
         if refreshDisplay {
             updateDisplay()
         }
     }
 
-    private func appendHistory(expression: String, result: String, displayExpressionOverride: String? = nil) {
+    private func appendHistory(
+        expression: String,
+        result: String,
+        displayExpressionOverride: String? = nil,
+        displayResultOverride: String? = nil
+    ) {
         let historyExpression: String
         let historyResult: String
         let displayResult: String
@@ -2077,9 +2279,11 @@ public final class CalculatorViewModel: ObservableObject {
         } else {
             historyExpression = expression
             historyResult = storedHistoryResultString(from: result)
-            displayResult = displayString(for: historyResult, useActiveCurrency: false)
+            displayResult = displayResultOverride ?? displayString(for: historyResult, useActiveCurrency: false)
             displayExpression = displayExpressionOverride ?? completedOperationDisplayExpression(expression)
         }
+
+        completedCalculationCount += 1
 
         let boundedExpression = String(historyExpression.prefix(Limits.maxHistoryExpressionCharacters))
         let boundedResult = String(historyResult.prefix(Limits.maxHistoryResultCharacters))
@@ -2165,6 +2369,7 @@ public final class CalculatorViewModel: ObservableObject {
         undoStack.append(snapshot)
         trimToRecentSnapshots(&undoStack, maxCount: Limits.maxUndoDepth)
         redoStack.removeAll()
+        undoRevision += 1
     }
 
     private func makeSnapshot() -> CalculatorSnapshot {
@@ -2195,7 +2400,9 @@ public final class CalculatorViewModel: ObservableObject {
             activeCurrencySymbol: activeCurrencySymbol,
             isPendingEntryClearedByClearButton: isPendingEntryClearedByClearButton,
             shouldPreserveTypedCurrencyInput: shouldPreserveTypedCurrencyInput,
-            displayEditCursorIndex: displayEditCursorIndex
+            resultUsesPercentToken: resultUsesPercentToken,
+            displayEditCursorIndex: displayEditCursorIndex,
+            toolApplication: toolApplication
         )
     }
 
@@ -2224,8 +2431,10 @@ public final class CalculatorViewModel: ObservableObject {
         isResultRoundingEnabled = snapshot.isResultRoundingEnabled
         resultRoundingPrecision = snapshot.resultRoundingPrecision
         activeCurrencySymbol = snapshot.activeCurrencySymbol
+        toolApplication = snapshot.toolApplication
         isPendingEntryClearedByClearButton = snapshot.isPendingEntryClearedByClearButton
         shouldPreserveTypedCurrencyInput = snapshot.shouldPreserveTypedCurrencyInput
+        resultUsesPercentToken = snapshot.resultUsesPercentToken
         displayEditCursorIndex = snapshot.displayEditCursorIndex
         trimToNewestEntries(&history, maxCount: Limits.maxStoredHistoryEntries)
         trimToNewestEntries(&memoryEntries, maxCount: Limits.maxStoredMemoryEntries)
@@ -2887,6 +3096,42 @@ public final class CalculatorViewModel: ObservableObject {
         }
     }
 
+    /// An amount of money shown with exactly `fractionDigits` decimals — full
+    /// cents, trailing zeros kept (£125.50, not £125.5) — in the active number
+    /// format, with the currency symbol. Used by the VAT and Tip panes.
+    public func formattedCurrencyAmount(_ value: Decimal, fractionDigits: Int) -> String {
+        var rounded = Decimal()
+        var source = value
+        NSDecimalRound(&rounded, &source, fractionDigits, .plain)
+
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.usesGroupingSeparator = false
+        formatter.minimumFractionDigits = fractionDigits
+        formatter.maximumFractionDigits = fractionDigits
+        formatter.minimumIntegerDigits = 1
+        let raw = formatter.string(from: NSDecimalNumber(decimal: rounded)) ?? decimalNumberString(from: rounded)
+        let formatted = groupedNumberString(raw)
+        guard let symbol = activeCurrencySymbol else { return formatted }
+
+        return formatted.hasPrefix("-")
+            ? "-\(symbol)\(formatted.dropFirst())"
+            : "\(symbol)\(formatted)"
+    }
+
+    /// Formats a value the way the display would, so numbers produced outside
+    /// the keypad — a VAT split, a tip share — cannot drift from the ones the
+    /// calculator shows. Honours the current number format style, and prefixes
+    /// the active currency symbol unless asked not to.
+    public func formattedValue(_ value: Decimal, includingCurrency: Bool = true) -> String {
+        let formatted = format(value)
+        guard includingCurrency, let symbol = activeCurrencySymbol else { return formatted }
+
+        return formatted.hasPrefix("-")
+            ? "-\(symbol)\(formatted.dropFirst())"
+            : "\(symbol)\(formatted)"
+    }
+
     private func format(_ value: Decimal) -> String {
         if value == 0 { return "0" }
         let roundedDecimal = formatter.string(from: NSDecimalNumber(decimal: value)) ?? decimalNumberString(from: value)
@@ -2916,6 +3161,7 @@ public final class CalculatorViewModel: ObservableObject {
         expression = ""
         currentInput = "0"
         currentToken = "0"
+        resultUsesPercentToken = false
         shouldResetInputOnNextDigit = false
         justEvaluated = false
         isErrorState = false
@@ -3168,8 +3414,23 @@ public final class CalculatorViewModel: ObservableObject {
 
     private func displayBoundaryIndex(forRawCursorIndex rawIndex: Int) -> Int? {
         let normalized = normalizedDisplayEditCursorIndex(rawIndex)
-        return displayBoundaryToRawCursorMapping().firstIndex(of: normalized)
+        let mapping = displayBoundaryToRawCursorMapping()
+        guard var boundary = mapping.firstIndex(of: normalized) else { return nil }
+
+        // The currency symbol is display-only, so the boundaries either side of
+        // it map to the same raw index and `firstIndex` lands in front of it.
+        // Step over it: the symbol is not editable, and the caret belongs before
+        // the first digit (#118). Grouping separators are deliberately not
+        // skipped, so the caret stays right after the digit it follows.
+        let displayCharacters = Array(display)
+        while boundary < displayCharacters.count,
+              mapping[boundary + 1] == normalized,
+              Self.supportedCurrencySymbolCharacters.contains(displayCharacters[boundary]) {
+            boundary += 1
+        }
+        return boundary
     }
+
 
     private func displayCharacterMatchesRawCharacter(_ displayCharacter: Character, rawCharacter: Character) -> Bool {
         if displayCharacter == rawCharacter {
@@ -3192,22 +3453,6 @@ public final class CalculatorViewModel: ObservableObject {
         pendingOperator != nil && accumulatorUsesStandalonePercentToken
     }
 
-    private var shouldFinalizeCurrencyPendingPercentAsStandaloneResult: Bool {
-        guard activeCurrencySymbol != nil,
-              let pendingOperator,
-              currentToken.hasSuffix("%"),
-              !shouldResetInputOnNextDigit else {
-            return false
-        }
-
-        switch pendingOperator {
-        case .add, .subtract:
-            return true
-        case .multiply, .divide:
-            return false
-        }
-    }
-
     private var pendingOperatorShouldKeepPercentToken: Bool {
         pendingOperator != nil
     }
@@ -3217,6 +3462,12 @@ public final class CalculatorViewModel: ObservableObject {
             return false
         }
 
+        // A percent-of-percent result has no pending operator left, so it needs
+        // its own reason to keep showing the token rather than the raw decimal.
+        if resultUsesPercentToken {
+            return true
+        }
+
         if isExpressionMode && !shouldResetInputOnNextDigit {
             return true
         }
@@ -3224,31 +3475,26 @@ public final class CalculatorViewModel: ObservableObject {
         return pendingOperator != nil
     }
 
-    private var accumulatorUsesStandalonePercentToken: Bool {
-        accumulatorToken?.hasSuffix("%") == true
+    // True when both sides of the operation were themselves standalone percent
+    // tokens: 9% + 9% is 18%, not 0.18. Restricted to + and − because × and ÷
+    // combine the percentages instead of accumulating them (9% × 9% is 0.81%).
+    private func operationYieldsPercentResult(pending: BinaryOperator, lhsToken: String, rhsToken: String) -> Bool {
+        guard lhsToken.hasSuffix("%"), rhsToken.hasSuffix("%") else { return false }
+
+        switch pending {
+        case .add, .subtract:
+            return true
+        case .multiply, .divide:
+            return false
+        }
     }
 
-    private func finalizeCurrencyPendingPercentAsStandaloneResult() {
-        guard let pending = pendingOperator else { return }
+    private func percentTokenString(forStoredValue value: Decimal) -> String {
+        "\(format(value * 100))%"
+    }
 
-        let lhsToken = accumulatorToken ?? currentToken
-        let rhsToken = currentToken
-        let resultText = format(parseStoredNumber(currentInput) ?? 0)
-        let expressionText = "\(lhsToken) \(pending.symbol) \(rhsToken)"
-
-        appendHistory(expression: expressionText, result: resultText)
-        lastResultSummary = expressionText + " ="
-        currentInput = resultText
-        currentToken = displayString(for: resultText, useActiveCurrency: false)
-        accumulator = parseStoredNumber(resultText)
-        accumulatorToken = currentToken
-        pendingOperator = nil
-        lastOperator = nil
-        lastOperand = nil
-        lastOperandToken = nil
-        expression = ""
-        shouldResetInputOnNextDigit = true
-        justEvaluated = true
+    private var accumulatorUsesStandalonePercentToken: Bool {
+        accumulatorToken?.hasSuffix("%") == true
     }
 
     private func resolvedPercentValue() -> Decimal {

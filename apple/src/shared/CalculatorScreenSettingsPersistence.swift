@@ -8,6 +8,8 @@ public enum CalculatorScreenSettingsPersistence {
     private static let alternativeKeypadKey = "settings.keypad.alternative"
     private static let newDefaultKeypadMigrationKey = "settings.keypad.newDefault.v1"
     private static let legacyClassicPercentKey = "settings.percent.classic"
+    private static let currencySymbolKey = "settings.currency.symbol"
+    private static let functionKeyAssignmentsKey = "settings.functionKeys.assignments"
 
     public static func load(from defaults: UserDefaults = .standard) -> CalculatorScreenSettings {
         migrateLegacyKeypadPreferenceIfNeeded(in: defaults)
@@ -20,10 +22,11 @@ public enum CalculatorScreenSettingsPersistence {
             usesScientificNotation: defaults.object(forKey: "settings.numberFormat.scientific") as? Bool ?? true,
             numberFormatStyleRawValue: defaults.string(forKey: "settings.numberFormat.style") ?? NumberFormatStyle.detected().rawValue,
             usesAlternativeKeypad: usesAlternativeKeypad(from: defaults),
-            usesEnterKeySymbol: defaults.object(forKey: "settings.equals.enterKeySymbol") as? Bool ?? true,
             disablesSwipeDownToRound: defaults.object(forKey: "settings.rounding.disableSwipeDown") as? Bool ?? false,
             disablesButtonSound: defaults.object(forKey: "settings.buttonSound.disabled") as? Bool ?? false,
-            keypadHeightMultiplier: min(max(storedKeypadHeightMultiplier, 0.5), 1.0)
+            keypadHeightMultiplier: min(max(storedKeypadHeightMultiplier, 0.5), 1.0),
+            currencySymbol: storedCurrencySymbol(from: defaults),
+            functionKeyAssignments: storedFunctionKeyAssignments(from: defaults)
         )
     }
 
@@ -35,10 +38,30 @@ public enum CalculatorScreenSettingsPersistence {
         defaults.set(settings.usesAlternativeKeypad, forKey: alternativeKeypadKey)
         defaults.removeObject(forKey: legacyClassicPercentKey)
         defaults.set(true, forKey: newDefaultKeypadMigrationKey)
-        defaults.set(settings.usesEnterKeySymbol, forKey: "settings.equals.enterKeySymbol")
         defaults.set(settings.disablesSwipeDownToRound, forKey: "settings.rounding.disableSwipeDown")
         defaults.set(settings.disablesButtonSound, forKey: "settings.buttonSound.disabled")
         defaults.set(settings.keypadHeightMultiplier, forKey: "settings.keypadHeightMultiplier")
+        defaults.set(settings.currencySymbol, forKey: currencySymbolKey)
+        defaults.set(settings.functionKeyAssignments.serialized, forKey: functionKeyAssignmentsKey)
+    }
+
+    /// Reads the configurable-key layout. Anything unparseable falls back to
+    /// the defaults rather than leaving the keypad half-configured.
+    public static func storedFunctionKeyAssignments(from defaults: UserDefaults = .standard) -> CalculatorFunctionKeyAssignments {
+        CalculatorFunctionKeyAssignments(serialized: defaults.string(forKey: functionKeyAssignmentsKey))
+    }
+
+    /// Falls back to the region default until the user picks a symbol, so the
+    /// currency key is useful on first launch without any setup. A stored value
+    /// that is no longer offered also falls back rather than persisting a symbol
+    /// the picker cannot display.
+    public static func storedCurrencySymbol(from defaults: UserDefaults = .standard) -> String {
+        guard let stored = defaults.string(forKey: currencySymbolKey),
+              CurrencyCatalog.option(forSymbol: stored) != nil else {
+            return CurrencyCatalog.detected().symbol
+        }
+
+        return stored
     }
 
     private static func usesAlternativeKeypad(from defaults: UserDefaults) -> Bool {
