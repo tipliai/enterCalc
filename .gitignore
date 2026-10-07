@@ -72,3 +72,6 @@ credentials.json
 
 # Generated assets
 *.generated.*
+
+# Xcode Cloud link Xcode creates on its own; not used here
+**/xcshareddata/xcodecloud/
