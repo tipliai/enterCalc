@@ -48,12 +48,15 @@ public struct CalculatorFunctionKeyChooser: View {
     // the key being edited stays in view (#131). A pointer needs less room
     // than a finger.
     public static let columns: Int = 6
-    private static let cellSize: CGFloat = 36
+    private static let cellSize: CGFloat = 32
     private static let cellSpacing: CGFloat = 6
-    private static let panelPadding: CGFloat = 9
+    private static let panelPadding: CGFloat = 8
     private static let anchorGap: CGFloat = 6
-    private static let glyphSize: CGFloat = 16
+    private static let glyphSize: CGFloat = 15
     private static let headerHeight: CGFloat = 28
+    // Twice the keypad's own inset, so the panel clearly floats inside the
+    // window rather than running edge to edge.
+    private static let screenMargin: CGFloat = 16
     #else
     public static let columns: Int = 4
     private static let cellSize: CGFloat = 56
@@ -62,8 +65,8 @@ public struct CalculatorFunctionKeyChooser: View {
     private static let anchorGap: CGFloat = 12
     private static let glyphSize: CGFloat = 20
     private static let headerHeight: CGFloat = 36
-    #endif
     private static let screenMargin: CGFloat = 8
+    #endif
 
     private let session: FunctionKeyChooserSession
     private let assignments: CalculatorFunctionKeyAssignments

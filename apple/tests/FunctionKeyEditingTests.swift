@@ -49,15 +49,16 @@ final class FunctionKeyEditingTests: XCTestCase {
 
     // MARK: Chooser placement
 
-    private let panel = CGSize(width: 264, height: 124)
+    private let panel = CGSize(width: 238, height: 120)
     private let window = CGRect(x: 0, y: 0, width: 280, height: 484)
 
     func testChooserOpensBelowTheKeyOnTheMac() {
         let key = CGRect(x: 75, y: 246, width: 63, height: 42)
         let origin = CalculatorFunctionKeyChooser.panelOrigin(anchor: key, panelSize: panel, container: window)
         XCTAssertGreaterThanOrEqual(origin.y, key.maxY, "the key being edited stays in view")
-        XCTAssertGreaterThanOrEqual(origin.x, 8)
-        XCTAssertLessThanOrEqual(origin.x + panel.width, window.maxX - 8)
+        // Clear of the window's edges, not running edge to edge.
+        XCTAssertGreaterThanOrEqual(origin.x, 16)
+        XCTAssertLessThanOrEqual(origin.x + panel.width, window.maxX - 16)
     }
 
     func testChooserFlipsAboveWhenThereIsNoRoomBelow() {
@@ -70,7 +71,7 @@ final class FunctionKeyEditingTests: XCTestCase {
         let tiny = CGRect(x: 0, y: 0, width: 280, height: 200)
         let key = CGRect(x: 75, y: 80, width: 63, height: 42)
         let origin = CalculatorFunctionKeyChooser.panelOrigin(anchor: key, panelSize: panel, container: tiny)
-        XCTAssertGreaterThanOrEqual(origin.y, 8)
-        XCTAssertLessThanOrEqual(origin.y + panel.height, tiny.maxY - 8 + 0.5)
+        XCTAssertGreaterThanOrEqual(origin.y, 16)
+        XCTAssertLessThanOrEqual(origin.y + panel.height, tiny.maxY - 16 + 0.5)
     }
 }
