@@ -3541,6 +3541,10 @@ private extension EnterCalcIOSView {
     func toggleOverlay(_ overlay: IOSOverlayPane) {
         let wasActiveOverlay = activeOverlay
 
+        if (overlay == .vat || overlay == .tip), wasActiveOverlay != overlay {
+            pressEnterForPendingCalculation()
+        }
+
         if wasActiveOverlay == .rounding,
            (overlay != .rounding || wasActiveOverlay == overlay) {
             activeScreen.viewModel.commitResultRoundingInteraction()
@@ -3556,6 +3560,17 @@ private extension EnterCalcIOSView {
         if activeOverlay != .history {
             resetHistoryOverlayResizeState()
         }
+    }
+
+    /// Opening VAT or Tip over an unfinished sum (`10 + 5`) presses Enter for
+    /// the person first, exactly as the Enter key would: the result, its
+    /// history entry, the Enter sound and haptic, and the review gate.
+    func pressEnterForPendingCalculation() {
+        let screen = activeScreen
+        guard screen.viewModel.hasPendingCalculation else { return }
+        screen.viewModel.evaluate()
+        triggerKeyPressFeedback(for: .equals)
+        requestReviewIfEarned(for: screen)
     }
 
     func animateIfAllowed(_ animation: Animation, _ updates: @escaping () -> Void) {

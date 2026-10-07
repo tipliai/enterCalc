@@ -881,6 +881,13 @@ public final class CalculatorViewModel: ObservableObject {
     // Computes the result (=). Expression mode evaluates the full token stream
     // (auto-closing open parentheses) with operator precedence; otherwise it
     // finishes the pending binary operation. Repeated equals does not replay.
+    /// Whether an operation is still waiting for Enter, e.g. `10 + 5` before =.
+    /// The VAT and Tip panes press Enter first in that case, so they work from
+    /// the result (15) rather than the number being typed (5).
+    public var hasPendingCalculation: Bool {
+        !isErrorState && (pendingOperator != nil || (isExpressionMode && !expressionTokens.isEmpty))
+    }
+
     public func evaluate() {
         guard !isErrorState else { return }
         let snapshot = beginUndoableChange()
