@@ -176,16 +176,6 @@ private struct RateChooser: View {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(isSelected ? palette.accent : palette.buttonFunction)
             )
-            // A preset the person has changed is marked, so a custom value is
-            // never mistaken for the regional default.
-            .overlay(alignment: .topTrailing) {
-                if editedSlots.contains(slot) {
-                    Circle()
-                        .fill(isSelected ? palette.accentText : palette.accent)
-                        .frame(width: 4, height: 4)
-                        .padding(4)
-                }
-            }
             .contentShape(Rectangle())
             .onTapGesture { onSelect(rate) }
             .onLongPressGesture(minimumDuration: 0.45) { beginEditingPreset(slot) }
