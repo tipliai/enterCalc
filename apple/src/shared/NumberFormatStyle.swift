@@ -17,7 +17,7 @@ public enum NumberFormatStyle: String, CaseIterable {
         }
     }
 
-    var decimalSeparator: String {
+    public var decimalSeparator: String {
         switch self {
         case .western, .indian, .swiss: return "."
         case .european, .french: return ","

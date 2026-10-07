@@ -66,6 +66,35 @@ public struct VATBreakdown: Equatable, Sendable {
         self.gross = gross
         self.rate = rate
     }
+
+    /// The breakdown rounded to currency precision for display and use: VAT is
+    /// always an amount of money, so the panel never shows more than
+    /// `scale` decimals.
+    ///
+    /// Each figure is not rounded on its own, which could leave the three
+    /// figures a cent apart. Instead the two that matter for the direction are
+    /// rounded and the third is derived, so `net + vat == gross` still holds
+    /// exactly on screen. Adding VAT rounds the net and the VAT and adds them, as
+    /// an invoice does. Removing it keeps the gross the person entered, rounds
+    /// the net, and takes the VAT as the remainder.
+    public func rounded(toScale scale: Int = 2, isRemoving: Bool) -> VATBreakdown {
+        func round(_ value: Decimal) -> Decimal {
+            var result = Decimal()
+            var source = value
+            NSDecimalRound(&result, &source, scale, .plain)
+            return result
+        }
+
+        if isRemoving {
+            let gross = round(self.gross)
+            let net = round(self.net)
+            return VATBreakdown(net: net, vat: gross - net, gross: gross, rate: rate)
+        }
+
+        let net = round(self.net)
+        let vat = round(self.vat)
+        return VATBreakdown(net: net, vat: vat, gross: net + vat, rate: rate)
+    }
 }
 
 public enum VATCalculation {

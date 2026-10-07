@@ -77,22 +77,26 @@
 "currency.vat.title" = "TVA";
 "currency.vat.add" = "Ajouter la TVA";
 "currency.vat.remove" = "Retirer la TVA";
-"currency.vat.rate" = "Taux";
+"currency.vat.rate" = "Taux d’imposition";
 "currency.vat.rate.decrease" = "Diminuer le taux";
 "currency.vat.rate.increase" = "Augmenter le taux";
 "currency.vat.net" = "Hors TVA";
 "currency.vat.amount" = "TVA";
 "currency.vat.gross" = "TTC";
 "currency.tip.title" = "Pourboire";
-"currency.tip.bill" = "Addition";
 "currency.tip.rate" = "Pourboire";
-"currency.tip.rate.decrease" = "Diminuer le pourboire";
-"currency.tip.rate.increase" = "Augmenter le pourboire";
-"currency.tip.split" = "Partager";
-"currency.tip.split.decrease" = "Moins de personnes";
-"currency.tip.split.increase" = "Plus de personnes";
 "currency.tip.amount" = "Pourboire";
 "currency.tip.total" = "Total";
-"currency.tip.perPerson" = "Par personne";
-"currency.tool.use" = "Utiliser le résultat";
 "currency.tool.close" = "Fermer";
+
+/* Typed rates and editable presets on the VAT and Tip panels (issue #124) */
+"currency.rate.type" = "Saisir un taux";
+"currency.rate.editPreset" = "Modifier le préréglage";
+"currency.rate.presetHint" = "Maintenez enfoncé pour saisir une nouvelle valeur pour ce préréglage";
+"currency.rate.done" = "OK";
+"currency.rate.cancel" = "Annuler";
+"currency.vat.clear" = "Supprimer la TVA";
+"currency.tip.clear" = "Supprimer le pourboire";
+"currency.vat.short" = "TVA";
+"currency.tip.short" = "Pourboire";
+"currency.tip.off" = "Désactivé";

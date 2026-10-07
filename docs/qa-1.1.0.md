@@ -128,22 +128,43 @@ Worth knowing when QA'ing #92 later:
 3. Type a digit there. It goes in front of the first digit, behind the symbol (`$5,120`).
 4. Repeat with a negative amount (`±` first): the caret stops after `-$`.
 
+## VAT presets and typed rates — #124
+
+Rates were verified on 2026-10-06; sources and confidence are in [vat-rates-research.md](vat-rates-research.md). Rates live in `apple/src/shared/Resources/vat-rates.json`: changing one is a one-line edit there.
+
+1. Set the device region to **Germany** and open VAT on an amount. The first row holds **three** presets and the rate selector (− rate +, with no "Rate" label): **19%** and **7%** (Germany's rates, 19% selected), topped up with 5. United Kingdom: 20 / 5 / 10. Switzerland: 8,1 / 3,8 / 2,6. United States (no VAT): 5 / 10 / 20. Tip: 15 / 18 / 20. The Tip panel has no Bill row.
+   - **There is no Use Result button.** Opening VAT or Tip writes the result to the display straight away (with an operation line that starts from the original amount, such as `100 + VAT(20%) =`, `120 − VAT(20%) =` when removing, or `100 + TIP(18%) =`; like every currency operation line it shows the numbers without the symbol), and every change of rate or direction updates it. Close the panel with ✕ or by tapping outside; the header is laid out like the rounding pane's, with a **trash** button that takes the VAT or tip back off the display (restoring it exactly, operation line included) and closes. Reopen it to adjust: it works from the original amount (Ex VAT £100 after £120 was applied), so a new rate replaces the VAT or tip rather than adding to it. One **Undo** returns to the amount before the panel opened.
+   - Type `10 + 5` without pressing Enter, then open VAT or Tip: Enter is pressed for you, with its sound and haptic and a `10 + 5 = 15` history entry, and the pane works from 15.
+   - While a panel is open, its VAT or Tip pill in the display is **inverted** (filled), not blue.
+   - Amounts in both panes show the currency's full decimals, trailing zeros kept: removing 19% from €100 reads €84,03 / €15,97 / €100,00; a 25.5% VAT on £100 reads £125.50; removing 10% from ¥1,000 reads ¥909 / ¥91 / ¥1,000. The tip is rounded to whole pence (or yen) and the total is the bill plus that tip.
+   - The Tip pane has no split and no − / + selector: three presets (long-press still edits them, any value), the **Tip (18%)** and Total lines, and below them a slider like the rounding pane's, from Off (power icon) to 40% with a notch every 2%. The slider moves in whole 2% steps; at Off the tip comes back off the display. A preset such as 15% shows between notches. A preset is shown selected (blue) only after it is pressed; moving the slider clears it, even if the slider then lands on that preset's value, so fast slides don't flash the presets.
+   - Check both panels in every language on the smallest iPhone: no label truncates (German *MwSt. herausrechnen* is the longest).
+2. Tap the rate in the selector (between − and +). A system alert opens over the panel (a lightbox, not inline), titled **Tax Rate**, with a text field showing the current rate with a % sign (e.g. `12.55%`) as its placeholder and no help text: the decimal pad on iPhone, the numbers layout on iPad, a text field on Mac. Type `8,1` (German format) or `8.1`; any number of decimals is accepted and used in full for the maths, while rates are shown rounded to three (`12.34567` shows as `12.346%`); rates above 100% are allowed, below 1000%. A rate that can't be used shows the calculator's own error after Done (**Out of range** for 1000% or more, **Invalid input** for anything that isn't a number, e.g. two separators) and changes nothing. **Done** applies it; **Cancel**, or Done on an empty field, keeps the old rate; text that isn't a valid rate changes nothing.
+3. Press and hold a preset. You feel the same haptic as other long-press actions, and the alert opens, titled **Edit Preset**; type a new value and press Done. The button shows the new value. Quit and relaunch: it is still there.
+4. To undo an edit, press and hold the preset again and type its original value.
+5. Repeat 3–4 on the **Tip** panel's presets.
+6. While the alert is open, the calculator underneath must not change, and on iPhone the keyboard covers the VAT/Tip panel rather than pushing it up; when the alert closes, nothing has moved.
+7. With a hardware keyboard: while the alert is open, keys type into its field and the calculator doesn't react; once it closes, keys go back to the calculator.
+8. The − / + stepper moves by 1 on a whole rate, and by 0.5 once a rate has decimals (8,1 → 8,5).
+9. VoiceOver: each preset offers an **Edit Preset** action; the alert is the standard system one.
+
 ## VAT and TIP controls — #92
 
-The pills appear in the mode row only while a currency symbol is showing, and both panels were driven end to end on the iPhone simulator: entering `$120`, opening VAT, switching to **Remove VAT** at 20% and reading back `$100` ex / `$20` VAT / `$120` inc, then **Use Result** writing `$100` to the display with the operation line reading `Remove VAT 20% =`. The Tip panel was checked the same way — `$100` bill at 18% giving `$18` tip and `$118` total, and a split of 2 adding an `Each` row of `$59`.
+The pills appear in the mode row only while a currency symbol is showing. The panels were reworked by #124 (see the section above): results apply live with no Use Result step, three presets share a row with the rate selector, and the Tip pane has no split. The steps below reflect that.
 
-**macOS was not driven interactively.** The Mac's display was asleep for this pass, which makes the accessibility driver report zero windows (now documented in [macos-qa.md](macos-qa.md)). The panels themselves are the same shared code the iPhone run exercised, and the macOS target builds, but the placement, the theme and the click targets need a person.
+**macOS was driven by automation for #126** (System Events plus a CGEvent click helper, see [macos-qa.md](macos-qa.md)): the pills and their active state, the blue currency key, Enter being pressed for a pending calculation, the pane padding, the Tip slider with Off clearing the line, the Edit Preset alert and its Invalid input error, typing or ⌘Z while a pane is open (the pane closes) were all checked on the QA build. Theme, VoiceOver and larger text sizes still need a person on the Mac.
 
-1. Enter a value, press the currency key. **VAT** and **Tip** appear at the right of the mode row; leave currency mode and they disappear.
+1. Enter a value, press the currency key. **VAT** and **TIP** (uppercase in English) appear at the right of the mode row, and the **currency key turns blue** (accent fill, white symbol) to show the mode is on. **AC** keeps it on and blue; pressing the currency key again leaves the mode and the key returns to its normal colour. Reassign currency onto the large ( ) or % key and check it highlights the same way, on iPhone, iPad and Mac.
 2. Neither should crowd the mode label at the smallest window width, or in landscape on iPhone.
-3. Open **VAT**. Check **Add VAT** and **Remove VAT** both read correctly and the emphasised figure switches between Inc VAT and Ex VAT with the direction.
-4. Tap a preset rate, then use the `−`/`+` stepper to reach a rate that is not a preset — 19% or 21% — and confirm the figures follow.
-5. **Use Result** writes the right figure — the gross when adding, the net when removing — and the operation line says which.
-6. Open **Tip**. Check the bill matches what is on screen, the presets select, and the split stepper adds an **Each** row only once the split is above 1.
-7. Confirm the split cannot go below 1.
+3. Open **VAT**. The display changes straight away. Check **Add VAT** and **Remove VAT** both read correctly, the emphasised figure switches between Inc VAT and Ex VAT with the direction, and the display shows the gross when adding and the net when removing, with an operation line saying which.
+4. Tap a preset rate, then use the `−`/`+` selector to reach a rate that is not a preset, such as 21%, and confirm the figures and the display follow.
+5. Open **Tip**. The presets select, and the display shows the total (bill plus the rounded tip) straight away. There is no split.
+6. Use the **trash** in either pane: the display returns to the amount before the pane opened, and the pane closes.
+7. Undo after closing a pane returns to the amount before it opened, in one step.
+   - Slide Tip to **Off**, then Undo: the tip comes back, with its operation line; Redo turns it off again.
 8. Leave currency mode while a panel is open. It should close rather than hang over a Basic-mode calculator.
 9. Check both panels in Dark and Light themes, and with larger text sizes — the figures shrink to fit rather than truncating.
-10. Run in another language and confirm every label is translated, including the accessibility labels on the steppers.
+10. Run in another language and confirm every label is translated, including the accessibility labels on the selector and the trash and close buttons.
 11. **VoiceOver:** each result row should read as one phrase — "Inc VAT, $120" — rather than as two separate fragments.
 
 ## macOS theme sync — PR #97

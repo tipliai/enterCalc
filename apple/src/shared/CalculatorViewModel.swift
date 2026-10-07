@@ -137,6 +137,9 @@ public final class CalculatorViewModel: ObservableObject {
         let shouldPreserveTypedCurrencyInput: Bool
         let resultUsesPercentToken: Bool
         let displayEditCursorIndex: Int?
+        /// Which VAT/Tip result is on the display, so undo and redo bring back
+        /// the base it was worked out from along with the display.
+        let toolApplication: ToolApplication?
     }
 
     // Published state: what the UI renders. `display` is the large result line,
@@ -881,6 +884,13 @@ public final class CalculatorViewModel: ObservableObject {
     // Computes the result (=). Expression mode evaluates the full token stream
     // (auto-closing open parentheses) with operator precedence; otherwise it
     // finishes the pending binary operation. Repeated equals does not replay.
+    /// Whether an operation is still waiting for Enter, e.g. `10 + 5` before =.
+    /// The VAT and Tip panes press Enter first in that case, so they work from
+    /// the result (15) rather than the number being typed (5).
+    public var hasPendingCalculation: Bool {
+        !isErrorState && (pendingOperator != nil || (isExpressionMode && !expressionTokens.isEmpty))
+    }
+
     public func evaluate() {
         guard !isErrorState else { return }
         let snapshot = beginUndoableChange()
@@ -1336,6 +1346,105 @@ public final class CalculatorViewModel: ObservableObject {
         completeUndoableChange(from: snapshot)
     }
 
+    /// Which Currency-mode tool last wrote the display, and from what (#124).
+    public enum Tool: Equatable, Sendable {
+        case vat
+        case tip
+    }
+
+    private struct ToolApplication: Equatable {
+        let tool: Tool
+        let base: Decimal
+        /// The amount the result left, compared by value so a change of
+        /// number format alone doesn't lose track of it.
+        let value: Decimal
+        let summary: String
+        /// `undoRevision` right after the result was first applied.
+        let revision: Int
+    }
+
+    private var toolApplication: ToolApplication?
+    /// Counts every change to the undo history. Unlike the stack's depth it
+    /// keeps moving once the stack is at its cap, so it tells whether a tool's
+    /// result is still the latest step.
+    private var undoRevision = 0
+
+    /// The amount a VAT or Tip panel works from. While the display still shows
+    /// that tool's own result, reopening the panel works from the amount it
+    /// started with, so choosing another rate replaces the VAT or tip rather
+    /// than adding it again on top. Anything typed since then starts afresh.
+    public func toolBase(for tool: Tool) -> Decimal {
+        if let application = liveToolApplication, application.tool == tool {
+            return application.base
+        }
+        return currentValue
+    }
+
+    private var liveToolApplication: ToolApplication? {
+        guard let application = toolApplication,
+              expression.isEmpty, pendingOperator == nil,
+              currentValue == application.value,
+              lastResultSummary == application.summary else { return nil }
+        return application
+    }
+
+    /// Writes a VAT or Tip result to the display as soon as the panel opens,
+    /// and again whenever its rate changes. The first write is one undo step
+    /// back to the original amount; later adjustments replace that result in
+    /// place rather than adding undo steps.
+    public func applyLiveToolResult(_ value: Decimal, tool: Tool, base: Decimal, describedBy summary: String) {
+        let revision: Int
+        if let live = liveToolApplication, live.tool == tool {
+            writeToolResult(value, describedBy: summary)
+            revision = live.revision
+        } else {
+            applyToolResult(value, describedBy: summary)
+            revision = undoRevision
+        }
+        toolApplication = ToolApplication(
+            tool: tool, base: base, value: currentValue, summary: lastResultSummary, revision: revision
+        )
+    }
+
+    /// The operation line a VAT or Tip result leaves on the display, starting
+    /// from the amount it was worked out from, without the currency symbol:
+    /// `100 + VAT(10%) =`, or with `−`
+    /// when VAT is backed out of a gross price. `label` is the short tool name
+    /// (VAT, TIP, MwSt., …).
+    public func toolOperationLine(base: Decimal, label: String, rate: Decimal, isRemoving: Bool = false) -> String {
+        // No symbol, like every currency operation line.
+        let amount = formattedValue(base, includingCurrency: false)
+        let rateText = formattedValue(RateEntry.roundedForDisplay(rate), includingCurrency: false)
+        return "\(amount) \(isRemoving ? "−" : "+") \(label)(\(rateText)%) ="
+    }
+
+    /// The VAT or Tip pane's trash button: takes the tool's result back off the
+    /// display, the way the rounding pane's trash removes rounding. While the
+    /// result is still the latest change this is an undo, so the display comes
+    /// back exactly as it was (and redo can bring the result back with its
+    /// base); otherwise the original amount is written back as a new step.
+    ///
+    /// With `clearingOperationLine`, as when the Tip slider is moved to Off,
+    /// the operation line is cleared too, as an undoable step, even if the
+    /// amount had one of its own before — the amount is left on its own. Off
+    /// is always a new step rather than an undo, so Undo brings the tip back.
+    public func removeLiveToolResult(_ tool: Tool, clearingOperationLine: Bool = false) {
+        if let live = liveToolApplication, live.tool == tool {
+            if !clearingOperationLine, undoRevision == live.revision {
+                undo()
+            } else {
+                applyToolResult(live.base, describedBy: "")
+                toolApplication = nil
+            }
+        }
+        if clearingOperationLine, expression.isEmpty, pendingOperator == nil, !lastResultSummary.isEmpty {
+            let snapshot = beginUndoableChange()
+            lastResultSummary = ""
+            updateDisplay()
+            completeUndoableChange(from: snapshot)
+        }
+    }
+
     /// Replaces what is on screen with a figure produced by one of the
     /// Currency-mode tools (#92).
     ///
@@ -1345,6 +1454,11 @@ public final class CalculatorViewModel: ObservableObject {
     /// a VAT or tip figure is still money.
     public func applyToolResult(_ value: Decimal, describedBy summary: String) {
         let snapshot = beginUndoableChange()
+        writeToolResult(value, describedBy: summary)
+        completeUndoableChange(from: snapshot)
+    }
+
+    private func writeToolResult(_ value: Decimal, describedBy summary: String) {
         currentInput = decimalNumberString(from: value)
         shouldPreserveTypedCurrencyInput = false
         isResultRoundingEnabled = false
@@ -1363,7 +1477,6 @@ public final class CalculatorViewModel: ObservableObject {
         currentErrorKey = nil
         isPendingEntryClearedByClearButton = false
         updateDisplay()
-        completeUndoableChange(from: snapshot)
     }
 
     public func clearHistory() {
@@ -1458,6 +1571,7 @@ public final class CalculatorViewModel: ObservableObject {
         apply(snapshot: snapshot)
         suppressHistoryTracking = false
         redoStack.append(current)
+        undoRevision += 1
     }
 
     public func redo() {
@@ -1468,6 +1582,7 @@ public final class CalculatorViewModel: ObservableObject {
         suppressHistoryTracking = false
         undoStack.append(current)
         trimToRecentSnapshots(&undoStack, maxCount: Limits.maxUndoDepth)
+        undoRevision += 1
     }
 
     // MARK: - Private helpers
@@ -2254,6 +2369,7 @@ public final class CalculatorViewModel: ObservableObject {
         undoStack.append(snapshot)
         trimToRecentSnapshots(&undoStack, maxCount: Limits.maxUndoDepth)
         redoStack.removeAll()
+        undoRevision += 1
     }
 
     private func makeSnapshot() -> CalculatorSnapshot {
@@ -2285,7 +2401,8 @@ public final class CalculatorViewModel: ObservableObject {
             isPendingEntryClearedByClearButton: isPendingEntryClearedByClearButton,
             shouldPreserveTypedCurrencyInput: shouldPreserveTypedCurrencyInput,
             resultUsesPercentToken: resultUsesPercentToken,
-            displayEditCursorIndex: displayEditCursorIndex
+            displayEditCursorIndex: displayEditCursorIndex,
+            toolApplication: toolApplication
         )
     }
 
@@ -2314,6 +2431,7 @@ public final class CalculatorViewModel: ObservableObject {
         isResultRoundingEnabled = snapshot.isResultRoundingEnabled
         resultRoundingPrecision = snapshot.resultRoundingPrecision
         activeCurrencySymbol = snapshot.activeCurrencySymbol
+        toolApplication = snapshot.toolApplication
         isPendingEntryClearedByClearButton = snapshot.isPendingEntryClearedByClearButton
         shouldPreserveTypedCurrencyInput = snapshot.shouldPreserveTypedCurrencyInput
         resultUsesPercentToken = snapshot.resultUsesPercentToken
@@ -2976,6 +3094,29 @@ public final class CalculatorViewModel: ObservableObject {
         while index < raw.endIndex, raw[index].isWhitespace {
             index = raw.index(after: index)
         }
+    }
+
+    /// An amount of money shown with exactly `fractionDigits` decimals — full
+    /// cents, trailing zeros kept (£125.50, not £125.5) — in the active number
+    /// format, with the currency symbol. Used by the VAT and Tip panes.
+    public func formattedCurrencyAmount(_ value: Decimal, fractionDigits: Int) -> String {
+        var rounded = Decimal()
+        var source = value
+        NSDecimalRound(&rounded, &source, fractionDigits, .plain)
+
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.usesGroupingSeparator = false
+        formatter.minimumFractionDigits = fractionDigits
+        formatter.maximumFractionDigits = fractionDigits
+        formatter.minimumIntegerDigits = 1
+        let raw = formatter.string(from: NSDecimalNumber(decimal: rounded)) ?? decimalNumberString(from: rounded)
+        let formatted = groupedNumberString(raw)
+        guard let symbol = activeCurrencySymbol else { return formatted }
+
+        return formatted.hasPrefix("-")
+            ? "-\(symbol)\(formatted.dropFirst())"
+            : "\(symbol)\(formatted)"
     }
 
     /// Formats a value the way the display would, so numbers produced outside

@@ -33,7 +33,8 @@ final class TipCalculationTests: XCTestCase {
     }
 
     func testPresetRatesAreTheOnesTheIssueNames() {
-        XCTAssertEqual(TipBreakdown.presetRates, [10, 15, 18, 20])
+        // Three presets, matching the VAT panel (#124, from device review).
+        XCTAssertEqual(TipBreakdown.presetRates, [15, 18, 20])
     }
 
     // The three outputs are shown side by side, so they have to reconcile or

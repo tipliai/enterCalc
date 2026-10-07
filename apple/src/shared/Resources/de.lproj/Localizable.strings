@@ -77,22 +77,26 @@
 "currency.vat.title" = "MwSt.";
 "currency.vat.add" = "MwSt. addieren";
 "currency.vat.remove" = "MwSt. herausrechnen";
-"currency.vat.rate" = "Satz";
+"currency.vat.rate" = "Steuersatz";
 "currency.vat.rate.decrease" = "Satz verringern";
 "currency.vat.rate.increase" = "Satz erhöhen";
 "currency.vat.net" = "Netto";
 "currency.vat.amount" = "MwSt.";
 "currency.vat.gross" = "Brutto";
 "currency.tip.title" = "Trinkgeld";
-"currency.tip.bill" = "Rechnung";
 "currency.tip.rate" = "Trinkgeld";
-"currency.tip.rate.decrease" = "Trinkgeld verringern";
-"currency.tip.rate.increase" = "Trinkgeld erhöhen";
-"currency.tip.split" = "Teilen";
-"currency.tip.split.decrease" = "Weniger Personen";
-"currency.tip.split.increase" = "Mehr Personen";
 "currency.tip.amount" = "Trinkgeld";
 "currency.tip.total" = "Gesamt";
-"currency.tip.perPerson" = "Pro Person";
-"currency.tool.use" = "Ergebnis übernehmen";
 "currency.tool.close" = "Schließen";
+
+/* Typed rates and editable presets on the VAT and Tip panels (issue #124) */
+"currency.rate.type" = "Prozentsatz eingeben";
+"currency.rate.editPreset" = "Voreinstellung bearbeiten";
+"currency.rate.presetHint" = "Gedrückt halten, um einen neuen Wert für diese Voreinstellung einzugeben";
+"currency.rate.done" = "Fertig";
+"currency.rate.cancel" = "Abbrechen";
+"currency.vat.clear" = "MwSt. entfernen";
+"currency.tip.clear" = "Trinkgeld entfernen";
+"currency.vat.short" = "MwSt.";
+"currency.tip.short" = "Trinkgeld";
+"currency.tip.off" = "Aus";
