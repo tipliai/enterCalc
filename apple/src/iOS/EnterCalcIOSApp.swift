@@ -1910,7 +1910,20 @@ private extension EnterCalcIOSView {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         } else {
             pager
+                .overlay(alignment: .bottom) {
+                    fixedPaginationOverlay(metrics: metrics)
+                }
         }
+    }
+
+    /// One set of page dots over the pager, in the space every page reserves
+    /// at its bottom, so the dots stay fixed while pages slide beneath them.
+    @ViewBuilder
+    func fixedPaginationOverlay(metrics: IOSLayoutMetrics) -> some View {
+        fadingPaginationIndicator(metrics: metrics, isVisible: screenStore.screenCount > 1)
+            .frame(height: metrics.pageIndicatorHeight, alignment: .top)
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, metrics.bottomPadding)
     }
 
     @ViewBuilder
@@ -1932,6 +1945,16 @@ private extension EnterCalcIOSView {
             dotSize: metrics.pageIndicatorDotSize,
             spacing: metrics.pageIndicatorSpacing
         )
+    }
+
+    /// The page dots, always laid out and faded in only while there is more than
+    /// one page. Hidden dots take no touches and are not announced.
+    func fadingPaginationIndicator(metrics: IOSLayoutMetrics, isVisible: Bool) -> some View {
+        paginationIndicator(metrics: metrics)
+            .opacity(isVisible ? 1 : 0)
+            .animation(reduceMotionEnabled ? nil : .easeInOut(duration: 0.25), value: isVisible)
+            .allowsHitTesting(isVisible)
+            .accessibilityHidden(!isVisible)
     }
 
     @ViewBuilder
@@ -2028,10 +2051,8 @@ private extension EnterCalcIOSView {
 
             Spacer(minLength: metrics.sectionSpacing)
 
-            if showsPaginationIndicator {
-                paginationIndicator(metrics: metrics)
-                    .frame(maxWidth: .infinity, alignment: buttonAlignment)
-            }
+            fadingPaginationIndicator(metrics: metrics, isVisible: showsPaginationIndicator)
+                .frame(maxWidth: .infinity, alignment: buttonAlignment)
 
             Spacer(minLength: metrics.sectionSpacing)
 
@@ -2080,16 +2101,16 @@ private extension EnterCalcIOSView {
     @ViewBuilder
     func pageContentWithPagination<Content: View>(
         metrics: IOSLayoutMetrics,
-        showsPaginationIndicator: Bool,
         @ViewBuilder content: @escaping () -> Content
     ) -> some View {
         GeometryReader { geometry in
             let usesLandscapeNavigationRail = metrics.usesLandscapeNavigationRail
-            let paginationSpacing = showsPaginationIndicator ? metrics.pageIndicatorVerticalSpacing : 0
-            let bottomFooterHeight = showsPaginationIndicator
-                ? 0
-                : (metrics.mode == .phonePortrait ? metrics.portraitBottomReserveWithoutPagination : 0)
-            let paginationReserve = showsPaginationIndicator ? metrics.pageIndicatorHeight + paginationSpacing : 0
+            // The dots' space is always reserved, even with a single page, so
+            // the calculator keeps one size as pages come and go. The dots are
+            // not drawn here: one fixed set sits over the pager in this space
+            // (`fixedPaginationOverlay`), so they stay put while pages slide.
+            let paginationSpacing = metrics.pageIndicatorVerticalSpacing
+            let paginationReserve = metrics.pageIndicatorHeight + paginationSpacing
 
             if usesLandscapeNavigationRail {
                 content()
@@ -2098,22 +2119,21 @@ private extension EnterCalcIOSView {
                 VStack(spacing: paginationSpacing) {
                     content()
                         .frame(maxWidth: .infinity, alignment: .top)
-                        .frame(height: max(0, geometry.size.height - paginationReserve - bottomFooterHeight), alignment: .top)
+                        .frame(height: max(0, geometry.size.height - paginationReserve), alignment: .top)
 
-                    if showsPaginationIndicator {
-                        paginationIndicator(metrics: metrics)
-                    } else if bottomFooterHeight > 0 {
-                        Color.clear
-                            .frame(height: bottomFooterHeight)
-                    }
+                    Color.clear
+                        .frame(height: metrics.pageIndicatorHeight)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
     }
 
-    func paginationBottomInset(metrics: IOSLayoutMetrics, showsPaginationIndicator: Bool) -> CGFloat {
-        guard metrics.mode == .phonePortrait, showsPaginationIndicator else {
+    /// Room kept under the calculator for the page dots. Reserved whether or
+    /// not the dots are showing, so adding or closing the last extra page does
+    /// not resize the calculator.
+    func paginationBottomInset(metrics: IOSLayoutMetrics) -> CGFloat {
+        guard metrics.mode == .phonePortrait else {
             return 0
         }
 
@@ -2132,11 +2152,7 @@ private extension EnterCalcIOSView {
 
     @ViewBuilder
     func screenBody(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession) -> some View {
-        let showsPaginationIndicator = screenStore.screenCount > 1
-        let paginationBottomInset = paginationBottomInset(
-            metrics: metrics,
-            showsPaginationIndicator: showsPaginationIndicator
-        )
+        let paginationBottomInset = paginationBottomInset(metrics: metrics)
 
         switch metrics.mode {
         case .phoneLandscape:
@@ -2146,7 +2162,7 @@ private extension EnterCalcIOSView {
                         titlebarHeader(metrics: metrics, screen: screen)
                     }
 
-                    pageContentWithPagination(metrics: metrics, showsPaginationIndicator: showsPaginationIndicator) {
+                    pageContentWithPagination(metrics: metrics) {
                         HStack(spacing: metrics.outerPadding) {
                             landscapeHistoryPane(metrics: metrics, screen: screen)
                                 .frame(width: metrics.historyPanelWidth)
@@ -2166,7 +2182,7 @@ private extension EnterCalcIOSView {
                         titlebarHeader(metrics: metrics, screen: screen)
                     }
 
-                    pageContentWithPagination(metrics: metrics, showsPaginationIndicator: showsPaginationIndicator) {
+                    pageContentWithPagination(metrics: metrics) {
                         calculatorSurface(metrics: metrics, screen: screen, paginationBottomInset: paginationBottomInset)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     }
@@ -2181,7 +2197,7 @@ private extension EnterCalcIOSView {
                     titlebarHeader(metrics: metrics, screen: screen)
                 }
 
-                pageContentWithPagination(metrics: metrics, showsPaginationIndicator: showsPaginationIndicator) {
+                pageContentWithPagination(metrics: metrics) {
                     calculatorSurface(metrics: metrics, screen: screen, paginationBottomInset: paginationBottomInset)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
@@ -2191,7 +2207,7 @@ private extension EnterCalcIOSView {
             .padding(.bottom, metrics.bottomPadding)
         case .padWide:
             if metrics.usesInlineLandscapeHistory {
-                pageContentWithPagination(metrics: metrics, showsPaginationIndicator: showsPaginationIndicator) {
+                pageContentWithPagination(metrics: metrics) {
                     HStack(spacing: metrics.outerPadding) {
                         landscapeHistoryPane(metrics: metrics, screen: screen)
                             .frame(width: metrics.historyPanelWidth)
@@ -2205,7 +2221,7 @@ private extension EnterCalcIOSView {
                 .padding(.bottom, metrics.bottomPadding)
                 .padding(.horizontal, metrics.outerPadding)
             } else {
-                pageContentWithPagination(metrics: metrics, showsPaginationIndicator: showsPaginationIndicator) {
+                pageContentWithPagination(metrics: metrics) {
                     calculatorSurface(metrics: metrics, screen: screen, paginationBottomInset: paginationBottomInset)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
@@ -4804,7 +4820,6 @@ private struct IOSLayoutMetrics {
     let pageIndicatorDotSize: CGFloat
     let pageIndicatorSpacing: CGFloat
     let pageIndicatorVerticalSpacing: CGFloat
-    let portraitBottomReserveWithoutPagination: CGFloat
     let usesTitlebarHeader: Bool
     let usesInlineLandscapeHistory: Bool
     let titlebarLeadingInset: CGFloat
@@ -4828,7 +4843,6 @@ private struct IOSLayoutMetrics {
             && size.height >= landscapeScreenHeight * 0.97
         isPadWindow = deviceFamily == .pad
         let pageIndicatorReserve: CGFloat = isPadWindow ? 18 : 0
-        let needsLegacyPhoneBottomReserve = !isPadWindow && !isGeometryLandscape && size.height <= 750 && safeAreaInsets.bottom < 10
 
         if usesWidePadLayout {
             mode = .padWide
@@ -4884,7 +4898,6 @@ private struct IOSLayoutMetrics {
             pageIndicatorDotSize = 7
             pageIndicatorSpacing = 8
             pageIndicatorVerticalSpacing = isPadWindow ? 10 : sectionSpacing
-            portraitBottomReserveWithoutPagination = needsLegacyPhoneBottomReserve ? 24 : (isPadWindow ? 12 : 0)
             usesTitlebarHeader = isPadWindow
             usesInlineLandscapeHistory = false
             titlebarLeadingInset = isPadWindow ? 84 : 0
@@ -4935,7 +4948,6 @@ private struct IOSLayoutMetrics {
             pageIndicatorDotSize = 6
             pageIndicatorSpacing = 6
             pageIndicatorVerticalSpacing = isPadWindow ? 1 : sectionSpacing
-            portraitBottomReserveWithoutPagination = 0
             usesTitlebarHeader = isPadWindow
             usesInlineLandscapeHistory = !isPadWindow
             titlebarLeadingInset = isPadWindow ? 54 : 0
@@ -4986,7 +4998,6 @@ private struct IOSLayoutMetrics {
             pageIndicatorDotSize = 7
             pageIndicatorSpacing = 8
             pageIndicatorVerticalSpacing = sectionSpacing
-            portraitBottomReserveWithoutPagination = 0
             usesTitlebarHeader = false
             usesInlineLandscapeHistory = true
             titlebarLeadingInset = 0
