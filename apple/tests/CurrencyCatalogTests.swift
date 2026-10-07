@@ -58,4 +58,26 @@ final class CurrencyCatalogTests: XCTestCase {
             )
         }
     }
+
+    // MARK: - Decimals
+
+    // Amounts follow the currency's minor units: none for the yen or won,
+    // two for most. ¥ is both yen and yuan, so the device's currency decides.
+    func testFractionDigitsFollowTheCurrency() {
+        XCTAssertEqual(CurrencyCatalog.fractionDigits(forSymbol: "¥", locale: Locale(identifier: "ja_JP")), 0)
+        XCTAssertEqual(CurrencyCatalog.fractionDigits(forSymbol: "¥", locale: Locale(identifier: "zh_CN")), 2)
+        XCTAssertEqual(CurrencyCatalog.fractionDigits(forSymbol: "¥", locale: Locale(identifier: "en_US")), 0, "symbol's first currency")
+        XCTAssertEqual(CurrencyCatalog.fractionDigits(forSymbol: "₩", locale: Locale(identifier: "ko_KR")), 0)
+        XCTAssertEqual(CurrencyCatalog.fractionDigits(forSymbol: "€", locale: Locale(identifier: "de_DE")), 2)
+        XCTAssertEqual(CurrencyCatalog.fractionDigits(forSymbol: "$", locale: Locale(identifier: "es_CL")), 0, "Chilean peso")
+        XCTAssertEqual(CurrencyCatalog.fractionDigits(forSymbol: "$", locale: Locale(identifier: "en_US")), 2)
+        XCTAssertEqual(CurrencyCatalog.fractionDigits(forSymbol: "₿"), 2, "outside the catalog")
+    }
+
+    func testYenVATHasNoDecimals() throws {
+        let rounded = try XCTUnwrap(VATCalculation.removing(rate: 10, fromGross: 1000)).rounded(toScale: 0, isRemoving: true)
+        XCTAssertEqual(rounded.net, 909)
+        XCTAssertEqual(rounded.vat, 91)
+        XCTAssertEqual(rounded.gross, 1000)
+    }
 }

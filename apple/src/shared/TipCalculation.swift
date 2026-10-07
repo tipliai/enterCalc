@@ -29,7 +29,7 @@ public struct TipBreakdown: Equatable, Sendable {
 
     /// Quick choices for the tip percentage. A custom rate is always allowed,
     /// so this is a convenience list rather than a constraint.
-    public static let presetRates: [Decimal] = [10, 15, 18, 20]
+    public static let presetRates: [Decimal] = [15, 18, 20]
 
     /// The default party size: one, meaning no split.
     public static let defaultSplitCount = 1
@@ -52,5 +52,16 @@ public struct TipBreakdown: Equatable, Sendable {
         let total = bill + tip
         self.total = total
         self.perPerson = clampedSplit == 1 ? total : total / Decimal(clampedSplit)
+    }
+}
+
+extension TipBreakdown {
+    /// The tip on `bill` at `rate` percent, rounded to `scale` decimals (the
+    /// currency's minor units), as it would actually be paid.
+    public static func roundedTip(bill: Decimal, rate: Decimal, scale: Int) -> Decimal {
+        var exact = bill * rate / 100
+        var result = Decimal()
+        NSDecimalRound(&result, &exact, scale, .plain)
+        return result
     }
 }

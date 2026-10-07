@@ -84,15 +84,19 @@
 "currency.vat.amount" = "增值税";
 "currency.vat.gross" = "含税";
 "currency.tip.title" = "小费";
-"currency.tip.bill" = "账单";
 "currency.tip.rate" = "小费";
-"currency.tip.rate.decrease" = "减少小费";
-"currency.tip.rate.increase" = "增加小费";
-"currency.tip.split" = "分摊";
-"currency.tip.split.decrease" = "减少人数";
-"currency.tip.split.increase" = "增加人数";
 "currency.tip.amount" = "小费";
 "currency.tip.total" = "总计";
-"currency.tip.perPerson" = "每人";
-"currency.tool.use" = "使用结果";
 "currency.tool.close" = "关闭";
+
+/* Typed rates and editable presets on the VAT and Tip panels (issue #124) */
+"currency.rate.type" = "输入比率";
+"currency.rate.editPreset" = "编辑预设";
+"currency.rate.presetHint" = "按住可为此预设输入新的数值";
+"currency.rate.done" = "完成";
+"currency.rate.cancel" = "取消";
+"currency.vat.clear" = "取消增值税";
+"currency.tip.clear" = "取消小费";
+"currency.vat.short" = "增值税";
+"currency.tip.short" = "小费";
+"currency.tip.off" = "关闭";

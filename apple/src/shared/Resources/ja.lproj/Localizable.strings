@@ -84,15 +84,19 @@
 "currency.vat.amount" = "消費税";
 "currency.vat.gross" = "税込";
 "currency.tip.title" = "チップ";
-"currency.tip.bill" = "会計";
 "currency.tip.rate" = "チップ";
-"currency.tip.rate.decrease" = "チップを減らす";
-"currency.tip.rate.increase" = "チップを増やす";
-"currency.tip.split" = "割り勘";
-"currency.tip.split.decrease" = "人数を減らす";
-"currency.tip.split.increase" = "人数を増やす";
 "currency.tip.amount" = "チップ";
 "currency.tip.total" = "合計";
-"currency.tip.perPerson" = "1人あたり";
-"currency.tool.use" = "結果を使う";
 "currency.tool.close" = "閉じる";
+
+/* Typed rates and editable presets on the VAT and Tip panels (issue #124) */
+"currency.rate.type" = "割合を入力";
+"currency.rate.editPreset" = "プリセットを編集";
+"currency.rate.presetHint" = "長押ししてこのプリセットに新しい値を入力";
+"currency.rate.done" = "完了";
+"currency.rate.cancel" = "キャンセル";
+"currency.vat.clear" = "消費税を解除";
+"currency.tip.clear" = "チップを解除";
+"currency.vat.short" = "消費税";
+"currency.tip.short" = "チップ";
+"currency.tip.off" = "オフ";

@@ -274,4 +274,224 @@ final class CurrencyModeTests: XCTestCase {
         XCTAssertEqual(viewModel.display, "$5,120")
         XCTAssertEqual(caretRendering(of: viewModel), "$5|,120")
     }
+
+    // MARK: - Live VAT and Tip (#124)
+
+    // Opening a panel writes its result straight away; changing the rate
+    // replaces it rather than stacking, and one undo returns to the amount the
+    // panel started from.
+    func testLiveToolResultReplacesItselfAndUndoesInOneStep() {
+        let viewModel = currencyViewModel("100", symbol: "€")
+        let base = viewModel.toolBase(for: .vat)
+        XCTAssertEqual(base, 100)
+
+        viewModel.applyLiveToolResult(119, tool: .vat, base: base, describedBy: "Add VAT 19% =")
+        XCTAssertEqual(viewModel.currentValue, 119)
+        XCTAssertEqual(viewModel.toolBase(for: .vat), 100, "reopening works from the original amount")
+
+        viewModel.applyLiveToolResult(107, tool: .vat, base: base, describedBy: "Add VAT 7% =")
+        XCTAssertEqual(viewModel.currentValue, 107)
+
+        viewModel.undo()
+        XCTAssertEqual(viewModel.currentValue, 100, "one undo step for the whole adjustment")
+    }
+
+    // Another tool, or anything typed after the result, starts from what is
+    // on the display.
+    func testToolBaseFollowsTheDisplayOnceSomethingElseHappens() {
+        let viewModel = currencyViewModel("100", symbol: "€")
+        viewModel.applyLiveToolResult(119, tool: .vat, base: 100, describedBy: "Add VAT 19% =")
+
+        XCTAssertEqual(viewModel.toolBase(for: .tip), 119, "tipping on a VAT-inclusive price")
+
+        viewModel.inputDigit("5")
+        XCTAssertEqual(viewModel.toolBase(for: .vat), viewModel.currentValue)
+        XCTAssertEqual(viewModel.currentValue, 5)
+    }
+
+    // The trash button restores the display exactly as it was before the
+    // panel opened, and does nothing for a tool that isn't on the display.
+    func testRemovingALiveToolResultRestoresTheOriginal() {
+        let viewModel = currencyViewModel("100", symbol: "€")
+        viewModel.applyLiveToolResult(119, tool: .vat, base: 100, describedBy: "Add VAT 19% =")
+        viewModel.applyLiveToolResult(107, tool: .vat, base: 100, describedBy: "Add VAT 7% =")
+
+        viewModel.removeLiveToolResult(.tip)
+        XCTAssertEqual(viewModel.currentValue, 107, "Tip's trash leaves VAT alone")
+
+        viewModel.removeLiveToolResult(.vat)
+        XCTAssertEqual(viewModel.currentValue, 100)
+        XCTAssertEqual(viewModel.toolBase(for: .vat), 100)
+    }
+
+    // VAT and Tip amounts show full cents, trailing zeros kept, in the active
+    // number format, and none for the yen.
+    func testCurrencyAmountsShowTheCurrencysFullDecimals() {
+        let pounds = currencyViewModel("1", symbol: "£")
+        XCTAssertEqual(pounds.formattedCurrencyAmount(Decimal(string: "125.5")!, fractionDigits: 2), "£125.50")
+        XCTAssertEqual(pounds.formattedCurrencyAmount(1234, fractionDigits: 2), "£1,234.00")
+        XCTAssertEqual(pounds.formattedCurrencyAmount(Decimal(string: "0.005")!, fractionDigits: 2), "£0.01")
+
+        let euros = currencyViewModel("1", symbol: "€", style: .european)
+        XCTAssertEqual(euros.formattedCurrencyAmount(Decimal(string: "1234.5")!, fractionDigits: 2), "€1.234,50")
+
+        let yen = currencyViewModel("1", symbol: "¥")
+        XCTAssertEqual(yen.formattedCurrencyAmount(Decimal(string: "909.09")!, fractionDigits: 0), "¥909")
+    }
+
+    func testTipIsRoundedToTheCurrency() {
+        XCTAssertEqual(TipBreakdown.roundedTip(bill: Decimal(string: "33.33")!, rate: 15, scale: 2), Decimal(string: "5"))
+        XCTAssertEqual(TipBreakdown.roundedTip(bill: Decimal(string: "47.10")!, rate: 18, scale: 2), Decimal(string: "8.48"))
+        XCTAssertEqual(TipBreakdown.roundedTip(bill: 1234, rate: 15, scale: 0), 185)
+    }
+
+    // The operation line starts from the amount the tool worked from.
+    func testToolOperationLineShowsTheOriginalAmount() {
+        let dollars = currencyViewModel("100", symbol: "$")
+        XCTAssertEqual(dollars.toolOperationLine(base: 100, label: "VAT", rate: 10), "100 + VAT(10%) =")
+        XCTAssertEqual(dollars.toolOperationLine(base: 110, label: "VAT", rate: 10, isRemoving: true), "110 − VAT(10%) =")
+        XCTAssertEqual(dollars.toolOperationLine(base: 1234, label: "TIP", rate: Decimal(string: "17.5")!), "1,234 + TIP(17.5%) =")
+    }
+
+    // Moving the Tip slider to Off leaves the amount on its own: no operation
+    // line, even one the amount had before the tip (here "50 + 50 =").
+    func testTipOffClearsTheOperationLine() {
+        let viewModel = currencyViewModel("50", symbol: "$")
+        viewModel.setOperator(.add)
+        enter("50", into: viewModel)
+        viewModel.evaluate()
+        XCTAssertFalse(viewModel.expressionDisplay.isEmpty)
+
+        viewModel.applyLiveToolResult(118, tool: .tip, base: 100, describedBy: "100 + TIP(18%) =")
+        viewModel.removeLiveToolResult(.tip, clearingOperationLine: true)
+
+        XCTAssertEqual(viewModel.currentValue, 100)
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+    }
+
+    // The pane can open at 0% (Off), so no tip was applied: Off still clears
+    // the operation line and leaves the amount alone.
+    func testTipOffClearsTheOperationLineEvenWithoutATip() {
+        let viewModel = currencyViewModel("50", symbol: "$")
+        viewModel.setOperator(.add)
+        enter("50", into: viewModel)
+        viewModel.evaluate()
+
+        viewModel.removeLiveToolResult(.tip, clearingOperationLine: true)
+
+        XCTAssertEqual(viewModel.currentValue, 100)
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+    }
+
+    func testOperationLineRoundsTheRateForDisplayOnly() {
+        let dollars = currencyViewModel("100", symbol: "$")
+        XCTAssertEqual(dollars.toolOperationLine(base: 100, label: "VAT", rate: Decimal(string: "12.34567")!), "100 + VAT(12.346%) =")
+    }
+
+    // 10 + 5 typed but not entered: the panes press Enter first, so they work
+    // from 15 and the calculation lands in history like any other.
+    func testPendingCalculationIsDetectedAndEvaluatesIntoHistory() {
+        let viewModel = currencyViewModel("10", symbol: "$")
+        viewModel.setOperator(.add)
+        enter("5", into: viewModel)
+        XCTAssertTrue(viewModel.hasPendingCalculation)
+        let historyCount = viewModel.history.count
+
+        viewModel.evaluate()
+
+        XCTAssertFalse(viewModel.hasPendingCalculation)
+        XCTAssertEqual(viewModel.toolBase(for: .vat), 15)
+        XCTAssertEqual(viewModel.history.count, historyCount + 1)
+    }
+
+    func testNothingPendingAfterAPlainNumber() {
+        XCTAssertFalse(currencyViewModel("10", symbol: "$").hasPendingCalculation)
+    }
+
+    // Trash undoes the VAT; redo brings it back with its base, so reopening VAT
+    // still works from 100 rather than compounding on 110 (review M1).
+    func testRedoAfterTrashKeepsTheToolBase() {
+        let viewModel = currencyViewModel("100", symbol: "$")
+        viewModel.applyLiveToolResult(110, tool: .vat, base: 100, describedBy: "100 + VAT(10%) =")
+        viewModel.removeLiveToolResult(.vat)
+        XCTAssertEqual(viewModel.currentValue, 100)
+
+        viewModel.redo()
+        XCTAssertEqual(viewModel.currentValue, 110)
+        XCTAssertEqual(viewModel.toolBase(for: .vat), 100)
+    }
+
+    // VAT, then Tip on the VAT-inclusive price, then Tip off: VAT's base comes
+    // back with VAT's result (review M2).
+    func testTipOffAfterVATRestoresTheVATBase() {
+        let viewModel = currencyViewModel("100", symbol: "$")
+        viewModel.applyLiveToolResult(110, tool: .vat, base: 100, describedBy: "100 + VAT(10%) =")
+        let tipBase = viewModel.toolBase(for: .tip)
+        XCTAssertEqual(tipBase, 110)
+        viewModel.applyLiveToolResult(132, tool: .tip, base: tipBase, describedBy: "$110 + TIP(20%) =")
+
+        viewModel.removeLiveToolResult(.tip)
+        XCTAssertEqual(viewModel.currentValue, 110)
+        XCTAssertEqual(viewModel.toolBase(for: .vat), 100)
+    }
+
+    // Clearing the operation line at Off is its own undo step.
+    func testTipOffClearingTheLineCanBeUndone() {
+        let viewModel = currencyViewModel("50", symbol: "$")
+        viewModel.setOperator(.add)
+        enter("50", into: viewModel)
+        viewModel.evaluate()
+        let line = viewModel.expressionDisplay
+
+        viewModel.removeLiveToolResult(.tip, clearingOperationLine: true)
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+        viewModel.undo()
+        XCTAssertEqual(viewModel.expressionDisplay, line)
+    }
+
+    // Off is a new step, not an undo of the tip: Undo brings the tip back
+    // (with its line and base) instead of leaving it on the redo stack.
+    func testUndoAfterTipOffRestoresTheTip() {
+        let viewModel = currencyViewModel("100", symbol: "$")
+        viewModel.applyLiveToolResult(118, tool: .tip, base: 100, describedBy: "100 + TIP(18%) =")
+        viewModel.removeLiveToolResult(.tip, clearingOperationLine: true)
+        XCTAssertEqual(viewModel.currentValue, 100)
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+
+        viewModel.undo()
+        XCTAssertEqual(viewModel.currentValue, 118)
+        XCTAssertEqual(viewModel.expressionDisplay, "100 + TIP(18%) =")
+        XCTAssertEqual(viewModel.toolBase(for: .tip), 100)
+
+        viewModel.redo()
+        XCTAssertEqual(viewModel.currentValue, 100)
+        XCTAssertEqual(viewModel.expressionDisplay, "")
+    }
+
+    // Changing the number format only reformats the display: reopening VAT
+    // still replaces the VAT rather than adding it on top of the gross.
+    func testNumberFormatChangeKeepsTheToolBase() {
+        let viewModel = currencyViewModel("1234.5", symbol: "$")
+        viewModel.applyLiveToolResult(Decimal(string: "1358.95")!, tool: .vat, base: Decimal(string: "1234.5")!, describedBy: "1,234.5 + VAT(10%) =")
+        viewModel.setNumberFormatStyle(.european)
+        XCTAssertEqual(viewModel.toolBase(for: .vat), Decimal(string: "1234.5"))
+
+        viewModel.applyLiveToolResult(Decimal(string: "1481.4")!, tool: .vat, base: Decimal(string: "1234.5")!, describedBy: "1.234,5 + VAT(20%) =")
+        viewModel.removeLiveToolResult(.vat)
+        XCTAssertEqual(viewModel.currentValue, Decimal(string: "1234.5"))
+    }
+
+    // With the undo stack at its cap, a later change that leaves the display
+    // alone (storing to memory) must not be mistaken for the VAT step: trash
+    // writes the amount back instead of undoing the memory store.
+    func testTrashWithAFullUndoStackRemovesTheVAT() {
+        let viewModel = currencyViewModel("100", symbol: "$")
+        for _ in 0..<120 { viewModel.storeMemory(); viewModel.clearMemory() }
+        viewModel.applyLiveToolResult(110, tool: .vat, base: 100, describedBy: "100 + VAT(10%) =")
+        viewModel.storeMemory()
+
+        viewModel.removeLiveToolResult(.vat)
+        XCTAssertEqual(viewModel.currentValue, 100)
+        XCTAssertFalse(viewModel.memoryEntries.isEmpty)
+    }
 }

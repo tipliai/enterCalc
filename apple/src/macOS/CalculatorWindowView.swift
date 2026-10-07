@@ -101,13 +101,17 @@ struct CalculatorWindowView: View {
     @State private var windowSettings: CalculatorScreenSettings
     /// Live hold-and-drag reassignment of a configurable key, if one is running.
     @State private var functionChooser: FunctionKeyChooserSession? = nil
-    // Currency-mode tool settings (#92). Per window, and session state rather
-    // than a stored preference: they belong to the calculation in progress, the
-    // same way the currency symbol itself does.
-    @State private var vatRate: Decimal = 20
+    // Currency-mode tool settings (#92, #124).
+    // Rates and edited presets are kept across launches and shared with iOS's
+    // keys (#124). The VAT rate starts on the region's standard rate.
+    @AppStorage(RateToolPreferences.vatRateKey) private var storedVATRate = ""
+    @AppStorage(RateToolPreferences.vatPresetOverridesKey) private var storedVATPresetOverrides = ""
+    @AppStorage(RateToolPreferences.tipRateKey) private var storedTipRate = ""
+    @AppStorage(RateToolPreferences.tipPresetOverridesKey) private var storedTipPresetOverrides = ""
+    @StateObject private var rateEditor = RateEditor()
+    @State private var sessionVATRate: Decimal?
+    @State private var sessionTipRate: Decimal?
     @State private var vatRemovesTax: Bool = false
-    @State private var tipRate: Decimal = 18
-    @State private var tipSplitCount: Int = TipBreakdown.defaultSplitCount
     @AppStorage("window.width") private var storedWindowWidth: Double = 0
     @AppStorage("window.height") private var storedWindowHeight: Double = 0
     @AppStorage("window.historyOpen") private var storedHistoryOpen: Bool = false
@@ -182,13 +186,15 @@ struct CalculatorWindowView: View {
             copy: { copyCurrentResultToPasteboard() },
             copyOperation: { copyCurrentOperationToPasteboard() },
             canCopyOperation: viewModel.hasOperationToCopy,
-            paste: { viewModel.pasteFromPasteboard() },
-            undo: { viewModel.undo() },
-            redo: { viewModel.redo() },
+            // Menu commands that change the display close an open VAT/Tip pane
+            // first, the same as typing does, so the pane can't drift from it.
+            paste: { closeToolPane(); viewModel.pasteFromPasteboard() },
+            undo: { closeToolPane(); viewModel.undo() },
+            redo: { closeToolPane(); viewModel.redo() },
             canUndo: viewModel.canUndo,
             canRedo: viewModel.canRedo,
-            clear: { viewModel.clearEntry() },
-            clearAll: { viewModel.clearAll() }
+            clear: { closeToolPane(); viewModel.clearEntry() },
+            clearAll: { closeToolPane(); viewModel.clearAll() }
         )
     }
 
@@ -854,8 +860,8 @@ struct CalculatorWindowView: View {
             Spacer(minLength: 4)
 
             if viewModel.activeCurrencySymbol != nil {
-                currencyToolButton(titleKey: "currency.vat.title", pane: .vat, opacity: opacity)
-                currencyToolButton(titleKey: "currency.tip.title", pane: .tip, opacity: opacity)
+                currencyToolButton(titleKey: "currency.vat.short", pane: .vat, opacity: opacity)
+                currencyToolButton(titleKey: "currency.tip.short", pane: .tip, opacity: opacity)
             }
         }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1003,6 +1009,7 @@ struct CalculatorWindowView: View {
                                 onChooserOpen: { slot, anchor, dragging in
                                     openFunctionChooser(for: slot, anchor: anchor, dragging: dragging)
                                 },
+                                isHighlighted: button.function == .currency && viewModel.activeCurrencySymbol != nil
                             )
                         }
                     }
@@ -1036,7 +1043,9 @@ struct CalculatorWindowView: View {
                                     },
                                     operatorRevealProgress: operatorRevealProgress,
                                     operatorAnimFadeOpacity: operatorAnimFadeOpacity,
-                                    reduceMotionEnabled: reduceMotionEnabled
+                                    reduceMotionEnabled: reduceMotionEnabled,
+                                    isHighlighted: viewModel.activeCurrencySymbol != nil
+                                        && button.slot.map { functionKeyAssignments[$0] == .currency } == true
                                 )
                                     .frame(width: cellWidth * CGFloat(button.columnSpan) + spacing * CGFloat(button.columnSpan - 1))
                             }
@@ -1379,77 +1388,182 @@ struct CalculatorWindowView: View {
             .padding(.bottom, -8)
     }
 
+    // The rate in use belongs to this window (or iPad scene) for the session,
+    // so changing it in one window never rewrites another window's display.
+    // The stored value is only the default a new window starts from.
+    private var vatRate: Decimal {
+        get { sessionVATRate ?? RateToolPreferences.rate(fromStored: storedVATRate, fallback: VATRateCatalog.defaultRate()) }
+        nonmutating set {
+            sessionVATRate = newValue
+            storedVATRate = RateToolPreferences.storedText(for: newValue)
+        }
+    }
+
+    private var tipRate: Decimal {
+        get { sessionTipRate ?? RateToolPreferences.rate(fromStored: storedTipRate, fallback: RateToolPreferences.defaultTipRate) }
+        nonmutating set {
+            sessionTipRate = newValue
+            storedTipRate = RateToolPreferences.storedText(for: newValue)
+        }
+    }
+
+    private func ratePresets(defaults: [Decimal], storedOverrides: String) -> RatePresets {
+        RatePresets(
+            defaults: defaults,
+            overrides: RatePresetOverrides(serialized: storedOverrides),
+            decimalSeparator: viewModel.numberFormatStyle.decimalSeparator
+        )
+    }
+
+    private var vatPresets: RatePresets {
+        ratePresets(defaults: VATRateCatalog.presets(), storedOverrides: storedVATPresetOverrides)
+    }
+
+    private var tipPresets: RatePresets {
+        ratePresets(defaults: TipBreakdown.presetRates, storedOverrides: storedTipPresetOverrides)
+    }
+
+    /// Saves a long-pressed preset's new value, or restores its default.
+    private func editPreset(_ slot: Int, to rate: Decimal?, in presets: RatePresets, store: (String) -> Void) {
+        var overrides = presets.overrides
+        overrides.set(rate, forSlot: slot, default: presets.defaults.indices.contains(slot) ? presets.defaults[slot] : nil)
+        store(overrides.serialized)
+    }
+
+    /// Decimals for amounts in the active currency: 2 for most, 0 for the yen.
+    private var currencyFractionDigits: Int {
+        CurrencyCatalog.fractionDigits(forSymbol: viewModel.activeCurrencySymbol ?? "")
+    }
+
     private func vatOverlay() -> some View {
         CurrencyVATPanel(
-            value: viewModel.currentValue,
+            value: viewModel.toolBase(for: .vat),
             rate: vatRate,
+            presets: vatPresets,
+            currencyFractionDigits: currencyFractionDigits,
             isRemoving: vatRemovesTax,
             palette: palette,
             localized: { macLocalized($0, bundle: currentLocalizationBundle) },
-            format: { viewModel.formattedValue($0) },
-            formatRate: { viewModel.formattedValue($0, includingCurrency: false) },
+            format: { viewModel.formattedCurrencyAmount($0, fractionDigits: currencyFractionDigits) },
+            formatRate: { viewModel.formattedValue(RateEntry.roundedForDisplay($0), includingCurrency: false) },
             onRateChange: { vatRate = max($0, 0) },
+            rateEditor: rateEditor,
+            onPresetEdited: { slot, rate in
+                editPreset(slot, to: rate, in: vatPresets) { storedVATPresetOverrides = $0 }
+            },
             onDirectionChange: { vatRemovesTax = $0 },
-            onApply: { result in
-                viewModel.applyToolResult(result, describedBy: vatSummary())
+            onResult: { result in
+                viewModel.applyLiveToolResult(result, tool: .vat, base: viewModel.toolBase(for: .vat), describedBy: vatSummary())
+            },
+            onRemove: {
+                viewModel.removeLiveToolResult(.vat)
                 setActiveOverlay(nil)
             },
             onDismiss: { setActiveOverlay(nil) }
         )
-        .background(memoryOverlayBackgroundColor)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .modifier(MacToolPaneBackground(color: memoryOverlayBackgroundColor))
     }
 
     private func tipOverlay() -> some View {
         CurrencyTipPanel(
-            bill: viewModel.currentValue,
+            bill: viewModel.toolBase(for: .tip),
             rate: tipRate,
-            splitCount: tipSplitCount,
+            presets: tipPresets,
+            currencyFractionDigits: currencyFractionDigits,
             palette: palette,
             localized: { macLocalized($0, bundle: currentLocalizationBundle) },
-            format: { viewModel.formattedValue($0) },
-            formatRate: { viewModel.formattedValue($0, includingCurrency: false) },
+            format: { viewModel.formattedCurrencyAmount($0, fractionDigits: currencyFractionDigits) },
+            formatRate: { viewModel.formattedValue(RateEntry.roundedForDisplay($0), includingCurrency: false) },
             onRateChange: { tipRate = max($0, 0) },
-            onSplitChange: { tipSplitCount = min(max($0, TipBreakdown.splitCountRange.lowerBound), TipBreakdown.splitCountRange.upperBound) },
-            onApply: { result in
-                viewModel.applyToolResult(result, describedBy: tipSummary())
+            rateEditor: rateEditor,
+            onPresetEdited: { slot, rate in
+                editPreset(slot, to: rate, in: tipPresets) { storedTipPresetOverrides = $0 }
+            },
+            onResult: { result in
+                viewModel.applyLiveToolResult(result, tool: .tip, base: viewModel.toolBase(for: .tip), describedBy: tipSummary())
+            },
+            onTipOff: { viewModel.removeLiveToolResult(.tip, clearingOperationLine: true) },
+            onRemove: {
+                viewModel.removeLiveToolResult(.tip)
                 setActiveOverlay(nil)
             },
             onDismiss: { setActiveOverlay(nil) }
         )
-        .background(memoryOverlayBackgroundColor)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .modifier(MacToolPaneBackground(color: memoryOverlayBackgroundColor))
     }
 
     /// The operation line left behind after a tool writes its result, so the
     /// display says where the number came from.
     private func vatSummary() -> String {
-        let rate = viewModel.formattedValue(vatRate, includingCurrency: false)
-        let action = macLocalized(vatRemovesTax ? "currency.vat.remove" : "currency.vat.add", bundle: currentLocalizationBundle)
-        return "\(action) \(rate)% ="
+        viewModel.toolOperationLine(
+            base: viewModel.toolBase(for: .vat),
+            label: macLocalized("currency.vat.short", bundle: currentLocalizationBundle),
+            rate: vatRate,
+            isRemoving: vatRemovesTax
+        )
     }
 
     private func tipSummary() -> String {
-        let rate = viewModel.formattedValue(tipRate, includingCurrency: false)
-        return "\(macLocalized("currency.tip.title", bundle: currentLocalizationBundle)) \(rate)% ="
+        viewModel.toolOperationLine(
+            base: viewModel.toolBase(for: .tip),
+            label: macLocalized("currency.tip.short", bundle: currentLocalizationBundle),
+            rate: tipRate
+        )
     }
 
     /// Compact outlined pill, deliberately unlike a keypad key: it opens a tool
     /// rather than entering anything.
+    /// Closes the VAT or Tip pane, if one is open, before something else
+    /// changes the display.
+    private func closeToolPane() {
+        if activeOverlay == .vat || activeOverlay == .tip {
+            setActiveOverlay(nil)
+        }
+    }
+
+    /// Captures the stored default rates into this window's own state the first
+    /// time a pane opens, so another window changing the default can never
+    /// change, and live-apply, this window's rate.
+    private func seedSessionRates() {
+        if sessionVATRate == nil { sessionVATRate = vatRate }
+        if sessionTipRate == nil { sessionTipRate = tipRate }
+    }
+
+    /// Opening VAT or Tip over an unfinished sum (`10 + 5`) presses Enter for
+    /// the person first, exactly as the Enter key would: the result, its
+    /// history entry and the Enter sound.
+    private func pressEnterForPendingCalculation() {
+        guard viewModel.hasPendingCalculation else { return }
+        MacButtonSoundFeedback.playIfNeeded(disabled: windowSettings.disablesButtonSound, isEnterKey: true)
+        viewModel.evaluate()
+    }
+
     private func currencyToolButton(titleKey: String, pane: OverlayPane, opacity: Double) -> some View {
         let isActive = activeOverlay == pane
         return Button {
+            if !isActive {
+                seedSessionRates()
+                pressEnterForPendingCalculation()
+            }
             setActiveOverlay(isActive ? nil : pane)
         } label: {
             Text(macLocalized(titleKey, bundle: currentLocalizationBundle))
                 .font(EnterCalcFont.appFont(size: 11))
-                .foregroundStyle((isActive ? palette.accent : primaryForeground).opacity(opacity))
+                // An open panel's pill is shown as a solid grey pill with white
+                // text, matching the iOS inverted pill as it appears behind the
+                // panel's scrim. A literal inversion (a light pill with dark
+                // text) is unreadable on the Mac's dark display.
+                .foregroundStyle(isActive ? Color.white : primaryForeground.opacity(opacity))
                 .padding(.horizontal, 6)
                 .padding(.vertical, 1)
+                .background(
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(isActive ? Color.gray : Color.clear)
+                )
                 .overlay(
                     RoundedRectangle(cornerRadius: 4)
                         .strokeBorder(
-                            (isActive ? palette.accent : palette.textSecondary).opacity(opacity * 0.7),
+                            isActive ? Color.gray : palette.textSecondary.opacity(opacity * 0.7),
                             lineWidth: 1
                         )
                 )
@@ -1485,6 +1599,12 @@ struct CalculatorWindowView: View {
     private func setActiveOverlay(_ overlay: OverlayPane?) {
         if activeOverlay == .rounding, overlay != .rounding {
             viewModel.commitResultRoundingInteraction()
+        }
+        // An open rate edit belongs to its panel; any overlay change abandons
+        // it, including switching straight between VAT and Tip, which share
+        // the editor.
+        if overlay != activeOverlay {
+            rateEditor.cancel()
         }
 
         if reduceMotionEnabled {
@@ -1693,6 +1813,21 @@ struct CalculatorWindowView: View {
     // handled so the event is consumed. Active overlays get first refusal.
     @discardableResult
     private func handleKey(_ event: NSEvent) -> Bool {
+        // While a VAT or Tip rate is being typed, every key belongs to its text
+        // field rather than to the calculator (#124).
+        if rateEditor.isEditing {
+            return false
+        }
+
+        // VAT and Tip apply live to the display, so any key on the calculator
+        // while one is open — typing, or a shortcut such as ⌘V, ⌘Z or
+        // ⌘Delete — closes it first: the result stays, and the key then does
+        // what it always does. Escape just closes the pane.
+        if activeOverlay == .vat || activeOverlay == .tip {
+            closeToolPane()
+            if event.keyCode == 53 { return true }
+        }
+
         let chars = event.charactersIgnoringModifiers ?? ""
         let inputChars = event.characters ?? chars
         let insertFunctionCharacter = Character(UnicodeScalar(NSInsertFunctionKey)!)
@@ -2140,6 +2275,9 @@ private struct CompactActionButton: View {
     let palette: Palette
     let action: () -> Void
     let onChooserOpen: (CalculatorFunctionSlot, CGRect, Bool) -> Void
+    /// Shown in the accent colour while the mode it toggles is on: the
+    /// currency key in Currency mode, since All Clear does not leave it.
+    var isHighlighted: Bool = false
     @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
     @State private var hovering: Bool = false
     @State private var globalFrame: CGRect = .zero
@@ -2156,7 +2294,7 @@ private struct CompactActionButton: View {
                         function: function,
                         currencySymbol: currencySymbol,
                         fontSize: boundedIconFontSize,
-                        color: palette.textPrimary
+                        color: isHighlighted ? palette.accentText : palette.textPrimary
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .contentShape(Rectangle())
@@ -2214,7 +2352,7 @@ private struct CompactActionButton: View {
             Color.clear
         } else {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(palette.buttonOperation)
+                .fill(isHighlighted ? palette.accent : palette.buttonOperation)
         }
     }
 }
@@ -2245,6 +2383,9 @@ private struct CompactActionButton: View {
         var operatorRevealProgress: Double = 0.0
         var operatorAnimFadeOpacity: Double = 1.0
         var reduceMotionEnabled: Bool = false
+        /// Accent fill while the mode this key toggles is on (the currency key
+        /// in Currency mode).
+        var isHighlighted: Bool = false
         @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
 
         @State private var hovering: Bool = false
@@ -2402,6 +2543,7 @@ private struct CompactActionButton: View {
         }
 
         private var foregroundColor: Color {
+            if isHighlighted { return palette.accentText }
             switch kind {
             case .accent:
                 return palette.accentText
@@ -2445,7 +2587,7 @@ private struct CompactActionButton: View {
                 }
             } else {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(backgroundStyle)
+                    .fill(isHighlighted ? AnyShapeStyle(palette.accent) : backgroundStyle)
             }
         }
 
@@ -3030,9 +3172,11 @@ private struct MacRoundingPanel: View {
             }
             .frame(height: 26)
         }
-        .padding(.horizontal, 5)
+        // Content lines up with the keypad: 8pt in from the window's sides and
+        // 10pt up from its bottom, the same as the VAT and Tip panes.
+        .padding(.horizontal, 8)
         .padding(.top, 0)
-        .padding(.bottom, 8)
+        .padding(.bottom, 10)
         .frame(maxWidth: .infinity, alignment: .top)
         .fixedSize(horizontal: false, vertical: true)
         .background(overlayBackgroundColor)
@@ -3643,5 +3787,30 @@ private struct CalculatorWindowResolver: NSViewRepresentable {
         DispatchQueue.main.async { [weak nsView] in
             onResolve(nsView?.window)
         }
+    }
+}
+
+/// The rounding pane's background treatment, shared by the VAT and Tip panes:
+/// the fill runs past the window's content inset to the edges, with rounded
+/// top corners, so all three panes sit the same way.
+private struct MacToolPaneBackground: ViewModifier {
+    let color: Color
+
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: .infinity, alignment: .top)
+            .fixedSize(horizontal: false, vertical: true)
+            .background(color)
+            .clipShape(
+                UnevenRoundedRectangle(
+                    topLeadingRadius: 10,
+                    bottomLeadingRadius: 0,
+                    bottomTrailingRadius: 0,
+                    topTrailingRadius: 10,
+                    style: .continuous
+                )
+            )
+            .padding(.horizontal, -8)
+            .padding(.bottom, -8)
     }
 }

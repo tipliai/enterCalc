@@ -456,10 +456,16 @@ struct EnterCalcIOSView: View {
     // Currency-mode tool settings (#92). Session state rather than a stored
     // preference: they belong to the calculation in progress, the same way the
     // currency symbol itself does.
-    @State private var vatRate: Decimal = 20
+    // Rates and edited presets are kept across launches (#124). The VAT rate
+    // starts on the region's standard rate until one is chosen.
+    @AppStorage(RateToolPreferences.vatRateKey) private var storedVATRate = ""
+    @AppStorage(RateToolPreferences.vatPresetOverridesKey) private var storedVATPresetOverrides = ""
+    @AppStorage(RateToolPreferences.tipRateKey) private var storedTipRate = ""
+    @AppStorage(RateToolPreferences.tipPresetOverridesKey) private var storedTipPresetOverrides = ""
+    @StateObject private var rateEditor = RateEditor()
+    @State private var sessionVATRate: Decimal?
+    @State private var sessionTipRate: Decimal?
     @State private var vatRemovesTax: Bool = false
-    @State private var tipRate: Decimal = 18
-    @State private var tipSplitCount: Int = TipBreakdown.defaultSplitCount
     @State private var counterRotatesForUpsideDownPortrait: Bool = false
     @State private var flashCopy: Bool = false
     @State private var showCopyToast: Bool = false
@@ -554,13 +560,15 @@ struct EnterCalcIOSView: View {
             copy: { copyCurrentResultToPasteboard(from: viewModel) },
             copyOperation: { copyCurrentOperationToPasteboard(from: viewModel) },
             canCopyOperation: viewModel.hasOperationToCopy,
-            paste: { viewModel.pasteFromPasteboard() },
-            undo: { viewModel.undo() },
-            redo: { viewModel.redo() },
+            // Menu commands that change the display close an open VAT/Tip pane
+            // first, the same as typing does, so the pane can't drift from it.
+            paste: { closeToolPane(); viewModel.pasteFromPasteboard() },
+            undo: { closeToolPane(); viewModel.undo() },
+            redo: { closeToolPane(); viewModel.redo() },
             canUndo: viewModel.canUndo,
             canRedo: viewModel.canRedo,
-            clear: { viewModel.clearEntry() },
-            clearAll: { viewModel.clearAll() },
+            clear: { closeToolPane(); viewModel.clearEntry() },
+            clearAll: { closeToolPane(); viewModel.clearAll() },
             toggleHistoryPanel: currentDeviceFamily() == .pad ? { toggleOverlay(.history) } : nil,
             toggleRoundingPanel: currentDeviceFamily() == .pad ? { toggleOverlay(.rounding) } : nil,
             growDisplayArea: { adjustDisplayHeightFromKeyboard(byPoints: Self.keyboardDisplayResizeStep) },
@@ -580,6 +588,48 @@ struct EnterCalcIOSView: View {
 
     private var usesAlternativeKeypad: Bool {
         activeScreen.settings.usesAlternativeKeypad
+    }
+
+    // The rate in use belongs to this window (or iPad scene) for the session,
+    // so changing it in one window never rewrites another window's display.
+    // The stored value is only the default a new window starts from.
+    private var vatRate: Decimal {
+        get { sessionVATRate ?? RateToolPreferences.rate(fromStored: storedVATRate, fallback: VATRateCatalog.defaultRate()) }
+        nonmutating set {
+            sessionVATRate = newValue
+            storedVATRate = RateToolPreferences.storedText(for: newValue)
+        }
+    }
+
+    private var tipRate: Decimal {
+        get { sessionTipRate ?? RateToolPreferences.rate(fromStored: storedTipRate, fallback: RateToolPreferences.defaultTipRate) }
+        nonmutating set {
+            sessionTipRate = newValue
+            storedTipRate = RateToolPreferences.storedText(for: newValue)
+        }
+    }
+
+    private func ratePresets(defaults: [Decimal], storedOverrides: String) -> RatePresets {
+        RatePresets(
+            defaults: defaults,
+            overrides: RatePresetOverrides(serialized: storedOverrides),
+            decimalSeparator: activeScreen.viewModel.numberFormatStyle.decimalSeparator
+        )
+    }
+
+    private var vatPresets: RatePresets {
+        ratePresets(defaults: VATRateCatalog.presets(), storedOverrides: storedVATPresetOverrides)
+    }
+
+    private var tipPresets: RatePresets {
+        ratePresets(defaults: TipBreakdown.presetRates, storedOverrides: storedTipPresetOverrides)
+    }
+
+    /// Saves a long-pressed preset's new value, or restores its default.
+    private func editPreset(_ slot: Int, to rate: Decimal?, in presets: RatePresets, store: (String) -> Void) {
+        var overrides = presets.overrides
+        overrides.set(rate, forSlot: slot, default: presets.defaults.indices.contains(slot) ? presets.defaults[slot] : nil)
+        store(overrides.serialized)
     }
 
     private var reduceMotionEnabled: Bool {
@@ -847,7 +897,9 @@ struct EnterCalcIOSView: View {
                 }
 
                 IOSHardwareKeyCaptureView(
-                    isEnabled: scenePhase == .active && !showSettingsSheet,
+                    // A rate being typed needs the keyboard focus for its text
+                    // field (#124), so the calculator's key capture steps aside.
+                    isEnabled: scenePhase == .active && !showSettingsSheet && !rateEditor.isEditing,
                     onKeyPress: handleHardwareKey
                 )
                 .frame(width: 1, height: 1)
@@ -926,6 +978,21 @@ struct EnterCalcIOSView: View {
             .onValueChange(of: preferredScientificNotation) { _ in
                 syncHomeScreenFromStoredSettings()
             }
+            // An open rate edit belongs to the panel; closing the panel by any
+            // route (✕, trash, the scrim, leaving Currency mode) abandons it.
+            // Any overlay change cancels it, including switching straight
+            // between VAT and Tip, which share the editor.
+            .onValueChange(of: activeOverlay) { _ in
+                rateEditor.cancel()
+            }
+            // A preset opened for editing by press-and-hold gets the same
+            // haptic as the other long-press actions, such as the function-key
+            // chooser (#124).
+            .onValueChange(of: rateEditor.target) { target in
+                if case .preset = target {
+                    triggerActionFeedback()
+                }
+            }
             .onValueChange(of: preferredNumberFormatRaw) { _ in
                 syncHomeScreenFromStoredSettings()
             }
@@ -983,6 +1050,11 @@ struct EnterCalcIOSView: View {
                 reconcileDisplayLayoutAfterOrientationChange()
             }
         }
+        // The only keyboard this screen raises is the rate alert's (#124), and
+        // nothing here needs to stay above it. Without this the layout measured
+        // a screen shortened by the keyboard and lifted the VAT/Tip panel over
+        // the calculator; now the keyboard simply covers the bottom.
+        .ignoresSafeArea(.keyboard, edges: .bottom)
     }
 }
 
@@ -1074,6 +1146,15 @@ private extension EnterCalcIOSView {
 
     func handleHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
         resetLandscapeDisplayScroll(for: activeScreen)
+
+        // VAT and Tip apply live to the display, so any key on the calculator
+        // while one is open — typing, or a shortcut such as ⌘V, ⌘Z or
+        // ⌘Delete — closes it first: the result stays, and the key then does
+        // what it always does (#124). Escape just closes the pane.
+        if activeOverlay == .vat || activeOverlay == .tip {
+            closeToolPane()
+            if event.keyCode == .keyboardEscape { return true }
+        }
 
         let unsupportedModifiers = event.modifierFlags.intersection([.control])
         guard unsupportedModifiers.isEmpty else {
@@ -1452,18 +1533,27 @@ private extension EnterCalcIOSView {
             } else if activeOverlay == .vat {
                 roundingOverlayPanel(metrics: metrics) {
                     CurrencyVATPanel(
-                        value: activeScreen.viewModel.currentValue,
+                        value: activeScreen.viewModel.toolBase(for: .vat),
                         rate: vatRate,
+                        presets: vatPresets,
+                        currencyFractionDigits: currencyFractionDigits,
                         isRemoving: vatRemovesTax,
                         palette: palette,
                         localized: { localized($0) },
-                        format: { activeScreen.viewModel.formattedValue($0) },
-                        formatRate: { activeScreen.viewModel.formattedValue($0, includingCurrency: false) },
+                        format: { activeScreen.viewModel.formattedCurrencyAmount($0, fractionDigits: currencyFractionDigits) },
+                        formatRate: { activeScreen.viewModel.formattedValue(RateEntry.roundedForDisplay($0), includingCurrency: false) },
                         onRateChange: { vatRate = $0; triggerActionFeedback() },
+                        rateEditor: rateEditor,
+                        onPresetEdited: { slot, rate in
+                            editPreset(slot, to: rate, in: vatPresets) { storedVATPresetOverrides = $0 }
+                        },
                         onDirectionChange: { vatRemovesTax = $0; triggerActionFeedback() },
-                        onApply: { result in
-                            activeScreen.viewModel.applyToolResult(result, describedBy: vatSummary())
-                            triggerActionFeedback(emphasized: true)
+                        onResult: { result in
+                            let viewModel = activeScreen.viewModel
+                            viewModel.applyLiveToolResult(result, tool: .vat, base: viewModel.toolBase(for: .vat), describedBy: vatSummary())
+                        },
+                        onRemove: {
+                            activeScreen.viewModel.removeLiveToolResult(.vat)
                             dismissActiveOverlay()
                         },
                         onDismiss: { dismissActiveOverlay() }
@@ -1473,18 +1563,26 @@ private extension EnterCalcIOSView {
             } else if activeOverlay == .tip {
                 roundingOverlayPanel(metrics: metrics) {
                     CurrencyTipPanel(
-                        bill: activeScreen.viewModel.currentValue,
+                        bill: activeScreen.viewModel.toolBase(for: .tip),
                         rate: tipRate,
-                        splitCount: tipSplitCount,
+                        presets: tipPresets,
+                        currencyFractionDigits: currencyFractionDigits,
                         palette: palette,
                         localized: { localized($0) },
-                        format: { activeScreen.viewModel.formattedValue($0) },
-                        formatRate: { activeScreen.viewModel.formattedValue($0, includingCurrency: false) },
+                        format: { activeScreen.viewModel.formattedCurrencyAmount($0, fractionDigits: currencyFractionDigits) },
+                        formatRate: { activeScreen.viewModel.formattedValue(RateEntry.roundedForDisplay($0), includingCurrency: false) },
                         onRateChange: { tipRate = $0; triggerActionFeedback() },
-                        onSplitChange: { tipSplitCount = clampedSplitCount($0); triggerActionFeedback() },
-                        onApply: { result in
-                            activeScreen.viewModel.applyToolResult(result, describedBy: tipSummary())
-                            triggerActionFeedback(emphasized: true)
+                        rateEditor: rateEditor,
+                        onPresetEdited: { slot, rate in
+                            editPreset(slot, to: rate, in: tipPresets) { storedTipPresetOverrides = $0 }
+                        },
+                        onResult: { result in
+                            let viewModel = activeScreen.viewModel
+                            viewModel.applyLiveToolResult(result, tool: .tip, base: viewModel.toolBase(for: .tip), describedBy: tipSummary())
+                        },
+                        onTipOff: { activeScreen.viewModel.removeLiveToolResult(.tip, clearingOperationLine: true) },
+                        onRemove: {
+                            activeScreen.viewModel.removeLiveToolResult(.tip)
                             dismissActiveOverlay()
                         },
                         onDismiss: { dismissActiveOverlay() }
@@ -2912,13 +3010,19 @@ private extension EnterCalcIOSView {
         } label: {
             Text(localized(titleKey))
                 .font(EnterCalcFont.appFont(size: metrics.memoryFontSize))
-                .foregroundStyle((isActive ? palette.accent : palette.textPrimary).opacity(opacity))
+                // An open panel's pill is inverted (filled with the text colour)
+                // rather than tinted blue, which was hard to read on the display.
+                .foregroundStyle((isActive ? palette.surface : palette.textPrimary).opacity(opacity))
                 .padding(.horizontal, 7)
                 .padding(.vertical, 2)
+                .background(
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(isActive ? palette.textPrimary.opacity(opacity) : Color.clear)
+                )
                 .overlay(
                     RoundedRectangle(cornerRadius: 5)
                         .strokeBorder(
-                            (isActive ? palette.accent : palette.textSecondary).opacity(opacity * 0.7),
+                            (isActive ? palette.textPrimary : palette.textSecondary).opacity(isActive ? opacity : opacity * 0.7),
                             lineWidth: 1
                         )
                 )
@@ -2927,21 +3031,26 @@ private extension EnterCalcIOSView {
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 
-    func clampedSplitCount(_ count: Int) -> Int {
-        min(max(count, TipBreakdown.splitCountRange.lowerBound), TipBreakdown.splitCountRange.upperBound)
+    /// Decimals for amounts in the active currency: 2 for most, 0 for the yen.
+    var currencyFractionDigits: Int {
+        CurrencyCatalog.fractionDigits(forSymbol: activeScreen.viewModel.activeCurrencySymbol ?? "")
     }
 
     /// The operation line left behind after a tool writes its result, so the
     /// display says where the number came from.
     func vatSummary() -> String {
-        let rate = activeScreen.viewModel.formattedValue(vatRate, includingCurrency: false)
-        let action = localized(vatRemovesTax ? "currency.vat.remove" : "currency.vat.add")
-        return "\(action) \(rate)% ="
+        let viewModel = activeScreen.viewModel
+        return viewModel.toolOperationLine(
+            base: viewModel.toolBase(for: .vat),
+            label: localized("currency.vat.short"),
+            rate: vatRate,
+            isRemoving: vatRemovesTax
+        )
     }
 
     func tipSummary() -> String {
-        let rate = activeScreen.viewModel.formattedValue(tipRate, includingCurrency: false)
-        return "\(localized("currency.tip.title")) \(rate)% ="
+        let viewModel = activeScreen.viewModel
+        return viewModel.toolOperationLine(base: viewModel.toolBase(for: .tip), label: localized("currency.tip.short"), rate: tipRate)
     }
 
     /// Leaving currency mode takes the tools with it, so a panel is never left
@@ -2965,8 +3074,8 @@ private extension EnterCalcIOSView {
             Spacer(minLength: 4)
 
             if showsCurrencyTools {
-                currencyToolButton(metrics: metrics, titleKey: "currency.vat.title", pane: .vat, opacity: opacity)
-                currencyToolButton(metrics: metrics, titleKey: "currency.tip.title", pane: .tip, opacity: opacity)
+                currencyToolButton(metrics: metrics, titleKey: "currency.vat.short", pane: .vat, opacity: opacity)
+                currencyToolButton(metrics: metrics, titleKey: "currency.tip.short", pane: .tip, opacity: opacity)
             }
         }
             .frame(maxWidth: .infinity, minHeight: metrics.memoryHeight, maxHeight: metrics.memoryHeight, alignment: .leading)
@@ -3240,6 +3349,7 @@ private extension EnterCalcIOSView {
                             height: compactActionHeight,
                             reduceMotionEnabled: reduceMotionEnabled,
                             isConfigurable: supportsConfigurableFunctionKeys(for: screen),
+                            isHighlighted: function == .currency && screen.viewModel.activeCurrencySymbol != nil,
                             pressFeedback: triggerActionFeedback,
                             action: {
                                 performFunction(function, on: screen)
@@ -3301,7 +3411,8 @@ private extension EnterCalcIOSView {
                                     onChooserDrag: { updateFunctionChooserDrag($0) },
                                     onChooserRelease: { releaseFunctionChooser() },
                                     operatorRevealProgress: operatorRevealProgress,
-                                    operatorAnimFadeOpacity: operatorAnimFadeOpacity
+                                    operatorAnimFadeOpacity: operatorAnimFadeOpacity,
+                                    isHighlighted: button.function == .currency && screen.viewModel.activeCurrencySymbol != nil
                                 )
                                 .frame(width: cellWidth * CGFloat(button.columnSpan) + spacing * CGFloat(button.columnSpan - 1))
                             }
@@ -3452,6 +3563,11 @@ private extension EnterCalcIOSView {
     func toggleOverlay(_ overlay: IOSOverlayPane) {
         let wasActiveOverlay = activeOverlay
 
+        if (overlay == .vat || overlay == .tip), wasActiveOverlay != overlay {
+            seedSessionRates()
+            pressEnterForPendingCalculation()
+        }
+
         if wasActiveOverlay == .rounding,
            (overlay != .rounding || wasActiveOverlay == overlay) {
             activeScreen.viewModel.commitResultRoundingInteraction()
@@ -3467,6 +3583,33 @@ private extension EnterCalcIOSView {
         if activeOverlay != .history {
             resetHistoryOverlayResizeState()
         }
+    }
+
+    /// Closes the VAT or Tip pane, if one is open, before something else
+    /// changes the display.
+    func closeToolPane() {
+        if activeOverlay == .vat || activeOverlay == .tip {
+            dismissActiveOverlay()
+        }
+    }
+
+    /// Captures the stored default rates into this scene's own state the first
+    /// time a pane opens, so another scene changing the default can never
+    /// change, and live-apply, this scene's rate.
+    func seedSessionRates() {
+        if sessionVATRate == nil { sessionVATRate = vatRate }
+        if sessionTipRate == nil { sessionTipRate = tipRate }
+    }
+
+    /// Opening VAT or Tip over an unfinished sum (`10 + 5`) presses Enter for
+    /// the person first, exactly as the Enter key would: the result, its
+    /// history entry, the Enter sound and haptic, and the review gate.
+    func pressEnterForPendingCalculation() {
+        let screen = activeScreen
+        guard screen.viewModel.hasPendingCalculation else { return }
+        screen.viewModel.evaluate()
+        triggerKeyPressFeedback(for: .equals)
+        requestReviewIfEarned(for: screen)
     }
 
     func animateIfAllowed(_ animation: Animation, _ updates: @escaping () -> Void) {
@@ -5330,6 +5473,9 @@ private struct IOSCompactActionButton: View {
     let height: CGFloat
     let reduceMotionEnabled: Bool
     let isConfigurable: Bool
+    /// Shown in the accent colour while the mode it toggles is on: the
+    /// currency key in Currency mode, since All Clear does not leave it.
+    var isHighlighted: Bool = false
     let pressFeedback: () -> Void
     let action: () -> Void
     let onChooserOpen: (CalculatorFunctionSlot, CGRect, Bool) -> Void
@@ -5359,7 +5505,7 @@ private struct IOSCompactActionButton: View {
                 function: button.function,
                 currencySymbol: currencySymbol,
                 fontSize: boundedIconFontSize,
-                color: palette.textPrimary
+                color: isHighlighted ? palette.accentText : palette.textPrimary
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
@@ -5406,8 +5552,9 @@ private struct IOSCompactActionButton: View {
         )
         .background(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(palette.buttonFunction)
+                .fill(isHighlighted ? palette.accent : palette.buttonFunction)
         )
+        .accessibilityAddTraits(isHighlighted ? [.isSelected] : [])
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .frame(height: height)
     }
@@ -5460,6 +5607,9 @@ private struct IOSKeypadButton: View {
     @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
     var operatorRevealProgress: Double = 0.0
     var operatorAnimFadeOpacity: Double = 1.0
+    /// Accent fill while the mode this key toggles is on (the currency key in
+    /// Currency mode).
+    var isHighlighted: Bool = false
     @State private var isPressed: Bool = false
     @State private var touchCancelledBySwipe: Bool = false
     @State private var shimmerProgress: CGFloat = 0
@@ -5556,7 +5706,7 @@ private struct IOSKeypadButton: View {
 
     private var buttonSurface: some View {
         labelView
-            .foregroundStyle(button.foregroundColor(palette: palette))
+            .foregroundStyle(isHighlighted ? palette.accentText : button.foregroundColor(palette: palette))
             .frame(maxWidth: .infinity, minHeight: buttonHeight, maxHeight: buttonHeight)
             .background(buttonBackground)
             .scaleEffect(reduceMotionEnabled ? 1.0 : pressPopScale)
@@ -5723,6 +5873,9 @@ private struct IOSKeypadButton: View {
                     .fill(gradColor)
                     .opacity(overlayOpacity)
             }
+        } else if isHighlighted {
+            RoundedRectangle(cornerRadius: cr, style: .continuous)
+                .fill(palette.accent)
         } else {
             RoundedRectangle(cornerRadius: cr, style: .continuous)
                 .fill(button.backgroundStyle(palette: palette))
