@@ -25,9 +25,15 @@ private struct CurrencyToolChrome<Content: View>: View {
             header
             content
         }
+        #if os(macOS)
+        // The same insets as the Mac rounding pane, so all three panes line up.
+        .padding(.horizontal, 5)
+        .padding(.bottom, 8)
+        #else
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
         .padding(.top, 4)
+        #endif
     }
 
     /// Laid out like the rounding pane's header: the title centred in the

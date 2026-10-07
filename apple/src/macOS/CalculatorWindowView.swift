@@ -1450,8 +1450,7 @@ struct CalculatorWindowView: View {
             },
             onDismiss: { setActiveOverlay(nil) }
         )
-        .background(memoryOverlayBackgroundColor)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .modifier(MacToolPaneBackground(color: memoryOverlayBackgroundColor))
     }
 
     private func tipOverlay() -> some View {
@@ -1479,8 +1478,7 @@ struct CalculatorWindowView: View {
             },
             onDismiss: { setActiveOverlay(nil) }
         )
-        .background(memoryOverlayBackgroundColor)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .modifier(MacToolPaneBackground(color: memoryOverlayBackgroundColor))
     }
 
     /// The operation line left behind after a tool writes its result, so the
@@ -3734,5 +3732,30 @@ private struct CalculatorWindowResolver: NSViewRepresentable {
         DispatchQueue.main.async { [weak nsView] in
             onResolve(nsView?.window)
         }
+    }
+}
+
+/// The rounding pane's background treatment, shared by the VAT and Tip panes:
+/// the fill runs past the window's content inset to the edges, with rounded
+/// top corners, so all three panes sit the same way.
+private struct MacToolPaneBackground: ViewModifier {
+    let color: Color
+
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: .infinity, alignment: .top)
+            .fixedSize(horizontal: false, vertical: true)
+            .background(color)
+            .clipShape(
+                UnevenRoundedRectangle(
+                    topLeadingRadius: 10,
+                    bottomLeadingRadius: 0,
+                    bottomTrailingRadius: 0,
+                    topTrailingRadius: 10,
+                    style: .continuous
+                )
+            )
+            .padding(.horizontal, -8)
+            .padding(.bottom, -8)
     }
 }
