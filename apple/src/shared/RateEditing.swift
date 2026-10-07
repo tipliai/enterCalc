@@ -69,10 +69,6 @@ public struct RatePresets: Equatable, Sendable {
     }
 
     public var rates: [Decimal] { overrides.applied(to: defaults) }
-
-    public var editedSlots: Set<Int> {
-        Set(defaults.indices.filter { overrides.isEdited($0) })
-    }
 }
 
 // MARK: - Editing session
@@ -175,12 +171,6 @@ public final class RateEditor: ObservableObject {
         let cancel = onCancel
         close()
         cancel?()
-    }
-
-    /// Closes the edit without running any of its closures, for a caller that
-    /// has already applied the outcome itself (Restore Default).
-    public func dismiss() {
-        close()
     }
 
     private func close() {

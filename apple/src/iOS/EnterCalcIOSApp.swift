@@ -973,6 +973,14 @@ struct EnterCalcIOSView: View {
                     rateEditor.cancel()
                 }
             }
+            // A preset opened for editing by press-and-hold gets the same
+            // haptic as the other long-press actions, such as the function-key
+            // chooser (#124).
+            .onValueChange(of: rateEditor.target) { target in
+                if case .preset = target {
+                    triggerActionFeedback()
+                }
+            }
             .onValueChange(of: preferredNumberFormatRaw) { _ in
                 syncHomeScreenFromStoredSettings()
             }

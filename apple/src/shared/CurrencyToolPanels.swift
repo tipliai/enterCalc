@@ -46,7 +46,6 @@ public struct RateEditingLabels {
     public let presetHint: String
     public let done: String
     public let cancel: String
-    public let restoreDefault: String
     public let rateRange: String
 
     public init(localized: (String) -> String) {
@@ -56,21 +55,18 @@ public struct RateEditingLabels {
         done = localized("currency.rate.done")
         cancel = localized("currency.rate.cancel")
         rateRange = localized("currency.rate.range")
-        restoreDefault = localized("currency.rate.restore")
     }
 }
 
 /// Quick-choice rates, a stepper, and typed entry (#124).
 ///
 /// Tap the rate to type one; press and hold a preset to type a new value for
-/// it, which is kept. Typing happens in a system alert with a text field — a
+/// it, which is kept (typing the preset's default value restores it). Typing happens in a system alert with a text field — a
 /// lightbox over the panel rather than inline, since it is a rare action and
 /// editing in place was confusing. On iPhone the field brings up the decimal
 /// pad; iPad has no number-only pad and shows its numbers layout.
 private struct RateChooser: View {
     let rates: [Decimal]
-    let defaultRates: [Decimal]
-    let editedSlots: Set<Int>
     let selected: Decimal
     let stepLabel: String
     let decreaseLabel: String
@@ -94,15 +90,6 @@ private struct RateChooser: View {
                     #endif
 
                 Button(labels.cancel, role: .cancel) { editor.cancel() }
-
-                if case .preset(let slot) = editor.target, editedSlots.contains(slot), defaultRates.indices.contains(slot) {
-                    Button(labels.restoreDefault) {
-                        let defaultRate = defaultRates[slot]
-                        editor.dismiss()
-                        onPresetEdited(slot, nil)
-                        onSelect(defaultRate)
-                    }
-                }
 
                 Button(labels.done) { commitTypedText() }
             } message: {
@@ -375,8 +362,6 @@ public struct CurrencyVATPanel: View {
 
                 RateChooser(
                     rates: presets.rates,
-                    defaultRates: presets.defaults,
-                    editedSlots: presets.editedSlots,
                     selected: rate,
                     stepLabel: localized("currency.vat.rate"),
                     decreaseLabel: localized("currency.vat.rate.decrease"),
@@ -512,8 +497,6 @@ public struct CurrencyTipPanel: View {
 
                 RateChooser(
                     rates: presets.rates,
-                    defaultRates: presets.defaults,
-                    editedSlots: presets.editedSlots,
                     selected: rate,
                     stepLabel: localized("currency.tip.rate"),
                     decreaseLabel: localized("currency.tip.rate.decrease"),

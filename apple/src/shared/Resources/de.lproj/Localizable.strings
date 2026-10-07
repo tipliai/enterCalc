@@ -102,6 +102,5 @@
 "currency.rate.editPreset" = "Voreinstellung bearbeiten";
 "currency.rate.presetHint" = "Gedrückt halten, um einen neuen Wert für diese Voreinstellung einzugeben";
 "currency.rate.done" = "Fertig";
-"currency.rate.restore" = "Standard wiederherstellen";
 "currency.rate.cancel" = "Abbrechen";
 "currency.rate.range" = "Zwischen 0 und 100, bis zu 3 Nachkommastellen";
