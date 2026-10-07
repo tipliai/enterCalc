@@ -1502,9 +1502,21 @@ struct CalculatorWindowView: View {
 
     /// Compact outlined pill, deliberately unlike a keypad key: it opens a tool
     /// rather than entering anything.
+    /// Opening VAT or Tip over an unfinished sum (`10 + 5`) presses Enter for
+    /// the person first, exactly as the Enter key would: the result, its
+    /// history entry and the Enter sound.
+    private func pressEnterForPendingCalculation() {
+        guard viewModel.hasPendingCalculation else { return }
+        MacButtonSoundFeedback.playIfNeeded(disabled: windowSettings.disablesButtonSound, isEnterKey: true)
+        viewModel.evaluate()
+    }
+
     private func currencyToolButton(titleKey: String, pane: OverlayPane, opacity: Double) -> some View {
         let isActive = activeOverlay == pane
         return Button {
+            if !isActive {
+                pressEnterForPendingCalculation()
+            }
             setActiveOverlay(isActive ? nil : pane)
         } label: {
             Text(macLocalized(titleKey, bundle: currentLocalizationBundle))

@@ -387,4 +387,24 @@ final class CurrencyModeTests: XCTestCase {
         let dollars = currencyViewModel("100", symbol: "$")
         XCTAssertEqual(dollars.toolOperationLine(base: 100, label: "VAT", rate: Decimal(string: "12.34567")!), "$100 + VAT(12.346%) =")
     }
+
+    // 10 + 5 typed but not entered: the panes press Enter first, so they work
+    // from 15 and the calculation lands in history like any other.
+    func testPendingCalculationIsDetectedAndEvaluatesIntoHistory() {
+        let viewModel = currencyViewModel("10", symbol: "$")
+        viewModel.setOperator(.add)
+        enter("5", into: viewModel)
+        XCTAssertTrue(viewModel.hasPendingCalculation)
+        let historyCount = viewModel.history.count
+
+        viewModel.evaluate()
+
+        XCTAssertFalse(viewModel.hasPendingCalculation)
+        XCTAssertEqual(viewModel.toolBase(for: .vat), 15)
+        XCTAssertEqual(viewModel.history.count, historyCount + 1)
+    }
+
+    func testNothingPendingAfterAPlainNumber() {
+        XCTAssertFalse(currencyViewModel("10", symbol: "$").hasPendingCalculation)
+    }
 }
