@@ -70,9 +70,9 @@
 "function.parentheses" = "Paréntesis";
 "function.percent" = "Porcentaje";
 "functionKey.chooser.title" = "Editar acción";
-"functionKey.change" = "Cambiar función";
-"functionKey.hint" = "Mantén pulsado para cambiar esta tecla";
-"functionKey.hint.mac" = "Haz clic derecho y elige Editar para cambiar esta tecla";
+"functionKey.change" = "Editar acción";
+"functionKey.hint" = "Mantén pulsado para editar la acción de esta tecla";
+"functionKey.hint.mac" = "Haz clic derecho y elige Editar para editar la acción de esta tecla";
 "functionKey.edit" = "Editar";
 
 /* Herramientas del modo moneda: IVA y propina (incidencia #92) */

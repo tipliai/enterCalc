@@ -70,9 +70,9 @@
 "function.parentheses" = "Parenthèses";
 "function.percent" = "Pourcentage";
 "functionKey.chooser.title" = "Modifier l’action";
-"functionKey.change" = "Changer de fonction";
-"functionKey.hint" = "Maintenez appuyé pour changer cette touche";
-"functionKey.hint.mac" = "Cliquez avec le bouton droit et choisissez Modifier pour changer cette touche";
+"functionKey.change" = "Modifier l’action";
+"functionKey.hint" = "Maintenez appuyé pour modifier l’action de cette touche";
+"functionKey.hint.mac" = "Cliquez avec le bouton droit et choisissez Modifier pour modifier l’action de cette touche";
 "functionKey.edit" = "Modifier";
 
 /* Outils du mode devise : TVA et pourboire (ticket #92) */

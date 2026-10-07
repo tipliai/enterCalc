@@ -957,7 +957,7 @@ struct CalculatorWindowView: View {
         if let session = functionChooser {
             ZStack {
                 // Catches the click that dismisses a chooser opened without a
-                // drag (VoiceOver's "Change Function" action).
+                // drag (VoiceOver's "Edit Action" action).
                 Color.black.opacity(0.001)
                     .contentShape(Rectangle())
                     .onTapGesture { dismissFunctionChooser() }

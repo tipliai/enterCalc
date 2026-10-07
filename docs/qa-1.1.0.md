@@ -106,7 +106,7 @@ Every step below was driven end to end automatically — on the iPhone simulator
 17. **iPad:** set up page 1 and page 2 differently and swipe between them. Each page keeps its own layout. **macOS:** with two windows open, change one — the other keeps its layout until it is closed. A newly opened window starts from the most recently changed layout, the same as theme, language and every other window setting.
 18. Switch to the **alternative keypad** in Settings. Its keys are deliberately fixed — press-and-hold and right-click should both do nothing there, and no key has a dog-ear.
 19. Check the panel in Dark and Light themes, at the smallest window width, and in landscape on iPhone.
-20. **VoiceOver:** each configurable key should announce the *function's* name — "Undo", "Square Root" — not its glyph, and offer a **Change Function** action that opens the chooser.
+20. **VoiceOver:** each configurable key should announce the *function's* name — "Undo", "Square Root" — not its glyph, and offer a **Edit Action** action that opens the chooser.
 21. Run in another language and confirm the chooser title, the hint and every function name are translated.
 
 ## Function keys: Edit menu, repeated edits, close button and dog-ear — #131

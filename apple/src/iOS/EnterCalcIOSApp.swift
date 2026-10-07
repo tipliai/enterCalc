@@ -849,7 +849,7 @@ struct EnterCalcIOSView: View {
         if let session = functionChooser {
             ZStack {
                 // Catches the tap that dismisses a chooser opened without a
-                // drag (VoiceOver's "Change function" action).
+                // drag (VoiceOver's "Edit Action" action).
                 Color.black.opacity(0.001)
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
