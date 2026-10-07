@@ -77,7 +77,7 @@
 "currency.vat.title" = "IVA";
 "currency.vat.add" = "Añadir IVA";
 "currency.vat.remove" = "Quitar IVA";
-"currency.vat.rate" = "Tipo";
+"currency.vat.rate" = "Tipo impositivo";
 "currency.vat.rate.decrease" = "Reducir tipo";
 "currency.vat.rate.increase" = "Aumentar tipo";
 "currency.vat.net" = "Sin IVA";
@@ -95,7 +95,6 @@
 "currency.rate.presetHint" = "Mantén pulsado para escribir un nuevo valor para este valor predefinido";
 "currency.rate.done" = "OK";
 "currency.rate.cancel" = "Cancelar";
-"currency.rate.range" = "Entre 0 y 100, hasta 3 decimales";
 "currency.vat.clear" = "Eliminar IVA";
 "currency.tip.clear" = "Eliminar propina";
 "currency.vat.short" = "IVA";

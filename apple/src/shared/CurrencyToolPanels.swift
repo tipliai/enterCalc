@@ -103,7 +103,6 @@ public struct RateEditingLabels {
     public let presetHint: String
     public let done: String
     public let cancel: String
-    public let rateRange: String
 
     public init(localized: (String) -> String) {
         typeRate = localized("currency.rate.type")
@@ -111,7 +110,6 @@ public struct RateEditingLabels {
         presetHint = localized("currency.rate.presetHint")
         done = localized("currency.rate.done")
         cancel = localized("currency.rate.cancel")
-        rateRange = localized("currency.rate.range")
     }
 }
 
@@ -149,7 +147,9 @@ private struct RateChooser: View {
     var body: some View {
         choosingView
             .alert(alertTitle, isPresented: isEditingBinding) {
-                TextField(editor.entry.displayText(decimalSeparator: decimalSeparator), text: $typedText)
+                // The current rate as the placeholder, with a % sign so it reads
+                // as a percentage; the person types just the number.
+                TextField("\(editor.entry.displayText(decimalSeparator: decimalSeparator))%", text: $typedText)
                     #if os(iOS)
                     .keyboardType(.decimalPad)
                     #endif
@@ -157,8 +157,6 @@ private struct RateChooser: View {
                 Button(labels.cancel, role: .cancel) { editor.cancel() }
 
                 Button(labels.done) { commitTypedText() }
-            } message: {
-                Text(labels.rateRange)
             }
     }
 

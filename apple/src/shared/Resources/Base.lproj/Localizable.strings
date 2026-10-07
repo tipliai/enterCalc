@@ -77,7 +77,7 @@
 "currency.vat.title" = "VAT";
 "currency.vat.add" = "Add VAT";
 "currency.vat.remove" = "Remove VAT";
-"currency.vat.rate" = "Rate";
+"currency.vat.rate" = "Tax Rate";
 "currency.vat.rate.decrease" = "Decrease Rate";
 "currency.vat.rate.increase" = "Increase Rate";
 "currency.vat.net" = "Ex VAT";
@@ -95,7 +95,6 @@
 "currency.rate.presetHint" = "Press and hold to type a new value for this preset";
 "currency.rate.done" = "Done";
 "currency.rate.cancel" = "Cancel";
-"currency.rate.range" = "Between 0 and 100, up to 3 decimal places";
 "currency.vat.clear" = "Remove";
 "currency.tip.clear" = "Remove";
 "currency.vat.short" = "VAT";

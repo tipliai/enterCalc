@@ -77,7 +77,7 @@
 "currency.vat.title" = "MwSt.";
 "currency.vat.add" = "MwSt. addieren";
 "currency.vat.remove" = "MwSt. herausrechnen";
-"currency.vat.rate" = "Satz";
+"currency.vat.rate" = "Steuersatz";
 "currency.vat.rate.decrease" = "Satz verringern";
 "currency.vat.rate.increase" = "Satz erhöhen";
 "currency.vat.net" = "Netto";
@@ -95,7 +95,6 @@
 "currency.rate.presetHint" = "Gedrückt halten, um einen neuen Wert für diese Voreinstellung einzugeben";
 "currency.rate.done" = "Fertig";
 "currency.rate.cancel" = "Abbrechen";
-"currency.rate.range" = "Zwischen 0 und 100, bis zu 3 Nachkommastellen";
 "currency.vat.clear" = "MwSt. entfernen";
 "currency.tip.clear" = "Trinkgeld entfernen";
 "currency.vat.short" = "MwSt.";

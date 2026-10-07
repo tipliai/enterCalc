@@ -129,9 +129,9 @@ final class RateEntryTests: XCTestCase {
 
     func testEntryNeverExceedsTheMaximumOrTheDecimalLimit() {
         XCTAssertEqual(typed("100").value, 100)
-        XCTAssertEqual(typed("1000").text, "100", "a fourth digit past 100 is refused")
-        XCTAssertEqual(typed("101").text, "10")
-        XCTAssertEqual(typed("100.").text, "100", "100 cannot take a fraction")
+        XCTAssertEqual(typed("150").value, 150, "rates above 100% are allowed")
+        XCTAssertEqual(typed("999.999").value, Decimal(string: "999.999"))
+        XCTAssertEqual(typed("1000").text, "100", "a fourth whole digit is refused")
         XCTAssertEqual(typed("9.975").value, Decimal(string: "9.975"), "three decimals, as in Quebec's QST")
         XCTAssertEqual(typed("8.1255").text, "8.125", "at most three decimals")
         XCTAssertEqual(typed("8..1").text, "8.1", "one separator only")
@@ -160,6 +160,7 @@ final class RateEntryTests: XCTestCase {
         XCTAssertEqual(RateEntry.stepped(Decimal(string: "8.5")!, up: true), 9)
         XCTAssertEqual(RateEntry.stepped(Decimal(string: "8.5")!, up: false), 8)
         XCTAssertEqual(RateEntry.stepped(0, up: false), 0)
-        XCTAssertEqual(RateEntry.stepped(100, up: true), 100)
+        XCTAssertEqual(RateEntry.stepped(100, up: true), 101)
+        XCTAssertEqual(RateEntry.stepped(RateEntry.maximum, up: true), RateEntry.maximum)
     }
 }
