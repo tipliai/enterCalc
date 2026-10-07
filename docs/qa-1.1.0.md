@@ -115,7 +115,7 @@ Every step below was driven end to end automatically — on the iPhone simulator
 2. **Pressing a dog-eared key** still pops and highlights in its cut-corner shape, and the hover highlight on Mac follows the cut.
 3. **Back-to-back edits.** Change a key, then immediately change it again, several times, then change the other large key. Every open, choice and close should work. On iOS, after a press-and-hold the key must not stay drawn as pressed, and the next tap anywhere must register.
 4. **Close.** The chooser's **✕** closes it without changing anything, on every platform; on Mac it has the same hover as the other panes' buttons.
-5. **Reset all.** The chooser's **trash** (leading edge, like the other panes) is dimmed while every key has its original action. After changing a few keys, press it: a system alert asks **Restore Default Keys?**; **Cancel** changes nothing, **Restore** puts every changeable key on this page or window back to its original action and closes the chooser.
+5. **Reset all.** The chooser's **trash** (leading edge, like the other panes) is always available, even when every key already has its original action. After changing a few keys, press it: a system alert asks **Restore Default Keys?**; **Cancel** changes nothing, **Restore** puts every changeable key on this page or window back to its original action and closes the chooser.
 6. **Mac hint.** With VoiceOver, a changeable Mac key's hint says to right-click and choose Edit (not "press and hold").
 7. Run in another language: **Edit** in the context menu, the Mac hint and the reset alert are translated.
 
