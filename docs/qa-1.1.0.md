@@ -63,7 +63,8 @@ The swipe-intent change was driven on the iPad simulator: a 12pt horizontal drif
 4. **⇧⌘C copies the operation** on both platforms, while ⌘C still copies the result. Worth checking carefully: both platforms intercept keyboard events before the menus see them, so this needed handling in two places, not just the menu item. Without that it would have silently copied the result instead.
 5. **Swipe feel:** with pages open, check that ordinary keypad use never turns a page, and that a deliberate swipe still feels responsive rather than sticky. The thresholds are named constants in `CalculatorPagerGestureIntent` if they want tuning.
 6. **Theme fade:** set two pages to different themes — Dark and Light — and switch between them. The change should crossfade over about a quarter-second rather than cutting. Check with Reduce Motion on, where it should cut instantly instead.
-7. **macOS:** confirm Cmd + ` still cycles calculator windows and that the Window menu lists them. #83 asked whether Shift + Arrow should do this; the answer taken was no — see [keyboard.md](keyboard.md) for why.
+7. **iPad, two windows side by side:** open a second EnterCalc window in Split View and tap into one of them. Shift + Left/Right, Shift + Up/Down, ⇧⌘H and ⌘R must each affect **only the focused window** — the other window's page, display height and panels stay put. Tap into the other window and repeat. With no calculator window focused, the six items under **View** are disabled.
+8. **macOS:** confirm Cmd + ` still cycles calculator windows and that the Window menu lists them. #83 asked whether Shift + Arrow should do this; the answer taken was no — see [keyboard.md](keyboard.md) for why.
 
 ## Configurable function keys — #67
 
