@@ -1861,11 +1861,16 @@ struct CalculatorWindowView: View {
             if event.keyCode == 53 { return true }
         }
 
-        // The function chooser closes the same way, leaving the key as it was
+        // While the action chooser is open, Escape closes it, leaving the key
+        // as it was; every other key belongs to the chooser (Tab to move
+        // between its buttons, Space to press one) and not to the calculator
         // (#131).
         if functionChooser != nil {
-            dismissFunctionChooser()
-            if event.keyCode == 53 { return true }
+            if event.keyCode == 53 {
+                dismissFunctionChooser()
+                return true
+            }
+            return false
         }
 
         let chars = event.charactersIgnoringModifiers ?? ""
@@ -2347,7 +2352,7 @@ private struct CompactActionButton: View {
                         color: isHighlighted ? palette.accentText : palette.textPrimary
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .contentShape(Rectangle())
+                    .contentShape(keyShape)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text(accessibilityLabel))
