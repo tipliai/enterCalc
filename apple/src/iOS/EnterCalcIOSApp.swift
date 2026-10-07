@@ -5478,9 +5478,6 @@ private struct IOSKeypadButton: View {
         static let signToggle = SignToggleLabelTuning()
     }
 
-    private static let horizontalSwipeCancellationDistance: CGFloat = 8
-    private static let horizontalSwipeDominanceRatio: CGFloat = 1.15
-    private static let tapCommitDistance: CGFloat = 22
     private static let pressedScale: CGFloat = 0.97
 
     private var isEqualsButton: Bool { button.kind == .equals }
@@ -5634,12 +5631,15 @@ private struct IOSKeypadButton: View {
     }
 
     private func isTapEligible(translation: CGSize) -> Bool {
-        hypot(translation.width, translation.height) <= Self.tapCommitDistance
+        hypot(translation.width, translation.height) <= CalculatorPagerGestureIntent.keyTapAllowance
     }
 
+    /// A key gives up its press only once the pager would take the gesture.
+    /// It used to give up after 8pt of sideways travel, which dropped digits
+    /// when typing fast: a finger slides a little as it lifts toward the next
+    /// key (#122).
     private func isHorizontalSwipeIntent(translation: CGSize) -> Bool {
-        abs(translation.width) > Self.horizontalSwipeCancellationDistance
-            && abs(translation.width) > abs(translation.height) * Self.horizontalSwipeDominanceRatio
+        CalculatorPagerGestureIntent.isPagingIntent(translation: translation, axis: .horizontal)
     }
 
     private func handleTap() {
