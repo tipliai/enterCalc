@@ -572,6 +572,70 @@ public struct OptionalFunctionKeyHold: ViewModifier {
 }
 
 #if os(macOS)
+import AppKit
+
+/// The context menu on a changeable key: one item, Edit (#131).
+///
+/// An AppKit menu rather than SwiftUI's `.contextMenu`, which intermittently
+/// failed to appear right after a key changed its action or a new window
+/// opened, until the pointer moved about. This view takes *only* secondary
+/// clicks — right-click, or Control-click, which macOS treats the same — so
+/// ordinary clicks still pass straight through to the key underneath.
+private struct FunctionKeyMenuCatcher: NSViewRepresentable {
+    let editLabel: String
+    let onEdit: () -> Void
+
+    final class CatcherView: NSView {
+        var editLabel = ""
+        var onEdit: (() -> Void)?
+
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            guard let event = NSApp.currentEvent else { return nil }
+            switch event.type {
+            case .rightMouseDown, .rightMouseUp, .rightMouseDragged:
+                return super.hitTest(point)
+            case .leftMouseDown, .leftMouseUp, .leftMouseDragged:
+                return event.modifierFlags.contains(.control) ? super.hitTest(point) : nil
+            default:
+                return nil
+            }
+        }
+
+        override func menu(for event: NSEvent) -> NSMenu? {
+            let menu = NSMenu()
+            let item = NSMenuItem(title: editLabel, action: #selector(edit), keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+            return menu
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            // Control-click: show the same menu a right-click would.
+            guard event.modifierFlags.contains(.control), let menu = menu(for: event) else {
+                super.mouseDown(with: event)
+                return
+            }
+            NSMenu.popUpContextMenu(menu, with: event, for: self)
+        }
+
+        @objc private func edit() {
+            onEdit?()
+        }
+    }
+
+    func makeNSView(context: Context) -> CatcherView {
+        let view = CatcherView()
+        view.editLabel = editLabel
+        view.onEdit = onEdit
+        return view
+    }
+
+    func updateNSView(_ nsView: CatcherView, context: Context) {
+        nsView.editLabel = editLabel
+        nsView.onEdit = onEdit
+    }
+}
+
 extension View {
     /// Makes this key reassignable from its context menu: right-click (or
     /// Control-click) shows the standard menu with one item, Edit, which
@@ -586,9 +650,7 @@ extension View {
         onEdit: @escaping (CalculatorFunctionSlot) -> Void
     ) -> some View {
         if let slot {
-            contextMenu {
-                Button(editLabel) { onEdit(slot) }
-            }
+            overlay(FunctionKeyMenuCatcher(editLabel: editLabel) { onEdit(slot) })
         } else {
             self
         }
