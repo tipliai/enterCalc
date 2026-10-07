@@ -13,7 +13,7 @@ public struct FunctionKeyChooserSession: Equatable {
     /// Global frame of that key, so the panel can sit next to it.
     public var anchor: CGRect
     /// Latest drag location in global coordinates, or `nil` when the chooser
-    /// was opened without a drag (VoiceOver's "Change function" action).
+    /// was opened without a drag (VoiceOver's "Edit Action" action).
     public var dragLocation: CGPoint?
     /// Option the finger is currently over.
     public var highlighted: CalculatorFunctionKey?

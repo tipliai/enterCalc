@@ -16,7 +16,7 @@ This page is a quick guide to accessibility features available in EnterCalc.
 
 - Function keys are changed by pressing and holding on iOS, or from the **Edit** item in a key's context menu on macOS (#131). Neither is easy for a VoiceOver user, and the Mac hint names the context menu rather than press-and-hold.
 - The folded-down corner that marks a changeable key is decoration only and hidden from VoiceOver; the key's hint and its action carry the same information.
-- Every configurable key therefore also offers a **Change Function** action. Activating it opens the same chooser, whose options are ordinary buttons that commit on a single tap or click. The key currently assigned is marked as selected.
+- Every configurable key therefore also offers a **Edit Action** action. Activating it opens the same chooser, whose options are ordinary buttons that commit on a single tap or click. The key currently assigned is marked as selected.
 - On iOS the keys carry a hint describing the press-and-hold for anyone who can use it.
 
 ### Reduced Motion support

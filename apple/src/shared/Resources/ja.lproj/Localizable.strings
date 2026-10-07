@@ -70,9 +70,9 @@
 "function.parentheses" = "かっこ";
 "function.percent" = "パーセント";
 "functionKey.chooser.title" = "アクションを編集";
-"functionKey.change" = "機能を変更";
-"functionKey.hint" = "長押しすると、このキーを変更できます";
-"functionKey.hint.mac" = "右クリックして「編集」を選ぶと、このキーを変更できます";
+"functionKey.change" = "アクションを編集";
+"functionKey.hint" = "長押しすると、このキーのアクションを編集できます";
+"functionKey.hint.mac" = "右クリックして「編集」を選ぶと、このキーのアクションを編集できます";
 "functionKey.edit" = "編集";
 
 /* 通貨モードのツール: 消費税とチップ (Issue #92) */

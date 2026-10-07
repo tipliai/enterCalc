@@ -70,9 +70,9 @@
 "function.parentheses" = "Parentheses";
 "function.percent" = "Percent";
 "functionKey.chooser.title" = "Edit Action";
-"functionKey.change" = "Change Function";
-"functionKey.hint" = "Press and hold to change this key";
-"functionKey.hint.mac" = "Right-click and choose Edit to change this key";
+"functionKey.change" = "Edit Action";
+"functionKey.hint" = "Press and hold to edit this key’s action";
+"functionKey.hint.mac" = "Right-click and choose Edit to edit this key’s action";
 "functionKey.edit" = "Edit";
 
 /* Currency mode tools: VAT and tipping (issue #92) */
