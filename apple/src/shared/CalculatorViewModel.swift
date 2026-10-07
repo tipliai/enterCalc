@@ -1411,13 +1411,24 @@ public final class CalculatorViewModel: ObservableObject {
     /// result is still the latest change this is an undo, so the display comes
     /// back exactly as it was, operation line included; otherwise the original
     /// amount is written back as a new step.
-    public func removeLiveToolResult(_ tool: Tool) {
-        guard let live = liveToolApplication, live.tool == tool else { return }
-        toolApplication = nil
-        if undoStack.count == live.undoDepth {
-            undo()
-        } else {
-            applyToolResult(live.base, describedBy: "")
+    ///
+    /// With `clearingOperationLine`, as when the Tip slider is moved to Off, the
+    /// operation line is cleared too, even if the amount had one of its own
+    /// before the tool was applied — the amount is left on its own.
+    public func removeLiveToolResult(_ tool: Tool, clearingOperationLine: Bool = false) {
+        if let live = liveToolApplication, live.tool == tool {
+            toolApplication = nil
+            if undoStack.count == live.undoDepth {
+                undo()
+            } else {
+                applyToolResult(live.base, describedBy: "")
+            }
+        }
+        // Also when no tip was ever applied (the pane opened at 0%): Off still
+        // leaves the amount on its own.
+        if clearingOperationLine, expression.isEmpty, pendingOperator == nil, !lastResultSummary.isEmpty {
+            lastResultSummary = ""
+            updateDisplay()
         }
     }
 
