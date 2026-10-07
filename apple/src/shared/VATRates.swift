@@ -31,6 +31,10 @@ public enum VATRateCatalog {
         public let regions: [String: Region]
     }
 
+    /// The bundled table holds real VAT rates, which never exceed 100%; a value
+    /// above that is a typo, so it fails validation.
+    public static let maximumTableRate: Decimal = 100
+
     /// Offered when the region has no entry, or the table cannot be read.
     public static let genericPresets: [Decimal] = [5, 10, 20, 25]
 
@@ -132,7 +136,7 @@ public enum VATRateCatalog {
               text.allSatisfy({ $0.isNumber || $0 == "." }) else {
             throw TableError.invalidRate(region: region, value: text)
         }
-        guard value >= 0, value <= RateEntry.maximum else {
+        guard value >= 0, value <= VATRateCatalog.maximumTableRate else {
             throw TableError.rateOutOfRange(region: region, rate: value)
         }
         return value
@@ -148,7 +152,10 @@ public enum VATRateCatalog {
 /// decimals, and no leading zeros. The text is held with a `.` separator and
 /// shown with the active number format's.
 public struct RateEntry: Equatable, Sendable {
-    public static let maximum: Decimal = 100
+    /// No real tax or tip exceeds 100%, but nothing forbids one, so typed rates
+    /// go up to 999.999 — enough for anything plausible while keeping the
+    /// field to a sensible length.
+    public static let maximum: Decimal = Decimal(string: "999.999")!
     public static let maximumFractionDigits = 3
 
     public private(set) var text: String
@@ -230,8 +237,6 @@ public struct RateEntry: Equatable, Sendable {
         guard let value = Decimal(string: candidate.hasSuffix(".") ? String(candidate.dropLast()) : candidate,
                                   locale: Locale(identifier: "en_US_POSIX")) else { return false }
         if value > RateEntry.maximum { return false }
-        // 100 is the ceiling, so it cannot take a fraction either.
-        if value == RateEntry.maximum, candidate.contains(".") { return false }
         return true
     }
 

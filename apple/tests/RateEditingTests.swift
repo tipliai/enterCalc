@@ -32,7 +32,7 @@ final class RatePresetOverridesTests: XCTestCase {
     }
 
     func testMalformedStoredValuesAreSkipped() {
-        let parsed = RatePresetOverrides(serialized: "0=8.1;x=3;1=;2=150;3=-1;4=12")
+        let parsed = RatePresetOverrides(serialized: "0=8.1;x=3;1=;2=1500;3=-1;4=12")
         XCTAssertEqual(parsed, RatePresetOverrides(rates: [0: Decimal(string: "8.1")!, 4: 12]))
         XCTAssertEqual(RatePresetOverrides(serialized: nil), RatePresetOverrides())
     }
@@ -85,7 +85,7 @@ final class RateEditorTests: XCTestCase {
         editor.press(.digit(0))
         editor.press(.digit(0))
         editor.press(.digit(5))
-        XCTAssertEqual(live(), [1, 10, 100], "the fourth digit would exceed 100")
+        XCTAssertEqual(live(), [1, 10, 100], "a fourth whole digit would exceed the maximum")
     }
 
     func testCancelAbandonsTheEdit() {
@@ -111,7 +111,7 @@ final class RateFieldTextTests: XCTestCase {
     }
 
     func testInvalidTextIsRejected() {
-        for bad in ["8a", "8.1.2", "8.1255", "101", "100.5", "-5", "1 2"] {
+        for bad in ["8a", "8.1.2", "8.1255", "1000", "1000.5", "-5", "1 2"] {
             XCTAssertNil(RateEntry(typed: bad, decimalSeparator: "."), bad)
         }
     }

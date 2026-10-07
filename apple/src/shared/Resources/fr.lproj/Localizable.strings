@@ -77,7 +77,7 @@
 "currency.vat.title" = "TVA";
 "currency.vat.add" = "Ajouter la TVA";
 "currency.vat.remove" = "Retirer la TVA";
-"currency.vat.rate" = "Taux";
+"currency.vat.rate" = "Taux d’imposition";
 "currency.vat.rate.decrease" = "Diminuer le taux";
 "currency.vat.rate.increase" = "Augmenter le taux";
 "currency.vat.net" = "Hors TVA";
@@ -95,7 +95,6 @@
 "currency.rate.presetHint" = "Maintenez enfoncé pour saisir une nouvelle valeur pour ce préréglage";
 "currency.rate.done" = "OK";
 "currency.rate.cancel" = "Annuler";
-"currency.rate.range" = "Entre 0 et 100, jusqu’à 3 décimales";
 "currency.vat.clear" = "Supprimer la TVA";
 "currency.tip.clear" = "Supprimer le pourboire";
 "currency.vat.short" = "TVA";
