@@ -96,3 +96,11 @@
 "currency.tip.perPerson" = "1人あたり";
 "currency.tool.use" = "結果を使う";
 "currency.tool.close" = "閉じる";
+
+/* Typed rates and editable presets on the VAT and Tip panels (issue #124) */
+"currency.rate.type" = "割合を入力";
+"currency.rate.editPreset" = "プリセットを編集";
+"currency.rate.presetHint" = "長押ししてこのプリセットに新しい値を入力";
+"currency.rate.done" = "完了";
+"currency.rate.restore" = "デフォルトに戻す";
+"currency.rate.delete" = "削除";

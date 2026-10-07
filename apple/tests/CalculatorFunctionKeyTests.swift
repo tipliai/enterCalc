@@ -267,6 +267,9 @@ final class CalculatorFunctionKeyTests: XCTestCase {
         let localeCodes = ["Base", "en", "de", "es", "fr", "ja", "zh-Hans"]
         let keys = CalculatorFunctionKey.allCases.map(\.accessibilityLabelKey)
             + ["functionKey.chooser.title", "functionKey.change", "functionKey.hint"]
+            // The VAT and Tip panels' rate editing (#124).
+            + ["currency.rate.type", "currency.rate.editPreset", "currency.rate.presetHint",
+               "currency.rate.done", "currency.rate.restore", "currency.rate.delete"]
 
         for localeCode in localeCodes {
             let strings = try localizedStrings(named: localeCode)

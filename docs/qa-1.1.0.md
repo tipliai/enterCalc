@@ -128,6 +128,20 @@ Worth knowing when QA'ing #92 later:
 3. Type a digit there. It goes in front of the first digit, behind the symbol (`$5,120`).
 4. Repeat with a negative amount (`±` first): the caret stops after `-$`.
 
+## VAT presets and typed rates — #124
+
+Rates were verified on 2026-10-06; sources and confidence are in [vat-rates-research.md](vat-rates-research.md). Rates live in `apple/src/shared/Resources/vat-rates.json`: changing one is a one-line edit there.
+
+1. Set the device region to **Germany** and open VAT on an amount. The presets read **19%** and **7%**, with 19% selected. United Kingdom: 20 / 5. Switzerland: 8,1 / 3,8 / 2,6. United States (no VAT): the generic 5 / 10 / 15 / 20 / 25.
+2. Tap the rate between − and +. A number pad replaces the presets. Type `8,1` (German format) or `8.1`. The results update with every key; **Done** keeps the rate.
+3. Press and hold a preset. The pad opens for that preset; type a new value and press Done. The button shows the new value with a small dot. Quit and relaunch: it is still there.
+4. Press and hold an edited preset: **Restore Default** puts the regional value back.
+5. Repeat 3–4 on the **Tip** panel's presets.
+6. While typing, the calculator underneath must not change. Close the panel with ✕ mid-edit: the rate goes back to what it was before typing.
+7. With a hardware keyboard: digits, `.`/`,`, Delete, Return (Done) and Escape (cancel) all go to the rate while the pad is open, and to the calculator when it is not.
+8. The − / + stepper moves by 1 on a whole rate, and by 0.5 once a rate has decimals (8,1 → 8,5).
+9. VoiceOver: each preset offers an **Edit Preset** action; the pad keys are ordinary buttons.
+
 ## VAT and TIP controls — #92
 
 The pills appear in the mode row only while a currency symbol is showing, and both panels were driven end to end on the iPhone simulator: entering `$120`, opening VAT, switching to **Remove VAT** at 20% and reading back `$100` ex / `$20` VAT / `$120` inc, then **Use Result** writing `$100` to the display with the operation line reading `Remove VAT 20% =`. The Tip panel was checked the same way — `$100` bill at 18% giving `$18` tip and `$118` total, and a split of 2 adding an `Each` row of `$59`.

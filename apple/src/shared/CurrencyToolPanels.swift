@@ -39,41 +39,60 @@ private struct CurrencyToolChrome<Content: View>: View {
     }
 }
 
-/// A row of quick-choice rates plus a stepper for anything not on the list.
+/// Strings the rate chooser needs beyond each panel's own labels (#124).
+public struct RateEditingLabels {
+    public let typeRate: String
+    public let editPreset: String
+    public let presetHint: String
+    public let done: String
+    public let restoreDefault: String
+    public let delete: String
+
+    public init(localized: (String) -> String) {
+        typeRate = localized("currency.rate.type")
+        editPreset = localized("currency.rate.editPreset")
+        presetHint = localized("currency.rate.presetHint")
+        done = localized("currency.rate.done")
+        restoreDefault = localized("currency.rate.restore")
+        delete = localized("currency.rate.delete")
+    }
+}
+
+/// Quick-choice rates, a stepper, and typed entry on a number pad (#124).
 ///
-/// A stepper rather than a text field: a keyboard over a calculator is
-/// awkward, and the rates that are not preset — 19, 21, 23 — are all a tap or
-/// two from one that is.
+/// Tap the rate to type one; press and hold a preset to type a new value for
+/// it, which is kept. Typing happens on a number pad drawn here, not the
+/// system keyboard: iPad has no number-only keyboard, and on iPhone it would
+/// cover the results being read.
 private struct RateChooser: View {
     let rates: [Decimal]
+    let defaultRates: [Decimal]
+    let editedSlots: Set<Int>
     let selected: Decimal
     let stepLabel: String
     let decreaseLabel: String
     let increaseLabel: String
+    let labels: RateEditingLabels
+    let decimalSeparator: String
     let palette: Palette
     let format: (Decimal) -> String
+    @ObservedObject var editor: RateEditor
     let onSelect: (Decimal) -> Void
+    let onPresetEdited: (Int, Decimal?) -> Void
 
     var body: some View {
+        if let target = editor.target {
+            editingView(target: target)
+        } else {
+            choosingView
+        }
+    }
+
+    private var choosingView: some View {
         VStack(spacing: 8) {
             HStack(spacing: 6) {
-                ForEach(rates, id: \.self) { rate in
-                    Button {
-                        onSelect(rate)
-                    } label: {
-                        Text("\(format(rate))%")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(rate == selected ? palette.accentText : palette.textPrimary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 7)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(rate == selected ? palette.accent : palette.buttonFunction)
-                    )
-                    .accessibilityAddTraits(rate == selected ? [.isSelected] : [])
+                ForEach(Array(rates.enumerated()), id: \.offset) { slot, rate in
+                    presetButton(slot: slot, rate: rate)
                 }
             }
 
@@ -89,10 +108,189 @@ private struct RateChooser: View {
                     decreaseLabel: decreaseLabel,
                     increaseLabel: increaseLabel,
                     palette: palette,
-                    onDecrease: { onSelect(selected - 1) },
-                    onIncrease: { onSelect(selected + 1) }
+                    onDecrease: { onSelect(RateEntry.stepped(selected, up: false)) },
+                    onIncrease: { onSelect(RateEntry.stepped(selected, up: true)) },
+                    valueActionLabel: labels.typeRate,
+                    onValueTap: beginTypingRate
                 )
             }
+        }
+    }
+
+    private func presetButton(slot: Int, rate: Decimal) -> some View {
+        let isSelected = rate == selected
+        return Text("\(format(rate))%")
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(isSelected ? palette.accentText : palette.textPrimary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isSelected ? palette.accent : palette.buttonFunction)
+            )
+            // A preset the person has changed is marked, so a custom value is
+            // never mistaken for the regional default.
+            .overlay(alignment: .topTrailing) {
+                if editedSlots.contains(slot) {
+                    Circle()
+                        .fill(isSelected ? palette.accentText : palette.accent)
+                        .frame(width: 4, height: 4)
+                        .padding(4)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { onSelect(rate) }
+            .onLongPressGesture(minimumDuration: 0.45) { beginEditingPreset(slot) }
+            .accessibilityElement()
+            .accessibilityLabel(Text("\(format(rate))%"))
+            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : [.isButton])
+            .accessibilityHint(Text(labels.presetHint))
+            .accessibilityAction { onSelect(rate) }
+            .accessibilityAction(named: Text(labels.editPreset)) { beginEditingPreset(slot) }
+    }
+
+    private func beginTypingRate() {
+        let original = selected
+        editor.begin(
+            .rate,
+            value: selected,
+            onLive: onSelect,
+            onCommit: onSelect,
+            onCancel: { onSelect(original) }
+        )
+    }
+
+    private func beginEditingPreset(_ slot: Int) {
+        guard rates.indices.contains(slot) else { return }
+        let original = selected
+        editor.begin(
+            .preset(slot),
+            value: rates[slot],
+            onLive: onSelect,
+            onCommit: { rate in
+                onPresetEdited(slot, rate)
+                onSelect(rate)
+            },
+            onCancel: { onSelect(original) }
+        )
+    }
+
+    private func editingView(target: RateEditor.Target) -> some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                Text(target == .rate ? stepLabel : labels.editPreset)
+                    .font(.system(size: 13))
+                    .foregroundStyle(palette.textSecondary)
+
+                Spacer(minLength: 8)
+
+                Text("\(editor.entry.displayText(decimalSeparator: decimalSeparator))%")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(palette.textPrimary)
+                    .lineLimit(1)
+                    .accessibilityAddTraits(.updatesFrequently)
+            }
+
+            RateKeypad(
+                decimalSeparator: decimalSeparator,
+                deleteLabel: labels.delete,
+                palette: palette,
+                onKey: { editor.press($0) }
+            )
+
+            HStack(spacing: 6) {
+                if case .preset(let slot) = target, editedSlots.contains(slot), defaultRates.indices.contains(slot) {
+                    keypadActionButton(title: labels.restoreDefault, isPrimary: false) {
+                        let defaultRate = defaultRates[slot]
+                        editor.dismiss()
+                        onPresetEdited(slot, nil)
+                        onSelect(defaultRate)
+                    }
+                }
+
+                keypadActionButton(title: labels.done, isPrimary: true) {
+                    editor.press(.done)
+                }
+            }
+        }
+    }
+
+    private func keypadActionButton(title: String, isPrimary: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(isPrimary ? palette.accentText : palette.textPrimary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 9)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(isPrimary ? palette.accent : palette.buttonFunction)
+        )
+    }
+}
+
+/// The number pad for typing a rate: 7 8 9 / 4 5 6 / 1 2 3 / separator 0 ⌫.
+private struct RateKeypad: View {
+    let decimalSeparator: String
+    let deleteLabel: String
+    let palette: Palette
+    let onKey: (RateEditor.Key) -> Void
+
+    private let rows: [[RateEditor.Key]] = [
+        [.digit(7), .digit(8), .digit(9)],
+        [.digit(4), .digit(5), .digit(6)],
+        [.digit(1), .digit(2), .digit(3)],
+        [.decimalSeparator, .digit(0), .backspace]
+    ]
+
+    var body: some View {
+        VStack(spacing: 6) {
+            ForEach(rows.indices, id: \.self) { row in
+                HStack(spacing: 6) {
+                    ForEach(rows[row].indices, id: \.self) { column in
+                        key(rows[row][column])
+                    }
+                }
+            }
+        }
+    }
+
+    private func key(_ key: RateEditor.Key) -> some View {
+        Button { onKey(key) } label: {
+            label(for: key)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(palette.textPrimary)
+                .frame(maxWidth: .infinity)
+                .frame(height: 38)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(palette.buttonFunction)
+        )
+        .accessibilityLabel(accessibilityLabel(for: key))
+    }
+
+    @ViewBuilder
+    private func label(for key: RateEditor.Key) -> some View {
+        switch key {
+        case .digit(let digit): Text("\(digit)")
+        case .decimalSeparator: Text(decimalSeparator)
+        case .backspace: Image(systemName: "delete.left")
+        case .done, .cancel: EmptyView()
+        }
+    }
+
+    private func accessibilityLabel(for key: RateEditor.Key) -> Text {
+        switch key {
+        case .digit(let digit): return Text("\(digit)")
+        case .decimalSeparator: return Text(decimalSeparator)
+        case .backspace: return Text(deleteLabel)
+        case .done, .cancel: return Text("")
         }
     }
 }
@@ -105,17 +303,15 @@ private struct StepperControl: View {
     let palette: Palette
     let onDecrease: () -> Void
     let onIncrease: () -> Void
+    /// When set, the value itself is a button (tapping the rate types one).
+    var valueActionLabel: String? = nil
+    var onValueTap: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 0) {
             button("minus", label: decreaseLabel, action: onDecrease)
 
-            Text(value)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(palette.textPrimary)
-                .frame(minWidth: 56)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+            valueView
 
             button("plus", label: increaseLabel, action: onIncrease)
         }
@@ -123,6 +319,30 @@ private struct StepperControl: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(palette.buttonFunction)
         )
+    }
+
+    @ViewBuilder
+    private var valueView: some View {
+        let text = Text(value)
+            .font(.system(size: 14, weight: .medium))
+            .foregroundStyle(palette.textPrimary)
+            .frame(minWidth: 56)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+
+        if let onValueTap {
+            Button(action: onValueTap) {
+                text
+                    .underline(true, pattern: .dot, color: palette.textSecondary)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(value))
+            .accessibilityHint(Text(valueActionLabel ?? ""))
+        } else {
+            text
+        }
     }
 
     private func button(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
@@ -171,12 +391,15 @@ private struct ResultRow: View {
 public struct CurrencyVATPanel: View {
     private let value: Decimal
     private let rate: Decimal
+    private let presets: RatePresets
     private let isRemoving: Bool
     private let palette: Palette
     private let localized: (String) -> String
     private let format: (Decimal) -> String
     private let formatRate: (Decimal) -> String
     private let onRateChange: (Decimal) -> Void
+    @ObservedObject private var rateEditor: RateEditor
+    private let onPresetEdited: (Int, Decimal?) -> Void
     private let onDirectionChange: (Bool) -> Void
     private let onApply: (Decimal) -> Void
     private let onDismiss: () -> Void
@@ -184,24 +407,30 @@ public struct CurrencyVATPanel: View {
     public init(
         value: Decimal,
         rate: Decimal,
+        presets: RatePresets,
         isRemoving: Bool,
         palette: Palette,
         localized: @escaping (String) -> String,
         format: @escaping (Decimal) -> String,
         formatRate: @escaping (Decimal) -> String,
         onRateChange: @escaping (Decimal) -> Void,
+        rateEditor: RateEditor,
+        onPresetEdited: @escaping (Int, Decimal?) -> Void,
         onDirectionChange: @escaping (Bool) -> Void,
         onApply: @escaping (Decimal) -> Void,
         onDismiss: @escaping () -> Void
     ) {
         self.value = value
         self.rate = rate
+        self.presets = presets
         self.isRemoving = isRemoving
         self.palette = palette
         self.localized = localized
         self.format = format
         self.formatRate = formatRate
         self.onRateChange = onRateChange
+        self.rateEditor = rateEditor
+        self.onPresetEdited = onPresetEdited
         self.onDirectionChange = onDirectionChange
         self.onApply = onApply
         self.onDismiss = onDismiss
@@ -224,14 +453,20 @@ public struct CurrencyVATPanel: View {
                 directionPicker
 
                 RateChooser(
-                    rates: VATCalculation.presetRates,
+                    rates: presets.rates,
+                    defaultRates: presets.defaults,
+                    editedSlots: presets.editedSlots,
                     selected: rate,
                     stepLabel: localized("currency.vat.rate"),
                     decreaseLabel: localized("currency.vat.rate.decrease"),
                     increaseLabel: localized("currency.vat.rate.increase"),
+                    labels: RateEditingLabels(localized: localized),
+                    decimalSeparator: presets.decimalSeparator,
                     palette: palette,
                     format: formatRate,
-                    onSelect: { onRateChange(max($0, 0)) }
+                    editor: rateEditor,
+                    onSelect: { onRateChange(max($0, 0)) },
+                    onPresetEdited: onPresetEdited
                 )
 
                 if let breakdown {
@@ -295,12 +530,15 @@ public struct CurrencyVATPanel: View {
 public struct CurrencyTipPanel: View {
     private let bill: Decimal
     private let rate: Decimal
+    private let presets: RatePresets
     private let splitCount: Int
     private let palette: Palette
     private let localized: (String) -> String
     private let format: (Decimal) -> String
     private let formatRate: (Decimal) -> String
     private let onRateChange: (Decimal) -> Void
+    @ObservedObject private var rateEditor: RateEditor
+    private let onPresetEdited: (Int, Decimal?) -> Void
     private let onSplitChange: (Int) -> Void
     private let onApply: (Decimal) -> Void
     private let onDismiss: () -> Void
@@ -308,24 +546,30 @@ public struct CurrencyTipPanel: View {
     public init(
         bill: Decimal,
         rate: Decimal,
+        presets: RatePresets,
         splitCount: Int,
         palette: Palette,
         localized: @escaping (String) -> String,
         format: @escaping (Decimal) -> String,
         formatRate: @escaping (Decimal) -> String,
         onRateChange: @escaping (Decimal) -> Void,
+        rateEditor: RateEditor,
+        onPresetEdited: @escaping (Int, Decimal?) -> Void,
         onSplitChange: @escaping (Int) -> Void,
         onApply: @escaping (Decimal) -> Void,
         onDismiss: @escaping () -> Void
     ) {
         self.bill = bill
         self.rate = rate
+        self.presets = presets
         self.splitCount = splitCount
         self.palette = palette
         self.localized = localized
         self.format = format
         self.formatRate = formatRate
         self.onRateChange = onRateChange
+        self.rateEditor = rateEditor
+        self.onPresetEdited = onPresetEdited
         self.onSplitChange = onSplitChange
         self.onApply = onApply
         self.onDismiss = onDismiss
@@ -346,14 +590,20 @@ public struct CurrencyTipPanel: View {
                 ResultRow(label: localized("currency.tip.bill"), value: format(breakdown.bill), isEmphasised: false, palette: palette)
 
                 RateChooser(
-                    rates: TipBreakdown.presetRates,
+                    rates: presets.rates,
+                    defaultRates: presets.defaults,
+                    editedSlots: presets.editedSlots,
                     selected: rate,
                     stepLabel: localized("currency.tip.rate"),
                     decreaseLabel: localized("currency.tip.rate.decrease"),
                     increaseLabel: localized("currency.tip.rate.increase"),
+                    labels: RateEditingLabels(localized: localized),
+                    decimalSeparator: presets.decimalSeparator,
                     palette: palette,
                     format: formatRate,
-                    onSelect: { onRateChange(max($0, 0)) }
+                    editor: rateEditor,
+                    onSelect: { onRateChange(max($0, 0)) },
+                    onPresetEdited: onPresetEdited
                 )
 
                 HStack(spacing: 10) {

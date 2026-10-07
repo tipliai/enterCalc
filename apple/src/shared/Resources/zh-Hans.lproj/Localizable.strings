@@ -96,3 +96,11 @@
 "currency.tip.perPerson" = "每人";
 "currency.tool.use" = "使用结果";
 "currency.tool.close" = "关闭";
+
+/* Typed rates and editable presets on the VAT and Tip panels (issue #124) */
+"currency.rate.type" = "输入比率";
+"currency.rate.editPreset" = "编辑预设";
+"currency.rate.presetHint" = "按住可为此预设输入新的数值";
+"currency.rate.done" = "完成";
+"currency.rate.restore" = "恢复默认";
+"currency.rate.delete" = "删除";
