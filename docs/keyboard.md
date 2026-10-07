@@ -24,6 +24,10 @@ Sources:
 | Right Arrow | Move display caret right (activates direct edit if possible) | Move display caret right | Increase rounding precision step | Suppressed |
 | Down Arrow | Open rounding overlay | Open rounding overlay | No-op (consumed) | Suppressed |
 | Up Arrow | No mapped action | No mapped action | Close rounding overlay | Suppressed |
+| Shift + Up Arrow | Increase display size (20pt) | Increase display size | Increase display size | Increase display size |
+| Shift + Down Arrow | Decrease display size (20pt) | Decrease display size | Decrease display size | Decrease display size |
+| Shift + Left Arrow | iPad: go to the page on the **left** | Same | Same | Same |
+| Shift + Right Arrow | iPad: go to the page on the **right** | Same | Same | Same |
 | Escape | Clear all | Exit direct edit | Remove rounding and close overlay | Close overlay |
 | End | Clear all | Exit direct edit | Close overlay | Close overlay |
 | Backspace | Delete one char/digit via model backspace | Delete one char/digit before caret | Remove rounding and close overlay | Close overlay |
@@ -37,6 +41,14 @@ Sources:
 | = | Evaluate | Evaluate path applies; direct edit Enter key exits edit | Not handled here | Suppressed |
 | Currency symbols ($, €, £, etc.) | Activate currency input mode with symbol | Same behavior at caret position | Not handled here | Suppressed |
 
+### Currency Mode
+
+The calculator is in currency mode exactly when a currency symbol is showing; there is no separate mode selection. Entering one — by typing a currency symbol as above, or with the on-screen currency key beside the mode label — switches the mode label from **Basic** to **Currency**.
+
+The on-screen key toggles: pressing it once applies the symbol chosen in Settings, and pressing it again leaves currency mode and removes the symbol without changing the entered value. It clears whichever symbol is active, including one typed on a hardware keyboard that differs from the configured one, so it is always a reliable way back to Basic.
+
+Which symbol the key applies is chosen in Settings. It defaults to the device region's currency (en-GB gives £, en-US gives $, de-DE gives €) until the user picks one.
+
 ### Platform Notes
 
 - iOS and macOS use the same keyboard actions in all contexts.
@@ -46,11 +58,34 @@ Sources:
 - macOS additionally maps physical keypad keyCodes for digits/operators/decimal/evaluate. iOS receives these through hardware key events and characters.
 - Control-modified keys are not handled by EnterCalc keyboard routing and return not-handled.
 
+### Resizing the display (macOS)
+
+The split between the display and the keypad can be dragged, which leaves it unreachable without a pointer. **Shift + Up/Down Arrow** moves it in 20-point steps, within the same limits the drag handle respects, and stops at either end rather than wrapping.
+
+These are menu commands under **View → Increase / Decrease Display Size**, not just key bindings, so they are discoverable and reachable by VoiceOver. The menu owns the shortcut: the app's key monitor deliberately ignores Shift + Up/Down so a single press applies a single step, and so Shift + Down does not open the rounding overlay the way a bare Down Arrow does.
+
+The step is not animated — it lands immediately, matching how dragging behaves.
+
+### Switching pages (iPad)
+
+**Shift + Left/Right Arrow** moves between calculator pages, as menu commands so they are discoverable and reachable by VoiceOver.
+
+The arrow names the page to go to: Shift + Right shows the page on the right, the same convention as Ctrl + Right for Spaces and the side the page dots grow on. #83 originally had it follow the swipe's finger direction — dragging left reveals the page on the right, so Shift + Left did too — but that read as inverted on a keyboard in 1.1.0 QA, where an arrow is taken as "go this way" rather than "push the content this way".
+
+Shift + Right past the last page **opens a new page**, the same as swiping onward from it, so the shortcut is not a more limited way to get around than the gesture. Shift + Left stops at the first page rather than wrapping.
+
+macOS has no equivalent because its pages are separate windows — see below.
+
+### Navigating between windows (macOS)
+
+Investigated for #83 and deliberately **not** implemented. macOS already cycles an app's windows with **Cmd + `** (a system shortcut, on by default), and every calculator window appears in the standard **Window** menu. Adding Shift + Left/Right on top would duplicate that, take two more key combinations away from the calculator, and mean teaching the local key monitor to ignore them — the same trap that made Shift + Down open the rounding overlay instead of resizing. The app's key monitor passes Cmd + ` straight through, so window cycling already works.
+
 ### Command Shortcuts
 
 - Cmd + Backspace: clear all.
 - Cmd + Forward Delete: clear all.
 - Cmd + C: copy current result.
+- Cmd + Shift + C: copy the current operation.
 - Cmd + V: paste into calculator.
 - Cmd + Z: undo.
 - Cmd + Shift + Z: redo.

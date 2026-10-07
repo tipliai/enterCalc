@@ -16,16 +16,20 @@
 "settings.language.defaultOption" = "Standard (%@)";
 "settings.userInterface" = "Benutzeroberfläche";
 "settings.numberFormat.style" = "Zahlenstil";
+"settings.currency.symbol" = "Währungssymbol";
 "settings.numberFormat.scientific" = "Wissenschaftliche Notation verwenden";
 "settings.percent.classicBehavior" = "Alternatives Tastenfeld verwenden";
 "settings.buttonSound.disabled" = "Tastenton deaktivieren";
 "settings.credits" = "Info";
+"settings.feedback" = "Feedback";
 "settings.credits.version" = "Version %@";
 "mac.about.windowTitle" = "Info %@";
 "settings.credit.part1" = "© 2026 Tipli AI, LLC. EnterCalc ist Open Source und wird unter der MIT-Lizenz veröffentlicht. Hilf mit, auf ";
 "settings.credit.linkText" = "GitHub";
 "settings.credit.middle" = " zum Projekt beizutragen.";
 "calculator.mode.basic" = "Einfach";
+"calculator.mode.currency" = "Währung";
+"calculator.currency.toggle" = "Währung umschalten";
 "history.title" = "Verlauf";
 "history.empty" = "Davon wird die Geschichte erst noch erzählen.";
 "history.emptyAfterClear" = "";
@@ -34,6 +38,10 @@
 "key.enter" = "Eingabe";
 "settings.rounding.disableSwipeDown" = "Runterwischen zum Runden deaktivieren";
 "rounding.toggle" = "Rundungspanel ein-/ausblenden";
+"display.grow" = "Anzeige vergrößern";
+"display.shrink" = "Anzeige verkleinern";
+"keypad.resize.label" = "Tastenfeld anpassen";
+"keypad.resize.hint" = "Ziehen oder Umschalt plus Pfeil nach oben/unten drücken, um die Anzeige anzupassen";
 "rounding.title" = "Ergebnis runden";
 "rounding.remove" = "Rundung entfernen";
 "copy" = "Kopieren";
@@ -50,3 +58,45 @@
 "screen.pageStatus" = "Bildschirm %1$@ von %2$@";
 "window.new" = "Neues Fenster öffnen";
 "history.toggle" = "Verlauf anzeigen/ausblenden";
+
+/* Page switching shortcuts (issue #83) */
+"screen.next" = "Nächster Bildschirm";
+"screen.previous" = "Vorheriger Bildschirm";
+
+/* Konfigurierbare Funktionstasten (Issue #67) */
+"function.squareRoot" = "Quadratwurzel";
+"function.square" = "Quadrat";
+"function.reciprocal" = "Kehrwert";
+"function.parentheses" = "Klammern";
+"function.percent" = "Prozent";
+"functionKey.chooser.title" = "Funktion wählen";
+"functionKey.change" = "Funktion ändern";
+"functionKey.hint" = "Gedrückt halten, um diese Taste zu ändern";
+
+/* Werkzeuge im Währungsmodus: MwSt. und Trinkgeld (Issue #92) */
+"currency.vat.title" = "MwSt.";
+"currency.vat.add" = "MwSt. addieren";
+"currency.vat.remove" = "MwSt. herausrechnen";
+"currency.vat.rate" = "Steuersatz";
+"currency.vat.rate.decrease" = "Satz verringern";
+"currency.vat.rate.increase" = "Satz erhöhen";
+"currency.vat.net" = "Netto";
+"currency.vat.amount" = "MwSt.";
+"currency.vat.gross" = "Brutto";
+"currency.tip.title" = "Trinkgeld";
+"currency.tip.rate" = "Trinkgeld";
+"currency.tip.amount" = "Trinkgeld";
+"currency.tip.total" = "Gesamt";
+"currency.tool.close" = "Schließen";
+
+/* Typed rates and editable presets on the VAT and Tip panels (issue #124) */
+"currency.rate.type" = "Prozentsatz eingeben";
+"currency.rate.editPreset" = "Voreinstellung bearbeiten";
+"currency.rate.presetHint" = "Gedrückt halten, um einen neuen Wert für diese Voreinstellung einzugeben";
+"currency.rate.done" = "Fertig";
+"currency.rate.cancel" = "Abbrechen";
+"currency.vat.clear" = "MwSt. entfernen";
+"currency.tip.clear" = "Trinkgeld entfernen";
+"currency.vat.short" = "MwSt.";
+"currency.tip.short" = "Trinkgeld";
+"currency.tip.off" = "Aus";

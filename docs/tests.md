@@ -6,12 +6,29 @@ permalink: /tests/
 # EnterCalc Unit Test Matrix
 
 This document tracks the shared-module checks currently discovered by `swift test list` for the Swift package in `apple/`.
-Each row maps directly to a discovered test method in `apple/tests/CalculatorViewModelTests.swift`.
+Each row in the matrix below maps directly to a discovered test method in `apple/tests/CalculatorViewModelTests.swift`.
 
 Current verification status on macOS:
-- `swift test list` discovers `179` `CalculatorViewModelTests` methods.
-- This matrix documents the same `179` methods with no missing or extra entries.
+- `swift test list` discovers `190` `CalculatorViewModelTests` methods.
+- This matrix documents the same `190` methods with no missing or extra entries.
 - The current macOS run includes the AppKit-only clipboard tests guarded by `canImport(AppKit)`.
+- A full `swift test` run executes `371` tests across every suite, of which `13` fail. Those 13 failures span 4 methods, all in `CalculatorViewModelTests`, and reproduce identically on an untouched checkout — they pre-date the 1.1.0 work and are not regressions.
+
+### Other suites
+
+- `apple/tests/SystemAppearanceTests.swift` — maps the macOS global-domain `AppleInterfaceStyle` value to a color scheme for the `system` theme. macOS only writes that key while Dark Mode is on, so the absent case must resolve to light, and accent variants such as `DarkAqua` must resolve to dark.
+- `apple/tests/CurrencyCatalogTests.swift` — region-to-symbol detection for the default currency (en-GB gives £, en-US gives $, de-DE gives €), the fallback for regions whose currency the catalog does not carry, and invariants that keep the catalog usable: symbols unique, currency codes not shared between symbols, and every offered symbol actually accepted by the calculator engine.
+- `apple/tests/CurrencyModeTests.swift` — entering and leaving currency mode via the currency key, including that leaving preserves the entered value, that it clears a symbol differing from the configured one, that it survives All Clear, and that toggling is undoable, and that the display-edit caret never sits in front of the currency symbol (#118) — at the left edge, after Left past the first digit, or between the sign and symbol of a negative amount — while still stopping before grouping separators. Also sweeps the states a value can be in — untouched zero, typed zero, after All Clear, pending operator, after evaluate, backspace, sign toggle, square and undo — asserting the symbol is on screen in every one, for several currencies. Percent is excluded on purpose: its result is a ratio rather than an amount, so it drops the symbol.
+- `apple/tests/EqualsKeyLabelTests.swift` — whether the evaluate key shows `Enter` or `=`, derived from keypad layout and resolved language.
+- `apple/tests/ReviewPromptPolicyTests.swift` — the gates on the in-app review prompt, and the semantics of the completed-calculation counter.
+- `apple/tests/SupportLinksTests.swift` — pins the support page URL used by the Feedback link.
+- `apple/tests/CalculatorPagerGestureIntentTests.swift` — how deliberate a swipe has to be before it counts as page navigation (#83). Covers the case the issue reports — a finger sliding a few points while pressing a key must not page — alongside the opposite one, that an ordinary swipe still does. Also pins the relationship the feel depends on: paging engages *above* the 8pt at which a keypad key gives up on its own tap, so the two thresholds bound a deliberate dead band rather than overlapping, and the axis threshold stays reachable given the minimum drag distance.
+
+- `apple/tests/CalculatorFunctionKeyTests.swift` — the configurable function keys (#67): the shipped default layout and that no two slots share a default; that the chooser offers every function; that assigning a function which already sits elsewhere **swaps** the two rather than duplicating or losing one; that only non-default slots are stored, so a later change to a default still reaches users who never customised it; that a stored value written by a newer build, or a corrupted one naming a function twice, still loads without producing a keypad with two identical keys; that the raw values used as the persistence format have not drifted; and that every function's name, the chooser title and the hold hint exist and are translated in all seven bundles.
+- `apple/tests/VATRatesTests.swift` — the VAT region presets and typed rates (#124). The bundled `vat-rates.json` must parse and validate: two-letter uppercase region codes, no duplicates, every rate 0–100, a source and effective date per region, and at most three extra rates. A bad edit fails the suite rather than falling back silently in the app. Also spot-checks verified rates that are easy to get wrong from memory (Germany 19/7, Switzerland 8.1, Finland 25.5, Russia 22, India 18/5/40, Canada 5/13/14/15) and that unlisted regions such as the US get the fallback. Typing a rate keeps the entry valid at every keystroke: the first key replaces the rate being edited, any number of decimals kept in full for the maths (shown rounded to three; digits past the calculator's 16 are rounded off), below 1000% (rates above 100% are allowed), one separator. The stepper moves by 1 for whole rates and 0.5 otherwise.
+- `apple/tests/RateEditingTests.swift` — long-press preset edits on the VAT and Tip panels (#124). Only edited slots are stored, so an untouched preset follows its default; edits round-trip through storage exactly, fractions included; malformed stored values are skipped. The number-pad editor reports each valid keystroke live, commits on Done, and restores the original rate on cancel or an emptied entry.
+- `apple/tests/TipCalculationTests.swift` — the tipping maths behind #92: the bill, tip and split producing all three outputs together, every preset rate, a default split of 1 behaving as no split, and the split count clamping rather than dividing by zero. The reconciliation test is deliberately two-sided — an even split scales back to the total *exactly*, while an uneven one is only required to land within Decimal's precision, because a third of a bill can never multiply back cleanly. That limitation is documented on the type: anything that rounds the shares for display has to allocate the leftover penny itself.
+- `apple/tests/PercentageCalculationTests.swift` — the percentage and VAT maths behind #25. Percentage mode keeps the percentage *amount* beside the result (`100 + 10%` is `10` and `110`), with the amount unsigned in both directions so a discount reads as its size rather than as a negative. VAT is covered in both directions, including the reverse case the issue names (120 including 20% VAT is 100 net and 20 VAT), a round trip through every preset rate, and the property an accountant checks: `net + vat == gross` exactly, for awkward prices like `0.01` and `999999.99` where the division does not come out even. Rates at or below −100% are refused rather than dividing by zero. Three tests cross-check the results against what typing the same thing on the keypad produces, so the new maths cannot drift from the engine.
 
 ## UI Settings Expectations
 
@@ -26,6 +43,7 @@ These behaviors are product expectations for the app UI and persistence model. T
 - iPad new pages: each new page is seeded from the current home-page settings at the moment the page is created.
 - iPad existing secondary pages: once created, a secondary page keeps its own settings and does not automatically update when the home page changes later.
 - iPad future secondary pages: if the home page changes language from `default` to an explicit language such as German, pages created after that change should inherit German.
+- Evaluate key label: the default keypad shows `Enter` in English and `=` in every other language; the alternative keypad shows `=` in all languages. This is derived from layout and resolved language, not a user setting, and follows a live language change without a restart. Covered by `apple/tests/EqualsKeyLabelTests.swift`.
 
 | Area | Test Value | Expected Result | Method |
 | --- | --- | --- | --- |
@@ -93,7 +111,18 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Percent | Evaluate `100 × 15%` | Pre-equals display shows `15%`; expression stays `100 × 15%`; final history stores `100 × 15% -> 15` | `testPercentMatchesCalculatorForMultiplication` |
 | Percent | Evaluate `5 ÷ 200%` | Pre-equals display shows `200%`; expression stays `5 ÷ 200%`; final history stores `5 ÷ 200% -> 2.5` | `testDivisionWithTwoHundredPercentKeepsPercentVisibleUntilEvaluate` |
 | Percent | In currency mode, enter `$6 + 200%` then evaluate | Before `=`, display stays `200%`; evaluation finalizes to `$12` and keeps the operation line currency-free as `6 + 200% =` | `testCurrencyPercentInPendingAdditionStaysVisibleUntilEvaluate` |
-| Percent | Apply `5%`, then add `3%` and evaluate | Display `0.08`; expression and history remain `5% + 3%` | `testPercentAfterStandalonePercentUsesStandaloneSemantics` |
+| Percent | Apply `5%`, then add `3%` and evaluate | Display `8%`; expression and history remain `5% + 3%`; stored history result stays `0.08` | `testPercentAfterStandalonePercentUsesStandaloneSemantics` |
+| Currency | Enter `10`, activate `$`, then `+ 10% =` | Display `$11`; the percent applies to the amount rather than replacing it | `testCurrencyPercentAdditionAppliesToTheAmount` |
+| Currency | Compare `$10 + 25% =` against plain `10 + 25% =` | Currency shows `$12.5` and plain shows `12.5`; both modes share percent semantics | `testCurrencyPercentAdditionMatchesPlainPercentAddition` |
+| Currency | Enter `200`, activate `$`, then `− 10% =` | Display `$180` | `testCurrencyPercentSubtractionAppliesToTheAmount` |
+| Currency | Enter `10`, activate `$`, then `+ 0.25 =` | Display `$10.25`; only percent handling changed in currency mode | `testCurrencyPlainDecimalAdditionIsUnchanged` |
+| Percent | Apply `9%`, then add `9%` and evaluate | Display `18%`; expression `9% + 9% =` | `testPercentPlusPercentKeepsPercentInResult` |
+| Percent | Apply `10%`, then subtract `4%` and evaluate | Display `6%`; expression `10% − 4% =` | `testPercentMinusPercentKeepsPercentInResult` |
+| Percent | Evaluate `200 + 10%` | Display `220`; a percent of a plain operand stays a value, not a percent | `testPercentAddedToPlainNumberStillResolvesToValue` |
+| Percent | Apply `9%`, then multiply by `9%` and evaluate | Display `0.0081`; × and ÷ keep decimal semantics rather than carrying `%` | `testPercentTimesPercentStaysDecimal` |
+| Percent | After `9% + 9% =`, add `1` and evaluate | Display `1.18`; the percent result is a display form over the stored `0.18` | `testCalculationContinuingFromPercentResultUsesDecimalValue` |
+| Percent | After `9% + 9% =`, apply percent again | Display `0.0018`, expression `0.18%`; the result token is not re-wrapped as `18%%` | `testPercentPressedOnPercentResultUsesUnderlyingValue` |
+| Percent | After `9% + 9% =`, undo | Display returns to `9%` with expression `9% + 9%` | `testUndoAfterPercentPlusPercentRestoresPendingPercentState` |
 | Percent | Apply `5%`, then add `3` and evaluate | Display `3.05`; expression and history remain `5% + 3` | `testAdditionAfterStandalonePercentUsesPercentValueAsLeftOperand` |
 | Error handling | Enter `9 ÷ 0 =` | Error state enabled, display `Cannot divide by zero`, empty expression, undo remains available | `testDivideByZeroSetsLocalizedErrorState` |
 | Error handling | Enter `0 ÷ 0 =` | Same divide-by-zero error state and cleared expression as the standard divide-by-zero case | `testZeroDividedByZeroSetsLocalizedErrorState` |
@@ -150,7 +179,7 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Clipboard | With French number format (`1 234 567,89`), copy `8,333` | Pasteboard preserves the localized decimal separator and ungrouped value (`8,333`) | `testCopyToPasteboardUsesLocalizedDecimalSeparatorForFrenchStyle` |
 | Clipboard | Copy operation `12 + 3 = 15`, then paste into a fresh view model | Pasted display is `15`; history stays empty; no error state | `testCopyOperationThenPasteReplaysTheOperation` |
 | Clipboard | Paste `$1,234.50` from the pasteboard | Display normalizes to `$1,234.5`; no error state | `testPasteFromPasteboardNormalizesFormattedNumericContent` |
-| Currency | Paste `$12.3`, continue with `+ 1 =`, then clear all | Currency mode stays active for results (`$12.3 -> $13.3`), while the operation line remains currency-free (`12.3 + 1`) until all-clear resets the session | `testLeadingCurrencyPasteKeepsCurrencyActiveUntilAllClear` |
+| Currency | Paste `$12.3`, continue with `+ 1 =`, then clear all | Currency mode stays active for results (`$12.3 -> $13.3`) while the operation line remains currency-free (`12.3 + 1`); all-clear resets the calculation but keeps currency mode, showing `$0` | `testLeadingCurrencyPasteKeepsCurrencyActiveAcrossAllClear` |
 | Currency | Evaluate `€12.34 + 1 =`, reuse the saved history entry | Reuse restores the currency-formatted result, while the restored operation line remains currency-free (`12.34 + 1 =`) | `testCurrencyReuseRestoresCurrencyAwareState` |
 | Currency | Evaluate `$12.34 + 1 =`, copy the operation, then paste into a fresh view model | Replayed operation restores a currency-free operation line (`12.34 + 1 =`) and keeps currency mode active on the pasted result session | `testCurrencyOperationCopyThenPasteReplaysAndRestoresCurrencyMode` |
 | Currency | Type `$`, then enter `1.2 + 2 =` | Leading currency symbol activates currency formatting immediately and arithmetic stays in currency mode without forced padding (`$1.2 -> $3.2`) | `testTypingCurrencySymbolActivatesCurrencyFormatting` |

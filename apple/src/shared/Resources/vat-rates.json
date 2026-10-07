@@ -1,0 +1,770 @@
+{
+  "schemaVersion": 1,
+  "updated": "2026-10-06",
+  "_readme": "VAT presets per region (ISO 3166 alpha-2). Standard rate first, then up to three additional common rates (usually reduced, sometimes higher, e.g. Canada's HST), shown in the order listed. Rates are strings so they parse exactly. Verified 2026-10-06; see docs/vat-rates-research.md. Regions not listed get the fallback.",
+  "fallback": [
+    "5",
+    "10",
+    "20",
+    "25"
+  ],
+  "regions": [
+    {
+      "region": "AT",
+      "standard": "20",
+      "additional": [
+        "10",
+        "13",
+        "4.9"
+      ],
+      "effective": "2026-07-01",
+      "source": "Your Europe; Austrian Parliament (4.9 on staple foods)",
+      "confidence": "M"
+    },
+    {
+      "region": "BE",
+      "standard": "21",
+      "additional": [
+        "12",
+        "6"
+      ],
+      "effective": "2026-03-01",
+      "source": "Your Europe; BDO Belgium",
+      "confidence": "H"
+    },
+    {
+      "region": "BG",
+      "standard": "20",
+      "additional": [
+        "9"
+      ],
+      "effective": "before 2024",
+      "source": "Your Europe",
+      "confidence": "H"
+    },
+    {
+      "region": "HR",
+      "standard": "25",
+      "additional": [
+        "13",
+        "5"
+      ],
+      "effective": "before 2024",
+      "source": "Your Europe",
+      "confidence": "H"
+    },
+    {
+      "region": "CY",
+      "standard": "19",
+      "additional": [
+        "9",
+        "5",
+        "3"
+      ],
+      "effective": "before 2024",
+      "source": "Your Europe",
+      "confidence": "H"
+    },
+    {
+      "region": "CZ",
+      "standard": "21",
+      "additional": [
+        "12"
+      ],
+      "effective": "2024-01-01",
+      "source": "Your Europe",
+      "confidence": "H"
+    },
+    {
+      "region": "DK",
+      "standard": "25",
+      "additional": [],
+      "effective": "before 2024",
+      "source": "Your Europe",
+      "confidence": "H"
+    },
+    {
+      "region": "EE",
+      "standard": "24",
+      "additional": [
+        "13",
+        "9"
+      ],
+      "effective": "2025-07-01",
+      "source": "Your Europe (24, 9); Avalara (13)",
+      "confidence": "H"
+    },
+    {
+      "region": "FI",
+      "standard": "25.5",
+      "additional": [
+        "13.5",
+        "10"
+      ],
+      "effective": "2026-01-01",
+      "source": "Your Europe",
+      "confidence": "H"
+    },
+    {
+      "region": "FR",
+      "standard": "20",
+      "additional": [
+        "10",
+        "5.5",
+        "2.1"
+      ],
+      "effective": "before 2024",
+      "source": "Your Europe",
+      "confidence": "H"
+    },
+    {
+      "region": "DE",
+      "standard": "19",
+      "additional": [
+        "7"
+      ],
+      "effective": "2026-01-01",
+      "source": "Your Europe; Bundesrat 2025-12-19",
+      "confidence": "H"
+    },
+    {
+      "region": "GR",
+      "standard": "24",
+      "additional": [
+        "13",
+        "6"
+      ],
+      "effective": "before 2024",
+      "source": "Your Europe",
+      "confidence": "H"
+    },
+    {
+      "region": "HU",
+      "standard": "27",
+      "additional": [
+        "18",
+        "5"
+      ],
+      "effective": "before 2024",
+      "source": "Your Europe",
+      "confidence": "H"
+    },
+    {
+      "region": "IE",
+      "standard": "23",
+      "additional": [
+        "13.5",
+        "9"
+      ],
+      "effective": "2026-07-01",
+      "source": "Your Europe; Revenue",
+      "confidence": "H"
+    },
+    {
+      "region": "IT",
+      "standard": "22",
+      "additional": [
+        "10",
+        "5",
+        "4"
+      ],
+      "effective": "before 2024",
+      "source": "Your Europe",
+      "confidence": "H"
+    },
+    {
+      "region": "LV",
+      "standard": "21",
+      "additional": [
+        "12",
+        "5"
+      ],
+      "effective": "2026-07-01",
+      "source": "Your Europe",
+      "confidence": "H"
+    },
+    {
+      "region": "LT",
+      "standard": "21",
+      "additional": [
+        "12",
+        "5"
+      ],
+      "effective": "2026-01-01",
+      "source": "Your Europe",
+      "confidence": "H"
+    },
+    {
+      "region": "LU",
+      "standard": "17",
+      "additional": [
+        "14",
+        "8",
+        "3"
+      ],
+      "effective": "before 2024",
+      "source": "Your Europe",
+      "confidence": "H"
+    },
+    {
+      "region": "MT",
+      "standard": "18",
+      "additional": [
+        "7",
+        "5"
+      ],
+      "effective": "before 2024",
+      "source": "Your Europe",
+      "confidence": "H"
+    },
+    {
+      "region": "NL",
+      "standard": "21",
+      "additional": [
+        "9"
+      ],
+      "effective": "2026-01-01",
+      "source": "Your Europe",
+      "confidence": "H"
+    },
+    {
+      "region": "PL",
+      "standard": "23",
+      "additional": [
+        "8",
+        "5"
+      ],
+      "effective": "before 2024",
+      "source": "Your Europe",
+      "confidence": "H"
+    },
+    {
+      "region": "PT",
+      "standard": "23",
+      "additional": [
+        "13",
+        "6"
+      ],
+      "effective": "before 2024",
+      "source": "Your Europe (mainland)",
+      "confidence": "H"
+    },
+    {
+      "region": "RO",
+      "standard": "21",
+      "additional": [
+        "11"
+      ],
+      "effective": "2025-08-01",
+      "source": "Your Europe; EY",
+      "confidence": "H"
+    },
+    {
+      "region": "SK",
+      "standard": "23",
+      "additional": [
+        "19",
+        "5"
+      ],
+      "effective": "2025-01-01",
+      "source": "Your Europe; PwC Slovakia",
+      "confidence": "H"
+    },
+    {
+      "region": "SI",
+      "standard": "22",
+      "additional": [
+        "9.5",
+        "5"
+      ],
+      "effective": "before 2024",
+      "source": "Your Europe",
+      "confidence": "H"
+    },
+    {
+      "region": "ES",
+      "standard": "21",
+      "additional": [
+        "10",
+        "4"
+      ],
+      "effective": "before 2024",
+      "source": "Your Europe",
+      "confidence": "H"
+    },
+    {
+      "region": "SE",
+      "standard": "25",
+      "additional": [
+        "12",
+        "6"
+      ],
+      "effective": "2026-04-01",
+      "source": "Your Europe; Skatteverket",
+      "confidence": "H"
+    },
+    {
+      "region": "GB",
+      "standard": "20",
+      "additional": [
+        "5"
+      ],
+      "effective": "2026-10-01",
+      "source": "gov.uk rates of VAT on goods and services",
+      "confidence": "H"
+    },
+    {
+      "region": "CH",
+      "standard": "8.1",
+      "additional": [
+        "3.8",
+        "2.6"
+      ],
+      "effective": "2024-01-01",
+      "source": "ESTV",
+      "confidence": "H"
+    },
+    {
+      "region": "LI",
+      "standard": "8.1",
+      "additional": [
+        "3.8",
+        "2.6"
+      ],
+      "effective": "2024-01-01",
+      "source": "ESTV; PwC Switzerland",
+      "confidence": "M"
+    },
+    {
+      "region": "NO",
+      "standard": "25",
+      "additional": [
+        "15",
+        "12"
+      ],
+      "effective": "before 2024",
+      "source": "Skatteetaten (via secondary)",
+      "confidence": "M"
+    },
+    {
+      "region": "IS",
+      "standard": "24",
+      "additional": [
+        "11"
+      ],
+      "effective": "2026-09-01",
+      "source": "KPMG",
+      "confidence": "M"
+    },
+    {
+      "region": "RU",
+      "standard": "22",
+      "additional": [
+        "10"
+      ],
+      "effective": "2026-01-01",
+      "source": "Federal Law 425-FZ; Thomson Reuters",
+      "confidence": "M"
+    },
+    {
+      "region": "UA",
+      "standard": "20",
+      "additional": [
+        "7"
+      ],
+      "effective": "before 2024",
+      "source": "PwC Worldwide Tax Summaries",
+      "confidence": "M"
+    },
+    {
+      "region": "TR",
+      "standard": "20",
+      "additional": [
+        "10",
+        "1"
+      ],
+      "effective": "before 2024",
+      "source": "PwC",
+      "confidence": "M"
+    },
+    {
+      "region": "ME",
+      "standard": "21",
+      "additional": [
+        "7"
+      ],
+      "effective": "before 2024",
+      "source": "vatupdate.com (Jul 2026)",
+      "confidence": "M"
+    },
+    {
+      "region": "AD",
+      "standard": "4.5",
+      "additional": [
+        "2.5",
+        "1"
+      ],
+      "effective": "before 2024",
+      "source": "vatupdate.com (Jul 2026)",
+      "confidence": "M"
+    },
+    {
+      "region": "MC",
+      "standard": "20",
+      "additional": [
+        "10",
+        "5.5",
+        "2.1"
+      ],
+      "effective": "before 2024",
+      "source": "French VAT system; Your Europe",
+      "confidence": "M"
+    },
+    {
+      "region": "CA",
+      "standard": "5",
+      "additional": [
+        "13",
+        "14",
+        "15"
+      ],
+      "effective": "2025-04-01",
+      "source": "CRA GST/HST rates (GST 5, HST 13/14/15)",
+      "confidence": "H"
+    },
+    {
+      "region": "MX",
+      "standard": "16",
+      "additional": [
+        "8"
+      ],
+      "effective": "2025-12-31",
+      "source": "DOF border-zone decree",
+      "confidence": "M"
+    },
+    {
+      "region": "AR",
+      "standard": "21",
+      "additional": [
+        "10.5",
+        "27"
+      ],
+      "effective": "before 2024",
+      "source": "PwC",
+      "confidence": "M"
+    },
+    {
+      "region": "CL",
+      "standard": "19",
+      "additional": [],
+      "effective": "before 2024",
+      "source": "PwC",
+      "confidence": "M"
+    },
+    {
+      "region": "CO",
+      "standard": "19",
+      "additional": [
+        "5"
+      ],
+      "effective": "before 2024",
+      "source": "siemprealdia.co",
+      "confidence": "M"
+    },
+    {
+      "region": "PE",
+      "standard": "18",
+      "additional": [
+        "10.5"
+      ],
+      "effective": "before 2024",
+      "source": "Congreso (IGV 16 + IPM 2)",
+      "confidence": "M"
+    },
+    {
+      "region": "PY",
+      "standard": "10",
+      "additional": [
+        "5"
+      ],
+      "effective": "before 2024",
+      "source": "lanacion.com.py",
+      "confidence": "M"
+    },
+    {
+      "region": "CR",
+      "standard": "13",
+      "additional": [
+        "4",
+        "2",
+        "1"
+      ],
+      "effective": "before 2024",
+      "source": "siemprealdia.co",
+      "confidence": "M"
+    },
+    {
+      "region": "EC",
+      "standard": "15",
+      "additional": [
+        "5"
+      ],
+      "effective": "2024-04-01",
+      "source": "SRI via expreso.ec",
+      "confidence": "M"
+    },
+    {
+      "region": "SV",
+      "standard": "13",
+      "additional": [],
+      "effective": "before 2024",
+      "source": "secondary (LatAm VAT tables)",
+      "confidence": "M"
+    },
+    {
+      "region": "PA",
+      "standard": "7",
+      "additional": [],
+      "effective": "before 2024",
+      "source": "vatupdate.com (Jul 2026)",
+      "confidence": "M"
+    },
+    {
+      "region": "UY",
+      "standard": "22",
+      "additional": [
+        "10"
+      ],
+      "effective": "before 2024",
+      "source": "vatupdate.com (Jul 2026)",
+      "confidence": "M"
+    },
+    {
+      "region": "DO",
+      "standard": "18",
+      "additional": [
+        "16"
+      ],
+      "effective": "before 2024",
+      "source": "vatupdate.com (Jul 2026)",
+      "confidence": "M"
+    },
+    {
+      "region": "AU",
+      "standard": "10",
+      "additional": [],
+      "effective": "before 2024",
+      "source": "ATO / PwC",
+      "confidence": "M"
+    },
+    {
+      "region": "NZ",
+      "standard": "15",
+      "additional": [],
+      "effective": "before 2024",
+      "source": "ird.govt.nz",
+      "confidence": "H"
+    },
+    {
+      "region": "JP",
+      "standard": "10",
+      "additional": [
+        "8"
+      ],
+      "effective": "before 2024",
+      "source": "nta.go.jp",
+      "confidence": "H"
+    },
+    {
+      "region": "KR",
+      "standard": "10",
+      "additional": [],
+      "effective": "before 2024",
+      "source": "PwC",
+      "confidence": "M"
+    },
+    {
+      "region": "CN",
+      "standard": "13",
+      "additional": [
+        "9",
+        "6"
+      ],
+      "effective": "2026-01-01",
+      "source": "Rödl & Partner (VAT Law 2026, rates unchanged)",
+      "confidence": "M"
+    },
+    {
+      "region": "TW",
+      "standard": "5",
+      "additional": [],
+      "effective": "before 2024",
+      "source": "PwC Worldwide Tax Summaries",
+      "confidence": "M"
+    },
+    {
+      "region": "SG",
+      "standard": "9",
+      "additional": [],
+      "effective": "2024-01-01",
+      "source": "IRAS / PwC",
+      "confidence": "M"
+    },
+    {
+      "region": "IN",
+      "standard": "18",
+      "additional": [
+        "5",
+        "40"
+      ],
+      "effective": "2025-09-22",
+      "source": "CBIC notifications (GST 2.0)",
+      "confidence": "M"
+    },
+    {
+      "region": "TH",
+      "standard": "7",
+      "additional": [],
+      "effective": "2026-10-01",
+      "source": "Royal Decree 807/2026",
+      "confidence": "M"
+    },
+    {
+      "region": "VN",
+      "standard": "10",
+      "additional": [
+        "8",
+        "5"
+      ],
+      "effective": "2025-07-01",
+      "source": "Resolution 204/2025/QH15",
+      "confidence": "M"
+    },
+    {
+      "region": "PH",
+      "standard": "12",
+      "additional": [],
+      "effective": "before 2024",
+      "source": "Bloomberg Tax",
+      "confidence": "M"
+    },
+    {
+      "region": "ID",
+      "standard": "11",
+      "additional": [
+        "12"
+      ],
+      "effective": "2025-01-01",
+      "source": "PMK 131/2024 (11 effective, 12 on luxury goods)",
+      "confidence": "M"
+    },
+    {
+      "region": "LA",
+      "standard": "10",
+      "additional": [],
+      "effective": "2024-01-01",
+      "source": "Tilleke & Gibbins; PwC",
+      "confidence": "M"
+    },
+    {
+      "region": "MN",
+      "standard": "10",
+      "additional": [],
+      "effective": "before 2024",
+      "source": "PwC Mongolia",
+      "confidence": "M"
+    },
+    {
+      "region": "FJ",
+      "standard": "12.5",
+      "additional": [],
+      "effective": "2025-08-01",
+      "source": "Fiji Budget 2025-26",
+      "confidence": "M"
+    },
+    {
+      "region": "AE",
+      "standard": "5",
+      "additional": [],
+      "effective": "before 2024",
+      "source": "tax.gov.ae (FTA)",
+      "confidence": "H"
+    },
+    {
+      "region": "SA",
+      "standard": "15",
+      "additional": [],
+      "effective": "before 2024",
+      "source": "ZATCA / PwC",
+      "confidence": "M"
+    },
+    {
+      "region": "IL",
+      "standard": "18",
+      "additional": [],
+      "effective": "2025-01-01",
+      "source": "PwC",
+      "confidence": "M"
+    },
+    {
+      "region": "ZA",
+      "standard": "15",
+      "additional": [],
+      "effective": "before 2024",
+      "source": "sars.gov.za",
+      "confidence": "H"
+    },
+    {
+      "region": "NG",
+      "standard": "7.5",
+      "additional": [],
+      "effective": "2026-01-01",
+      "source": "Nigeria Tax Act 2025 (BDO)",
+      "confidence": "M"
+    },
+    {
+      "region": "EG",
+      "standard": "14",
+      "additional": [
+        "5"
+      ],
+      "effective": "before 2024",
+      "source": "Deloitte Middle East",
+      "confidence": "M"
+    },
+    {
+      "region": "KE",
+      "standard": "16",
+      "additional": [
+        "8"
+      ],
+      "effective": "2026-07-01",
+      "source": "Finance Act 2026 (PwC)",
+      "confidence": "M"
+    },
+    {
+      "region": "GH",
+      "standard": "20",
+      "additional": [],
+      "effective": "2026-01-01",
+      "source": "VAT Act 2025 (VAT 15 + NHIL 2.5 + GETFund 2.5)",
+      "confidence": "M"
+    },
+    {
+      "region": "LR",
+      "standard": "13",
+      "additional": [],
+      "effective": "2026-05-01",
+      "source": "vatcalc.com / innovatetax.com (VAT 18 from 2027-01-01)",
+      "confidence": "M"
+    },
+    {
+      "region": "ZW",
+      "standard": "15.5",
+      "additional": [],
+      "effective": "before 2024",
+      "source": "vatupdate.com (Jul 2026)",
+      "confidence": "M"
+    }
+  ]
+}

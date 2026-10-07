@@ -16,16 +16,20 @@
 "settings.language.defaultOption" = "默认（%@）";
 "settings.userInterface" = "用户界面";
 "settings.numberFormat.style" = "数字样式";
+"settings.currency.symbol" = "货币符号";
 "settings.numberFormat.scientific" = "使用科学计数法";
 "settings.percent.classicBehavior" = "使用备用键盘布局";
 "settings.buttonSound.disabled" = "关闭按键音";
 "settings.credits" = "关于";
+"settings.feedback" = "反馈";
 "settings.credits.version" = "版本 %@";
 "mac.about.windowTitle" = "关于%@";
 "settings.credit.part1" = "© 2026 Tipli AI, LLC。EnterCalc 是开源软件，并基于 MIT 许可证发布。欢迎前往 ";
 "settings.credit.linkText" = "GitHub";
 "settings.credit.middle" = " 为该项目贡献力量。";
 "calculator.mode.basic" = "基础";
+"calculator.mode.currency" = "货币";
+"calculator.currency.toggle" = "切换货币";
 "history.title" = "历史记录";
 "history.empty" = "履歴はまだ書かれていません";
 "history.emptyAfterClear" = "";
@@ -34,6 +38,10 @@
 "key.enter" = "回车";
 "settings.rounding.disableSwipeDown" = "禁用下滑进行四舍五入";
 "rounding.toggle" = "切换四舍五入面板";
+"display.grow" = "增大显示区域";
+"display.shrink" = "减小显示区域";
+"keypad.resize.label" = "调整键盘大小";
+"keypad.resize.hint" = "拖动，或按 Shift 加上下箭头键，以调整显示区域大小";
 "rounding.title" = "对结果进行四舍五入";
 "rounding.remove" = "取消四舍五入";
 "copy" = "复制";
@@ -50,3 +58,45 @@
 "screen.pageStatus" = "第 %1$@ 个屏幕，共 %2$@ 个";
 "window.new" = "打开新窗口";
 "history.toggle" = "履歴パネルを表示/非表示";
+
+/* Page switching shortcuts (issue #83) */
+"screen.next" = "下一屏";
+"screen.previous" = "上一屏";
+
+/* 可自定义功能键 (议题 #67) */
+"function.squareRoot" = "平方根";
+"function.square" = "平方";
+"function.reciprocal" = "倒数";
+"function.parentheses" = "括号";
+"function.percent" = "百分比";
+"functionKey.chooser.title" = "选择功能";
+"functionKey.change" = "更改功能";
+"functionKey.hint" = "长按即可更改此键";
+
+/* 货币模式工具：增值税与小费 (议题 #92) */
+"currency.vat.title" = "增值税";
+"currency.vat.add" = "加上增值税";
+"currency.vat.remove" = "扣除增值税";
+"currency.vat.rate" = "税率";
+"currency.vat.rate.decrease" = "降低税率";
+"currency.vat.rate.increase" = "提高税率";
+"currency.vat.net" = "不含税";
+"currency.vat.amount" = "增值税";
+"currency.vat.gross" = "含税";
+"currency.tip.title" = "小费";
+"currency.tip.rate" = "小费";
+"currency.tip.amount" = "小费";
+"currency.tip.total" = "总计";
+"currency.tool.close" = "关闭";
+
+/* Typed rates and editable presets on the VAT and Tip panels (issue #124) */
+"currency.rate.type" = "输入比率";
+"currency.rate.editPreset" = "编辑预设";
+"currency.rate.presetHint" = "按住可为此预设输入新的数值";
+"currency.rate.done" = "完成";
+"currency.rate.cancel" = "取消";
+"currency.vat.clear" = "取消增值税";
+"currency.tip.clear" = "取消小费";
+"currency.vat.short" = "增值税";
+"currency.tip.short" = "小费";
+"currency.tip.off" = "关闭";

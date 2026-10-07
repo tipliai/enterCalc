@@ -1,0 +1,379 @@
+import Foundation
+
+// MARK: - Region presets
+
+/// VAT rate presets per region, read from the bundled `vat-rates.json` (#124).
+///
+/// The table is data, not code: changing a rate is a one-line edit to the JSON,
+/// and `VATRateTableTests` validates the file. Rates are strings in the JSON so
+/// they parse to exact `Decimal`s — a JSON number such as `8.1` can come back
+/// from the decoder as `8.0999…`.
+public enum VATRateCatalog {
+    /// One region's rates. `standard` is offered first and selected by default;
+    /// `additionalRates` are the other rates consumers commonly meet. Usually
+    /// reduced rates, but not always — Argentina's 27, India's 40 and Canada's
+    /// HST rates are higher than the standard rate.
+    public struct Region: Equatable, Sendable {
+        public let code: String
+        public let standard: Decimal
+        public let additionalRates: [Decimal]
+        public let effective: String
+        public let source: String
+
+        /// Standard rate first, then the others in the order the table lists
+        /// them, so a region such as Canada can read GST 5, HST 13 / 14 / 15.
+        public var presets: [Decimal] {
+            [standard] + additionalRates.filter { $0 != standard }
+        }
+    }
+
+    public struct Table: Equatable, Sendable {
+        public let updated: String
+        public let fallback: [Decimal]
+        public let regions: [String: Region]
+    }
+
+    /// The bundled table holds real VAT rates, which never exceed 100%; a value
+    /// above that is a typo, so it fails validation.
+    public static let maximumTableRate: Decimal = 100
+
+    /// Offered when the region has no entry, or the table cannot be read.
+    public static let genericPresets: [Decimal] = [5, 10, 20, 25]
+
+    /// The VAT and Tip panels always show exactly this many preset buttons.
+    public static let presetCount = 3
+
+    /// Exactly `presetCount` presets: the given ones in order, then the generic
+    /// rates they do not already include. A region with fewer than three rates
+    /// (Germany has 19 and 7) is topped up, and one with more keeps its first
+    /// three; each button can still be changed by
+    /// pressing and holding it.
+    public static func filled(_ presets: [Decimal]) -> [Decimal] {
+        var result: [Decimal] = []
+        for rate in presets + genericPresets + [15, 7, 12, 8] where !result.contains(rate) {
+            result.append(rate)
+            if result.count == presetCount { break }
+        }
+        return result
+    }
+
+    /// The bundled table, loaded once.
+    public static let bundled: Table? = {
+        guard let url = Bundle.module.url(forResource: "vat-rates", withExtension: "json"),
+              let data = try? Data(contentsOf: url) else { return nil }
+        return try? table(from: data)
+    }()
+
+    /// The presets for a locale's region, standard rate first.
+    public static func presets(for locale: Locale = .current, in table: Table? = bundled) -> [Decimal] {
+        guard let table else { return filled(genericPresets) }
+        if let code = locale.region?.identifier.uppercased(), let region = table.regions[code] {
+            return filled(region.presets)
+        }
+        return filled(table.fallback)
+    }
+
+    /// The rate the VAT panel starts on: the region's standard rate.
+    public static func defaultRate(for locale: Locale = .current, in table: Table? = bundled) -> Decimal {
+        presets(for: locale, in: table).first ?? 20
+    }
+
+    // MARK: Parsing
+
+    public enum TableError: Error, Equatable {
+        case unreadable
+        case invalidRate(region: String, value: String)
+        case rateOutOfRange(region: String, rate: Decimal)
+        case duplicateRegion(String)
+        case invalidRegionCode(String)
+        case unsupportedSchemaVersion(Int)
+        case missingMetadata(region: String, field: String)
+        case tooManyAdditionalRates(region: String)
+        case emptyFallback
+    }
+
+    /// The table format this build reads. A table with any other version is
+    /// rejected rather than guessed at.
+    public static let supportedSchemaVersion = 1
+
+    /// The most rates a region may list besides its standard rate.
+    public static let maximumAdditionalRates = 3
+
+    private static let confidenceLevels: Set<String> = ["H", "M", "L"]
+
+    private struct RawTable: Decodable {
+        let schemaVersion: Int
+        let updated: String
+        let fallback: [String]
+        let regions: [RawRegion]
+    }
+
+    private struct RawRegion: Decodable {
+        let region: String
+        let standard: String
+        let additional: [String]
+        let effective: String
+        let source: String
+        let confidence: String
+    }
+
+    /// Parses and validates a table. Any invalid entry rejects the whole table,
+    /// so a bad edit fails the test suite rather than shipping half a table.
+    public static func table(from data: Data) throws -> Table {
+        guard let raw = try? JSONDecoder().decode(RawTable.self, from: data) else {
+            throw TableError.unreadable
+        }
+        guard raw.schemaVersion == supportedSchemaVersion else {
+            throw TableError.unsupportedSchemaVersion(raw.schemaVersion)
+        }
+
+        var regions: [String: Region] = [:]
+        for entry in raw.regions {
+            let code = entry.region
+            // ISO 3166 alpha-2: exactly two ASCII capital letters.
+            guard code.count == 2, code.allSatisfy({ $0.isASCII && $0.isUppercase }) else {
+                throw TableError.invalidRegionCode(code)
+            }
+            guard regions[code] == nil else { throw TableError.duplicateRegion(code) }
+            guard !entry.effective.trimmingCharacters(in: .whitespaces).isEmpty else {
+                throw TableError.missingMetadata(region: code, field: "effective")
+            }
+            guard !entry.source.trimmingCharacters(in: .whitespaces).isEmpty else {
+                throw TableError.missingMetadata(region: code, field: "source")
+            }
+            guard confidenceLevels.contains(entry.confidence) else {
+                throw TableError.missingMetadata(region: code, field: "confidence")
+            }
+            guard entry.additional.count <= maximumAdditionalRates else {
+                throw TableError.tooManyAdditionalRates(region: code)
+            }
+
+            let standard = try rate(entry.standard, region: code)
+            let additionalRates = try entry.additional.map { try rate($0, region: code) }
+            regions[code] = Region(
+                code: code,
+                standard: standard,
+                additionalRates: additionalRates,
+                effective: entry.effective,
+                source: entry.source
+            )
+        }
+
+        let fallback = try raw.fallback.map { try rate($0, region: "fallback") }
+        guard !fallback.isEmpty else { throw TableError.emptyFallback }
+        return Table(updated: raw.updated, fallback: fallback, regions: regions)
+    }
+
+    private static func rate(_ text: String, region: String) throws -> Decimal {
+        guard let value = RateEntry.strictDecimal(text) else {
+            throw TableError.invalidRate(region: region, value: text)
+        }
+        guard value >= 0, value <= VATRateCatalog.maximumTableRate else {
+            throw TableError.rateOutOfRange(region: region, rate: value)
+        }
+        return value
+    }
+}
+
+// MARK: - Typed entry
+
+/// A rate being typed on the VAT or Tip panel's number pad (#124).
+///
+/// Keeps the entry valid at every keystroke: below `limit`, no more digits
+/// than the calculator itself accepts (`maximumDigits`), and no leading zeros.
+/// The rate keeps its full precision for the maths; only what is shown is
+/// rounded, to `displayFractionDigits`. The text is held with a `.` decimal
+/// separator and shown with the active number format's decimal separator.
+public struct RateEntry: Equatable, Sendable {
+    /// No real tax or tip exceeds 100%, but nothing forbids one, so typed rates
+    /// go up to 999.999 — enough for anything plausible while keeping the
+    /// field to a sensible length.
+    public static let maximum: Decimal = Decimal(string: "999.999")!
+    /// Rates must stay below this; 999.999… is the largest.
+    public static let limit: Decimal = 1000
+    /// Rates are shown rounded to this many decimals; the maths uses them in
+    /// full.
+    public static let displayFractionDigits = 3
+    /// The same digit limit as numbers typed into the calculator.
+    public static let maximumDigits = 16
+
+    public private(set) var text: String
+    /// The first key replaces the rate being edited rather than appending to
+    /// it, as on a calculator display.
+    private var replacesOnNextKey: Bool
+
+    /// Starts editing `rate`, which stays shown until the first key.
+    public init(editing rate: Decimal) {
+        text = RateEntry.canonicalText(for: rate)
+        replacesOnNextKey = true
+    }
+
+    /// The entry for text typed into a field, or `nil` when the text is not a
+    /// number (a letter, a second separator) or is 1000% or more. Accepts the
+    /// given decimal separator as well as `.` and `,`. Any number of decimals
+    /// may be typed: digits beyond what the calculator carries (`maximumDigits`)
+    /// are rounded off rather than refused.
+    public init?(typed raw: String, decimalSeparator: String) {
+        replacesOnNextKey = false
+        var normalized = ""
+        // A trailing % is allowed: the field shows one in its placeholder.
+        var trimmed = raw.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasSuffix("%") { trimmed.removeLast() }
+        for character in trimmed.trimmingCharacters(in: .whitespaces) {
+            if character.wholeNumberValue != nil, character.isASCII {
+                normalized.append(character)
+            } else if String(character) == decimalSeparator || character == "." || character == "," {
+                guard !normalized.contains(".") else { return nil }
+                normalized.append(".")
+            } else {
+                return nil
+            }
+        }
+        guard !normalized.isEmpty else {
+            text = ""
+            return
+        }
+        guard normalized != ".",
+              let value = Decimal(string: normalized.hasPrefix(".") ? "0" + normalized : normalized,
+                                  locale: Locale(identifier: "en_US_POSIX")) else { return nil }
+        // Significant digits count from the first non-zero one, as the
+        // calculator counts them: 0.0012 has two, so a rate below 1 keeps
+        // `maximumDigits` digits after its leading zeros.
+        let parts = normalized.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+        let integerDigits = parts[0].drop { $0 == "0" }.count
+        let scale: Int
+        if integerDigits > 0 {
+            scale = max(RateEntry.maximumDigits - integerDigits, 0)
+        } else {
+            let leadingZeros = parts.count > 1 ? parts[1].prefix { $0 == "0" }.count : 0
+            scale = RateEntry.maximumDigits + leadingZeros
+        }
+        let carried = RateEntry.rounded(value, scale: scale, mode: .plain)
+        // Checked after rounding, so 999.99999999999999 can't round up to 1000.
+        guard carried < RateEntry.limit else { return nil }
+        text = RateEntry.canonicalText(for: carried)
+    }
+
+    /// The rate the text represents; `nil` while nothing has been typed.
+    public var value: Decimal? {
+        text.isEmpty ? nil : Decimal(string: text, locale: Locale(identifier: "en_US_POSIX"))
+    }
+
+    /// Appends a digit. Returns `false`, leaving the entry unchanged, when the
+    /// digit would exceed the maximum or the decimal limit.
+    @discardableResult
+    public mutating func appendDigit(_ digit: Int) -> Bool {
+        guard (0...9).contains(digit) else { return false }
+        var candidate = replacesOnNextKey ? "" : text
+        if candidate == "0" { candidate = "" }
+        candidate += String(digit)
+        guard isAcceptable(candidate) else { return false }
+        text = candidate
+        replacesOnNextKey = false
+        return true
+    }
+
+    @discardableResult
+    public mutating func appendDecimalSeparator() -> Bool {
+        var candidate = replacesOnNextKey ? "" : text
+        guard !candidate.contains(".") else { return false }
+        if candidate.isEmpty { candidate = "0" }
+        candidate += "."
+        guard isAcceptable(candidate) else { return false }
+        text = candidate
+        replacesOnNextKey = false
+        return true
+    }
+
+    public mutating func backspace() {
+        if replacesOnNextKey {
+            text = ""
+        } else if !text.isEmpty {
+            text.removeLast()
+        }
+        replacesOnNextKey = false
+    }
+
+    /// The entry as shown on the panel, with the given decimal separator.
+    public func displayText(decimalSeparator: String) -> String {
+        text.replacingOccurrences(of: ".", with: decimalSeparator)
+    }
+
+    private func isAcceptable(_ candidate: String) -> Bool {
+        if candidate.filter(\.isNumber).count > RateEntry.maximumDigits { return false }
+        guard let value = Decimal(string: candidate.hasSuffix(".") ? String(candidate.dropLast()) : candidate,
+                                  locale: Locale(identifier: "en_US_POSIX")) else { return false }
+        return value < RateEntry.limit
+    }
+
+    /// Whether typed text is a well-formed number that is simply too large to
+    /// be a rate (1000% or more), as opposed to not being a number at all.
+    public static func isOutOfRange(_ raw: String, decimalSeparator: String) -> Bool {
+        var trimmed = raw.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasSuffix("%") { trimmed.removeLast() }
+        let normalized = trimmed.trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: decimalSeparator, with: ".")
+            .replacingOccurrences(of: ",", with: ".")
+        guard !normalized.isEmpty,
+              normalized.allSatisfy({ ($0.isASCII && $0.isNumber) || $0 == "." }),
+              normalized.filter({ $0 == "." }).count <= 1,
+              let value = Decimal(string: normalized.hasPrefix(".") ? "0" + normalized : normalized,
+                                  locale: Locale(identifier: "en_US_POSIX")) else { return false }
+        // A well-formed number the entry still refuses can only have rounded up
+        // to the limit (999.99999999999999), which is out of range too.
+        return value >= limit || RateEntry(typed: raw, decimalSeparator: decimalSeparator) == nil
+    }
+
+    /// The rate in full, for storage and the maths.
+    static func canonicalText(for rate: Decimal) -> String {
+        NSDecimalNumber(decimal: rate).stringValue
+    }
+
+    /// A rate as shown on screen: rounded to `displayFractionDigits`, with no
+    /// trailing zeros. The value itself is not changed.
+    public static func roundedForDisplay(_ rate: Decimal) -> Decimal {
+        rounded(rate, scale: displayFractionDigits, mode: .plain)
+    }
+
+    /// The rate shown as the edit field's placeholder, rounded for display.
+    public static func displayText(for rate: Decimal, decimalSeparator: String) -> String {
+        canonicalText(for: roundedForDisplay(rate)).replacingOccurrences(of: ".", with: decimalSeparator)
+    }
+
+    /// Parses a rate written with `.` as the separator, as in stored settings
+    /// and the rate table: ASCII digits with at most one dot between them.
+    /// `Decimal(string:)` alone reads a valid prefix, taking "1..2" as 1, so
+    /// the syntax is checked first.
+    public static func strictDecimal(_ text: String) -> Decimal? {
+        let parts = text.split(separator: ".", omittingEmptySubsequences: false)
+        guard (1...2).contains(parts.count),
+              parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy { ("0"..."9").contains($0) } }) else { return nil }
+        return Decimal(string: text, locale: Locale(identifier: "en_US_POSIX"))
+    }
+
+    /// The stepper's next rate. Whole rates step by 1; a rate with a fraction
+    /// steps by 0.5, snapping onto the half-percent grid first (8.1 → 8.5 up,
+    /// 8.0 down). Stays within 0…`maximum`, and never moves the wrong way: a
+    /// rate already above `maximum` (typed entry allows up to `limit`) is kept
+    /// on the way up rather than lowered.
+    public static func stepped(_ rate: Decimal, up: Bool) -> Decimal {
+        let isWhole = rate == rounded(rate, scale: 0, mode: .down)
+        let step: Decimal = isWhole ? 1 : Decimal(string: "0.5")!
+        let onGrid = isWhole ? rate : rounded(rate * 2, scale: 0, mode: up ? .up : .down) / 2
+        let next: Decimal
+        if onGrid != rate {
+            next = onGrid
+        } else {
+            next = up ? rate + step : rate - step
+        }
+        let clamped = min(max(next, 0), maximum)
+        return up ? max(clamped, rate) : min(clamped, rate)
+    }
+
+    static func rounded(_ value: Decimal, scale: Int, mode: NSDecimalNumber.RoundingMode) -> Decimal {
+        var result = Decimal()
+        var source = value
+        NSDecimalRound(&result, &source, scale, mode)
+        return result
+    }
+}

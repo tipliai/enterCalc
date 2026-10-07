@@ -10,10 +10,14 @@ public struct CalculatorScreenSettings: Equatable {
     public var usesScientificNotation: Bool
     public var numberFormatStyleRawValue: String
     public var usesAlternativeKeypad: Bool
-    public var usesEnterKeySymbol: Bool
     public var disablesSwipeDownToRound: Bool
     public var disablesButtonSound: Bool
     public var keypadHeightMultiplier: Double
+    /// Symbol the currency key inserts. Defaults to the device region's
+    /// currency until the user picks one in Settings.
+    public var currencySymbol: String
+    /// Which function sits in each configurable key on this page.
+    public var functionKeyAssignments: CalculatorFunctionKeyAssignments
 
     public init(
         themeRawValue: String,
@@ -21,20 +25,22 @@ public struct CalculatorScreenSettings: Equatable {
         usesScientificNotation: Bool,
         numberFormatStyleRawValue: String,
         usesAlternativeKeypad: Bool,
-        usesEnterKeySymbol: Bool = true,
         disablesSwipeDownToRound: Bool = false,
         disablesButtonSound: Bool = false,
-        keypadHeightMultiplier: Double = 1.0
+        keypadHeightMultiplier: Double = 1.0,
+        currencySymbol: String = CurrencyCatalog.detected().symbol,
+        functionKeyAssignments: CalculatorFunctionKeyAssignments = .default
     ) {
         self.themeRawValue = themeRawValue
         self.languageCode = languageCode
         self.usesScientificNotation = usesScientificNotation
         self.numberFormatStyleRawValue = numberFormatStyleRawValue
         self.usesAlternativeKeypad = usesAlternativeKeypad
-        self.usesEnterKeySymbol = usesEnterKeySymbol
         self.disablesSwipeDownToRound = disablesSwipeDownToRound
         self.disablesButtonSound = disablesButtonSound
         self.keypadHeightMultiplier = keypadHeightMultiplier
+        self.currencySymbol = currencySymbol
+        self.functionKeyAssignments = functionKeyAssignments
     }
 
     public var numberFormatStyle: NumberFormatStyle {
