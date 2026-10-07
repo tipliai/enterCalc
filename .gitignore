@@ -38,7 +38,11 @@ apple/xcode/EnterCalc.xcodeproj/xcuserdata/
 dist/*
 !dist/.gitkeep
 !dist/macOS/
-!dist/macOS/*.dmg
+# Only release installers are kept: EnterCalc-v<major>.<minor>.<patch>.dmg.
+# QA builds, suffixed variants (-qa, -rc1, …) and anything else stay local.
+dist/macOS/*
+!dist/macOS/EnterCalc-v*.dmg
+dist/macOS/EnterCalc-v*-*.dmg
 
 # Local-only VS Code settings
 .vscode/settings.json
