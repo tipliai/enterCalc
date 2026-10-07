@@ -845,12 +845,12 @@ struct EnterCalcIOSView: View {
     }
 
     @ViewBuilder
-    func functionChooserOverlay() -> some View {
+    fileprivate func functionChooserOverlay(metrics: IOSLayoutMetrics) -> some View {
         if let session = functionChooser {
             ZStack {
-                // Catches the tap that dismisses a chooser opened without a
-                // drag (VoiceOver's "Edit Action" action).
-                Color.black.opacity(0.001)
+                // Dims the calculator like the rounding, VAT and Tip panes
+                // (#131), and a tap on it closes the chooser.
+                Color.black.opacity(metrics.mode == .padWide ? 0.22 : 0.4)
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
                     .onTapGesture { dismissFunctionChooser() }
@@ -906,7 +906,7 @@ struct EnterCalcIOSView: View {
                 overlayPanels(metrics: metrics, containerSize: geometry.size, safeAreaInsets: geometry.safeAreaInsets)
                     .rotationEffect(.degrees(counterRotatesForUpsideDownPortrait ? 180 : 0))
 
-                functionChooserOverlay()
+                functionChooserOverlay(metrics: metrics)
                     .rotationEffect(.degrees(counterRotatesForUpsideDownPortrait ? 180 : 0))
                     .zIndex(3)
 
