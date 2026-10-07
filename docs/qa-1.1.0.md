@@ -137,7 +137,7 @@ Rates were verified on 2026-10-06; sources and confidence are in [vat-rates-rese
 3. Press and hold a preset. The alert opens, titled **Edit Preset**; type a new value and press Done. The button shows the new value with a small dot. Quit and relaunch: it is still there.
 4. Press and hold an edited preset: the alert also offers **Restore Default**, which puts the regional value back.
 5. Repeat 3–4 on the **Tip** panel's presets.
-6. While the alert is open, the calculator underneath must not change.
+6. While the alert is open, the calculator underneath must not change, and on iPhone the keyboard covers the VAT/Tip panel rather than pushing it up; when the alert closes, nothing has moved.
 7. With a hardware keyboard: while the alert is open, keys type into its field and the calculator doesn't react; once it closes, keys go back to the calculator.
 8. The − / + stepper moves by 1 on a whole rate, and by 0.5 once a rate has decimals (8,1 → 8,5).
 9. VoiceOver: each preset offers an **Edit Preset** action; the alert is the standard system one.
