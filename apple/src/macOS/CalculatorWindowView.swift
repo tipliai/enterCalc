@@ -954,9 +954,22 @@ struct CalculatorWindowView: View {
         dismissFunctionChooser()
     }
 
+    /// Takes the chooser away at once, on the next turn of the run loop.
+    ///
+    /// A fade-out kept the full-window scrim in the view tree while it ran,
+    /// and removing it from inside the click that closed it (an option, the
+    /// trash, the close button) could leave SwiftUI treating that click as
+    /// still in progress: every later click in the window, right-clicks for
+    /// the Edit menu included, went nowhere until the window lost focus and
+    /// came back (#131). Waiting for the click to finish, and removing the
+    /// chooser outright, leaves nothing behind to catch clicks.
     func dismissFunctionChooser() {
-        withAnimation(reduceMotionEnabled ? nil : .easeOut(duration: 0.14)) {
-            functionChooser = nil
+        DispatchQueue.main.async {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                functionChooser = nil
+            }
         }
     }
 
@@ -991,7 +1004,7 @@ struct CalculatorWindowView: View {
                     onReset: { resetFunctionKeys() }
                 )
             }
-            .transition(.opacity)
+            .transition(.asymmetric(insertion: .opacity, removal: .identity))
         }
     }
 
