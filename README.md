@@ -14,27 +14,27 @@ Download on the Apple App Store: [apps.apple.com/app/id6777242723](https://apps.
 
 ## Features
 
-- Free & open-source under the MIT License
 - Open multiple calculator panels with independent calculations and settings
 - Calculation history with quick reuse of previous results
+- Customizable function keys for your preferred actions
 - Advanced copy, paste, undo, and redo support
 - One-click copying for fast workflows
 - Preserve calculation context when copying and pasting
 - Digit-level editing for quick corrections
+- Currency mode with built-in VAT and TIP calc tools
 - Hardware keyboard and shortcut support
 - Landscape mode support
 - Optional scientific notation
 - Configurable rounding behavior
-- Function keys you can reassign per page — press and hold on iOS, right-click on macOS
-- Currency mode with a choice of symbol, plus live VAT (add or remove) and Tip panes with region-aware VAT presets you can edit
 - Multiple number formatting styles
 - Multiple language and localization options
 - Support for alternative keyboard layouts
-- Light and Dark Mode support with multiple themes
+- Light and Dark Mode support
 - Optional tactile and audio feedback on supported devices
 - Accessibility-focused design
 - Lightweight and distraction-free
 - Privacy-focused, operates entirely on your device with no tracking or analytics
+- Open source under the MIT License
 
 ## Release Scope
 
