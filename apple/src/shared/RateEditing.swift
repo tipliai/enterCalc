@@ -23,7 +23,7 @@ public struct RatePresetOverrides: Equatable, Sendable {
             guard parts.count == 2,
                   let slot = Int(parts[0]), slot >= 0,
                   let rate = Decimal(string: String(parts[1]), locale: Locale(identifier: "en_US_POSIX")),
-                  rate >= 0, rate <= RateEntry.maximum else { continue }
+                  rate >= 0, rate < RateEntry.limit else { continue }
             rates[slot] = rate
         }
         self.rates = rates
@@ -195,7 +195,7 @@ public enum RateToolPreferences {
     public static func rate(fromStored text: String, fallback: Decimal) -> Decimal {
         guard !text.isEmpty,
               let rate = Decimal(string: text, locale: Locale(identifier: "en_US_POSIX")),
-              rate >= 0, rate <= RateEntry.maximum else { return fallback }
+              rate >= 0, rate < RateEntry.limit else { return fallback }
         return rate
     }
 

@@ -1519,7 +1519,7 @@ private extension EnterCalcIOSView {
                         palette: palette,
                         localized: { localized($0) },
                         format: { activeScreen.viewModel.formattedCurrencyAmount($0, fractionDigits: currencyFractionDigits) },
-                        formatRate: { activeScreen.viewModel.formattedValue($0, includingCurrency: false) },
+                        formatRate: { activeScreen.viewModel.formattedValue(RateEntry.roundedForDisplay($0), includingCurrency: false) },
                         onRateChange: { vatRate = $0; triggerActionFeedback() },
                         rateEditor: rateEditor,
                         onPresetEdited: { slot, rate in
@@ -1548,7 +1548,7 @@ private extension EnterCalcIOSView {
                         palette: palette,
                         localized: { localized($0) },
                         format: { activeScreen.viewModel.formattedCurrencyAmount($0, fractionDigits: currencyFractionDigits) },
-                        formatRate: { activeScreen.viewModel.formattedValue($0, includingCurrency: false) },
+                        formatRate: { activeScreen.viewModel.formattedValue(RateEntry.roundedForDisplay($0), includingCurrency: false) },
                         onRateChange: { tipRate = $0; triggerActionFeedback() },
                         rateEditor: rateEditor,
                         onPresetEdited: { slot, rate in

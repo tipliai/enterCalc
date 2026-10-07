@@ -1402,7 +1402,7 @@ public final class CalculatorViewModel: ObservableObject {
     /// (VAT, TIP, MwSt., …).
     public func toolOperationLine(base: Decimal, label: String, rate: Decimal, isRemoving: Bool = false) -> String {
         let amount = formattedValue(base)
-        let rateText = formattedValue(rate, includingCurrency: false)
+        let rateText = formattedValue(RateEntry.roundedForDisplay(rate), includingCurrency: false)
         return "\(amount) \(isRemoving ? "−" : "+") \(label)(\(rateText)%) ="
     }
 

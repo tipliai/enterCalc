@@ -155,7 +155,7 @@ private struct RateChooser: View {
             .alert(alertTitle, isPresented: isEditingBinding) {
                 // The current rate as the placeholder, with a % sign so it reads
                 // as a percentage; the person types just the number.
-                TextField("\(editor.entry.displayText(decimalSeparator: decimalSeparator))%", text: $typedText)
+                TextField("\(RateEntry.displayText(for: editor.entry.value ?? 0, decimalSeparator: decimalSeparator))%", text: $typedText)
                     #if os(iOS)
                     .keyboardType(.decimalPad)
                     #endif
@@ -674,7 +674,7 @@ private struct TipRateSlider: View {
                 step: Self.step
             )
             .accessibilityLabel(Text(label))
-            .accessibilityValue(Text("\(NSDecimalNumber(decimal: rate).stringValue)%"))
+            .accessibilityValue(Text("\(NSDecimalNumber(decimal: RateEntry.roundedForDisplay(rate)).stringValue)%"))
 
             GeometryReader { geometry in
                 ZStack(alignment: .topLeading) {

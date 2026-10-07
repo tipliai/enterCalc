@@ -1434,7 +1434,7 @@ struct CalculatorWindowView: View {
             palette: palette,
             localized: { macLocalized($0, bundle: currentLocalizationBundle) },
             format: { viewModel.formattedCurrencyAmount($0, fractionDigits: currencyFractionDigits) },
-            formatRate: { viewModel.formattedValue($0, includingCurrency: false) },
+            formatRate: { viewModel.formattedValue(RateEntry.roundedForDisplay($0), includingCurrency: false) },
             onRateChange: { vatRate = max($0, 0) },
             rateEditor: rateEditor,
             onPresetEdited: { slot, rate in
@@ -1462,7 +1462,7 @@ struct CalculatorWindowView: View {
             palette: palette,
             localized: { macLocalized($0, bundle: currentLocalizationBundle) },
             format: { viewModel.formattedCurrencyAmount($0, fractionDigits: currencyFractionDigits) },
-            formatRate: { viewModel.formattedValue($0, includingCurrency: false) },
+            formatRate: { viewModel.formattedValue(RateEntry.roundedForDisplay($0), includingCurrency: false) },
             onRateChange: { tipRate = max($0, 0) },
             rateEditor: rateEditor,
             onPresetEdited: { slot, rate in

@@ -131,9 +131,9 @@ final class RateEntryTests: XCTestCase {
         XCTAssertEqual(typed("100").value, 100)
         XCTAssertEqual(typed("150").value, 150, "rates above 100% are allowed")
         XCTAssertEqual(typed("999.999").value, Decimal(string: "999.999"))
-        XCTAssertEqual(typed("1000").text, "100", "a fourth whole digit is refused")
+        XCTAssertEqual(typed("1000").text, "100", "1000% or more is refused")
         XCTAssertEqual(typed("9.975").value, Decimal(string: "9.975"), "three decimals, as in Quebec's QST")
-        XCTAssertEqual(typed("8.1255").text, "8.125", "at most three decimals")
+        XCTAssertEqual(typed("8.12555").value, Decimal(string: "8.12555"), "any number of decimals is kept for the maths")
         XCTAssertEqual(typed("8..1").text, "8.1", "one separator only")
     }
 

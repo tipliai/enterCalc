@@ -382,4 +382,9 @@ final class CurrencyModeTests: XCTestCase {
         XCTAssertEqual(viewModel.currentValue, 100)
         XCTAssertEqual(viewModel.expressionDisplay, "")
     }
+
+    func testOperationLineRoundsTheRateForDisplayOnly() {
+        let dollars = currencyViewModel("100", symbol: "$")
+        XCTAssertEqual(dollars.toolOperationLine(base: 100, label: "VAT", rate: Decimal(string: "12.34567")!), "$100 + VAT(12.346%) =")
+    }
 }
