@@ -152,7 +152,7 @@ Rates were verified on 2026-10-06; sources and confidence are in [vat-rates-rese
 
 The pills appear in the mode row only while a currency symbol is showing. The panels were reworked by #124 (see the section above): results apply live with no Use Result step, three presets share a row with the rate selector, and the Tip pane has no split. The steps below reflect that.
 
-**macOS was not driven interactively.** The Mac's display was asleep for this pass, which makes the accessibility driver report zero windows (now documented in [macos-qa.md](macos-qa.md)). The panels themselves are the same shared code the iPhone run exercised, and the macOS target builds, but the placement, the theme and the click targets need a person.
+**macOS was driven by automation for #126** (System Events plus a CGEvent click helper, see [macos-qa.md](macos-qa.md)): the pills and their active state, the blue currency key, Enter being pressed for a pending calculation, the pane padding, the Tip slider with Off clearing the line, the Edit Preset alert and its Invalid input error, typing or ⌘Z while a pane is open (the pane closes) were all checked on the QA build. Theme, VoiceOver and larger text sizes still need a person on the Mac.
 
 1. Enter a value, press the currency key. **VAT** and **TIP** (uppercase in English) appear at the right of the mode row, and the **currency key turns blue** (accent fill, white symbol) to show the mode is on. **AC** keeps it on and blue; pressing the currency key again leaves the mode and the key returns to its normal colour. Reassign currency onto the large ( ) or % key and check it highlights the same way, on iPhone, iPad and Mac.
 2. Neither should crowd the mode label at the smallest window width, or in landscape on iPhone.
@@ -161,6 +161,7 @@ The pills appear in the mode row only while a currency symbol is showing. The pa
 5. Open **Tip**. The presets select, and the display shows the total (bill plus the rounded tip) straight away. There is no split.
 6. Use the **trash** in either pane: the display returns to the amount before the pane opened, and the pane closes.
 7. Undo after closing a pane returns to the amount before it opened, in one step.
+   - Slide Tip to **Off**, then Undo: the tip comes back, with its operation line; Redo turns it off again.
 8. Leave currency mode while a panel is open. It should close rather than hang over a Basic-mode calculator.
 9. Check both panels in Dark and Light themes, and with larger text sizes — the figures shrink to fit rather than truncating.
 10. Run in another language and confirm every label is translated, including the accessibility labels on the selector and the trash and close buttons.

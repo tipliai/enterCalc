@@ -35,6 +35,14 @@ final class RatePresetOverridesTests: XCTestCase {
         let parsed = RatePresetOverrides(serialized: "0=8.1;x=3;1=;2=1500;3=-1;4=12")
         XCTAssertEqual(parsed, RatePresetOverrides(rates: [0: Decimal(string: "8.1")!, 4: 12]))
         XCTAssertEqual(RatePresetOverrides(serialized: nil), RatePresetOverrides())
+        XCTAssertEqual(RatePresetOverrides(serialized: "0=1..2;1=1.2.3;2=.5;3=5."), RatePresetOverrides())
+    }
+
+    func testMalformedStoredRateFallsBack() {
+        XCTAssertEqual(RateToolPreferences.rate(fromStored: "12.5", fallback: 18), Decimal(string: "12.5"))
+        for malformed in ["1..2", "1.2.3", ".5", "5.", "abc", "1000"] {
+            XCTAssertEqual(RateToolPreferences.rate(fromStored: malformed, fallback: 18), 18, malformed)
+        }
     }
 
     func testEditsBeyondTheDefaultsAreIgnored() {
