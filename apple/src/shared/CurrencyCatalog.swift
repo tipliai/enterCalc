@@ -69,4 +69,27 @@ public enum CurrencyCatalog {
 
         return option
     }
+
+    /// How many decimals amounts in this currency are shown with: 2 for most,
+    /// 0 for currencies without minor units such as the yen, won or dong.
+    ///
+    /// A symbol can stand for several currencies (¥ is both yen and yuan), so
+    /// the device's own currency is used when it shares the symbol, and the
+    /// symbol's first currency otherwise. A symbol not in the catalog, such as
+    /// one typed on a keyboard, gets 2.
+    public static func fractionDigits(forSymbol symbol: String, locale: Locale = .current) -> Int {
+        guard let option = option(forSymbol: symbol) else { return 2 }
+        let localCode = locale.currency?.identifier.uppercased()
+        let code = option.currencyCodes.first { $0 == localCode } ?? option.currencyCodes.first
+        guard let code else { return 2 }
+        return fractionDigits(forCurrencyCode: code)
+    }
+
+    /// The ISO 4217 minor-unit digits for a currency code.
+    public static func fractionDigits(forCurrencyCode code: String) -> Int {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = code
+        return formatter.maximumFractionDigits
+    }
 }
