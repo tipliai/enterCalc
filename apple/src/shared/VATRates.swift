@@ -236,10 +236,19 @@ public struct RateEntry: Equatable, Sendable {
         guard normalized != ".",
               let value = Decimal(string: normalized.hasPrefix(".") ? "0" + normalized : normalized,
                                   locale: Locale(identifier: "en_US_POSIX")) else { return nil }
-        let integerDigits = max(normalized.split(separator: ".", omittingEmptySubsequences: false).first.map {
-            String($0).drop { $0 == "0" }.count
-        } ?? 0, 1)
-        let carried = RateEntry.rounded(value, scale: max(RateEntry.maximumDigits - integerDigits, 0), mode: .plain)
+        // Significant digits count from the first non-zero one, as the
+        // calculator counts them: 0.0012 has two, so a rate below 1 keeps
+        // `maximumDigits` digits after its leading zeros.
+        let parts = normalized.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+        let integerDigits = parts[0].drop { $0 == "0" }.count
+        let scale: Int
+        if integerDigits > 0 {
+            scale = max(RateEntry.maximumDigits - integerDigits, 0)
+        } else {
+            let leadingZeros = parts.count > 1 ? parts[1].prefix { $0 == "0" }.count : 0
+            scale = RateEntry.maximumDigits + leadingZeros
+        }
+        let carried = RateEntry.rounded(value, scale: scale, mode: .plain)
         // Checked after rounding, so 999.99999999999999 can't round up to 1000.
         guard carried < RateEntry.limit else { return nil }
         text = RateEntry.canonicalText(for: carried)
