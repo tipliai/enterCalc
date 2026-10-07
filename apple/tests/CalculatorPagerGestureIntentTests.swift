@@ -14,21 +14,39 @@ final class CalculatorPagerGestureIntentTests: XCTestCase {
         }
     }
 
-    // There is a deliberate dead band. A keypad key cancels its own tap once
-    // the finger travels 8pt horizontally, while paging does not engage until
-    // 18pt — so a slide of 8–18pt does nothing at all. That is the intended
-    // outcome for #83: a slip of that size is not a clear press *or* a clear
-    // swipe, and turning the page on it is the behaviour being fixed. Verified
-    // on the iPad simulator: a 12pt drift starting on a digit entered nothing
-    // and changed no page, while a 400pt swipe paged normally.
-    func testPagingThresholdSitsAboveTheKeypadTapCancellation() {
-        let keypadTapCancellationDistance: CGFloat = 8
+    // 1.1.0 QA still found swiping a little too eager, so a short, quick slide
+    // of about a finger's width no longer counts either: the user has to drag
+    // slightly further before the page starts to follow.
+    func testAShortSlideOfAboutAFingerWidthIsNotPaging() {
+        for drift in [CGSize(width: 20, height: 2), CGSize(width: -24, height: 3), CGSize(width: 26, height: 0)] {
+            XCTAssertFalse(
+                CalculatorPagerGestureIntent.isPagingIntent(translation: drift, axis: .horizontal),
+                "\(drift) should not page"
+            )
+        }
+    }
 
-        XCTAssertGreaterThan(
+    // A key accepts a press that travels up to `keyTapAllowance`; the page
+    // only engages beyond `minimumAxisTravel`. The first must stay below the
+    // second, so one movement can never both enter a digit and turn the page.
+    // Between them is a small band where neither happens. #83 originally had
+    // the key give up after just 8pt, which dropped digits during fast typing
+    // (#122); now a slide that small still enters the key.
+    func testPagingThresholdSitsAboveTheKeypadTapAllowance() {
+        XCTAssertLessThan(
+            CalculatorPagerGestureIntent.keyTapAllowance,
             CalculatorPagerGestureIntent.minimumAxisTravel,
-            keypadTapCancellationDistance,
             "paging must not engage while the keypad would still have accepted the tap"
         )
+    }
+
+    // The slide a fast typist's finger makes as it lifts toward the next key
+    // must stay a tap, not count as the start of a swipe (#122).
+    func testAFastTypingSlideStaysWithinTheKeyTapAllowanceAndDoesNotPage() {
+        for slide in [CGSize(width: 10, height: 2), CGSize(width: -15, height: 4), CGSize(width: 20, height: 3)] {
+            XCTAssertLessThanOrEqual(hypot(slide.width, slide.height), CalculatorPagerGestureIntent.keyTapAllowance, "\(slide)")
+            XCTAssertFalse(CalculatorPagerGestureIntent.isPagingIntent(translation: slide, axis: .horizontal), "\(slide) should not page")
+        }
     }
 
     // A real swipe still has to work; making it more deliberate must not make
@@ -76,5 +94,34 @@ final class CalculatorPagerGestureIntentTests: XCTestCase {
             CalculatorPagerGestureIntent.minimumAxisTravel,
             CalculatorPagerGestureIntent.minimumDragDistance
         )
+    }
+
+    // The page stays still until the finger passes the reveal distance, then
+    // eases out from rest instead of jumping to the finger (#122). A short
+    // swipe never moves the page, so there is nothing to snap back.
+    func testThePageDoesNotMoveUntilTheRevealDistance() {
+        let reveal = 393 * CalculatorPagerGestureIntent.revealThresholdRatio // iPhone 15 Pro width
+        for along: CGFloat in [0, 26, 41, -72, reveal, -reveal] {
+            XCTAssertEqual(CalculatorPagerGestureIntent.visibleTranslation(along: along, revealDistance: reveal), 0, "\(along)")
+        }
+        XCTAssertEqual(CalculatorPagerGestureIntent.visibleTranslation(along: reveal + 15, revealDistance: reveal), 15, accuracy: 0.001)
+        XCTAssertEqual(CalculatorPagerGestureIntent.visibleTranslation(along: -(reveal + 43), revealDistance: reveal), -43, accuracy: 0.001)
+    }
+
+    // The page must start moving before letting go would turn it on iOS, so
+    // there is visible feedback ahead of the turn, and short slips of the size
+    // fast typing produces (up to ~72pt on an iPhone) must not move it at all.
+    func testRevealSitsBetweenTypingSlipsAndTheTurnDistance() {
+        let iOSTurnRatio: CGFloat = 0.4
+        XCTAssertLessThan(CalculatorPagerGestureIntent.revealThresholdRatio, iOSTurnRatio)
+        XCTAssertGreaterThan(393 * CalculatorPagerGestureIntent.revealThresholdRatio, 72)
+    }
+
+    // A reveal distance below swipe recognition cannot draw travel that has
+    // not yet been recognised as a swipe.
+    func testRevealNeverStartsBeforeSwipeRecognition() {
+        let recognition = CalculatorPagerGestureIntent.minimumAxisTravel
+        XCTAssertEqual(CalculatorPagerGestureIntent.visibleTranslation(along: recognition, revealDistance: 0), 0)
+        XCTAssertEqual(CalculatorPagerGestureIntent.visibleTranslation(along: recognition + 10, revealDistance: 0), 10)
     }
 }
