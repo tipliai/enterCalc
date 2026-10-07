@@ -147,16 +147,23 @@ public enum VATRateCatalog {
 
 /// A rate being typed on the VAT or Tip panel's number pad (#124).
 ///
-/// Keeps the entry valid at every keystroke, so the panel can show live results
-/// while typing: never above `maximum`, at most `maximumFractionDigits`
-/// decimals, and no leading zeros. The text is held with a `.` separator and
-/// shown with the active number format's.
+/// Keeps the entry valid at every keystroke: below `limit`, no more digits
+/// than the calculator itself accepts (`maximumDigits`), and no leading zeros.
+/// The rate keeps its full precision for the maths; only what is shown is
+/// rounded, to `displayFractionDigits`. The text is held with a `.` separator
+/// and shown with the active number format's.
 public struct RateEntry: Equatable, Sendable {
     /// No real tax or tip exceeds 100%, but nothing forbids one, so typed rates
     /// go up to 999.999 — enough for anything plausible while keeping the
     /// field to a sensible length.
     public static let maximum: Decimal = Decimal(string: "999.999")!
-    public static let maximumFractionDigits = 3
+    /// Rates must stay below this; 999.999… is the largest.
+    public static let limit: Decimal = 1000
+    /// Rates are shown rounded to this many decimals; the maths uses them in
+    /// full.
+    public static let displayFractionDigits = 3
+    /// The same digit limit as numbers typed into the calculator.
+    public static let maximumDigits = 16
 
     public private(set) var text: String
     /// The first key replaces the rate being edited rather than appending to
@@ -170,20 +177,35 @@ public struct RateEntry: Equatable, Sendable {
     }
 
     /// The entry for text typed into a field, or `nil` when the text is not a
-    /// valid rate (a letter, a second separator, a third decimal, over 100).
-    /// Accepts the given decimal separator as well as `.` and `,`.
+    /// number (a letter, a second separator) or is 1000% or more. Accepts the
+    /// given decimal separator as well as `.` and `,`. Any number of decimals
+    /// may be typed: digits beyond what the calculator carries (`maximumDigits`)
+    /// are rounded off rather than refused.
     public init?(typed raw: String, decimalSeparator: String) {
-        text = ""
         replacesOnNextKey = false
-        for character in raw {
-            if let digit = character.wholeNumberValue, character.isASCII {
-                guard appendDigit(digit) else { return nil }
+        var normalized = ""
+        for character in raw.trimmingCharacters(in: .whitespaces) {
+            if character.wholeNumberValue != nil, character.isASCII {
+                normalized.append(character)
             } else if String(character) == decimalSeparator || character == "." || character == "," {
-                guard appendDecimalSeparator() else { return nil }
+                guard !normalized.contains(".") else { return nil }
+                normalized.append(".")
             } else {
                 return nil
             }
         }
+        guard !normalized.isEmpty else {
+            text = ""
+            return
+        }
+        guard normalized != ".",
+              let value = Decimal(string: normalized.hasPrefix(".") ? "0" + normalized : normalized,
+                                  locale: Locale(identifier: "en_US_POSIX")),
+              value < RateEntry.limit else { return nil }
+        let integerDigits = max(normalized.split(separator: ".", omittingEmptySubsequences: false).first.map {
+            String($0).drop { $0 == "0" }.count
+        } ?? 0, 1)
+        text = RateEntry.canonicalText(for: RateEntry.rounded(value, scale: max(RateEntry.maximumDigits - integerDigits, 0), mode: .plain))
     }
 
     /// The rate the text represents; `nil` while nothing has been typed.
@@ -232,19 +254,26 @@ public struct RateEntry: Equatable, Sendable {
     }
 
     private func isAcceptable(_ candidate: String) -> Bool {
-        let parts = candidate.split(separator: ".", omittingEmptySubsequences: false)
-        if parts.count == 2, parts[1].count > RateEntry.maximumFractionDigits { return false }
+        if candidate.filter(\.isNumber).count > RateEntry.maximumDigits { return false }
         guard let value = Decimal(string: candidate.hasSuffix(".") ? String(candidate.dropLast()) : candidate,
                                   locale: Locale(identifier: "en_US_POSIX")) else { return false }
-        if value > RateEntry.maximum { return false }
-        return true
+        return value < RateEntry.limit
     }
 
+    /// The rate in full, for storage and the maths.
     static func canonicalText(for rate: Decimal) -> String {
-        var rounded = Decimal()
-        var source = rate
-        NSDecimalRound(&rounded, &source, maximumFractionDigits, .plain)
-        return NSDecimalNumber(decimal: rounded).stringValue
+        NSDecimalNumber(decimal: rate).stringValue
+    }
+
+    /// A rate as shown on screen: rounded to `displayFractionDigits`, with no
+    /// trailing zeros. The value itself is not changed.
+    public static func roundedForDisplay(_ rate: Decimal) -> Decimal {
+        rounded(rate, scale: displayFractionDigits, mode: .plain)
+    }
+
+    /// The rate shown as the edit field's placeholder, rounded for display.
+    public static func displayText(for rate: Decimal, decimalSeparator: String) -> String {
+        canonicalText(for: roundedForDisplay(rate)).replacingOccurrences(of: ".", with: decimalSeparator)
     }
 
     /// The stepper's next rate. Whole rates step by 1; a rate with a fraction
@@ -263,7 +292,7 @@ public struct RateEntry: Equatable, Sendable {
         return min(max(next, 0), maximum)
     }
 
-    private static func rounded(_ value: Decimal, scale: Int, mode: NSDecimalNumber.RoundingMode) -> Decimal {
+    static func rounded(_ value: Decimal, scale: Int, mode: NSDecimalNumber.RoundingMode) -> Decimal {
         var result = Decimal()
         var source = value
         NSDecimalRound(&result, &source, scale, mode)

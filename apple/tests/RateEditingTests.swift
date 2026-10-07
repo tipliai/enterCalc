@@ -85,7 +85,7 @@ final class RateEditorTests: XCTestCase {
         editor.press(.digit(0))
         editor.press(.digit(0))
         editor.press(.digit(5))
-        XCTAssertEqual(live(), [1, 10, 100], "a fourth whole digit would exceed the maximum")
+        XCTAssertEqual(live(), [1, 10, 100], "1005 would be 1000% or more")
     }
 
     func testCancelAbandonsTheEdit() {
@@ -111,7 +111,7 @@ final class RateFieldTextTests: XCTestCase {
     }
 
     func testInvalidTextIsRejected() {
-        for bad in ["8a", "8.1.2", "8.1255", "1000", "1000.5", "-5", "1 2"] {
+        for bad in ["8a", "8.1.2", "1000", "1000.5", "-5", "."] {
             XCTAssertNil(RateEntry(typed: bad, decimalSeparator: "."), bad)
         }
     }
@@ -135,5 +135,28 @@ final class RateFieldTextTests: XCTestCase {
         editor.begin(.preset(1), value: 7, onLive: { _ in }, onCommit: { committed = $0 }, onCancel: {})
         editor.press(.done)
         XCTAssertEqual(committed, 7)
+    }
+
+    // More than three decimals are kept in full for the maths; only what is
+    // shown is rounded. Digits beyond what the calculator carries are rounded
+    // off rather than refused.
+    func testTypedRatesKeepFullPrecisionAndRoundOnlyForDisplay() {
+        let entry = RateEntry(typed: "12.34567", decimalSeparator: ".")
+        XCTAssertEqual(entry?.value, Decimal(string: "12.34567"))
+        XCTAssertEqual(RateEntry.roundedForDisplay(Decimal(string: "12.34567")!), Decimal(string: "12.346"))
+        XCTAssertEqual(RateEntry.displayText(for: Decimal(string: "12.34567")!, decimalSeparator: ","), "12,346")
+
+        let long = RateEntry(typed: "1.12345678901234567890", decimalSeparator: ".")
+        XCTAssertEqual(long?.value, Decimal(string: "1.123456789012346"), "rounded to the calculator's 16 digits")
+        XCTAssertEqual(RateEntry(typed: " 7 ", decimalSeparator: ".")?.value, 7)
+    }
+
+    // An untouched edit keeps the rate's full precision.
+    func testUntouchedEditKeepsFullPrecision() {
+        let editor = RateEditor()
+        var committed: Decimal?
+        editor.begin(.rate, value: Decimal(string: "12.34567")!, onLive: { _ in }, onCommit: { committed = $0 }, onCancel: {})
+        editor.press(.done)
+        XCTAssertEqual(committed, Decimal(string: "12.34567"))
     }
 }
