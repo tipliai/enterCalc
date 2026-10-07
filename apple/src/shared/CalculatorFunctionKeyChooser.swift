@@ -43,11 +43,26 @@ private struct FunctionOptionFramesKey: PreferenceKey {
 
 /// Grid of candidate functions shown during a hold-and-drag reassignment.
 public struct CalculatorFunctionKeyChooser: View {
+    #if os(macOS)
+    // Compact enough to fit below a top-row key in the smallest window, so
+    // the key being edited stays in view (#131). A pointer needs less room
+    // than a finger.
+    public static let columns: Int = 6
+    private static let cellSize: CGFloat = 36
+    private static let cellSpacing: CGFloat = 6
+    private static let panelPadding: CGFloat = 9
+    private static let anchorGap: CGFloat = 6
+    private static let glyphSize: CGFloat = 16
+    private static let headerHeight: CGFloat = 28
+    #else
     public static let columns: Int = 4
     private static let cellSize: CGFloat = 56
     private static let cellSpacing: CGFloat = 8
     private static let panelPadding: CGFloat = 12
     private static let anchorGap: CGFloat = 12
+    private static let glyphSize: CGFloat = 20
+    private static let headerHeight: CGFloat = 36
+    #endif
     private static let screenMargin: CGFloat = 8
 
     private let session: FunctionKeyChooserSession
@@ -55,11 +70,16 @@ public struct CalculatorFunctionKeyChooser: View {
     private let palette: Palette
     private let currencySymbol: String
     private let title: String
+    private let closeLabel: String
     private let label: (CalculatorFunctionKey) -> String
     private let onHighlight: (CalculatorFunctionKey?) -> Void
     private let onCommit: (CalculatorFunctionKey) -> Void
+    private let onClose: () -> Void
 
     @State private var optionFrames: [CalculatorFunctionKey: CGRect] = [:]
+    #if os(macOS)
+    @State private var isCloseHovering = false
+    #endif
 
     public init(
         session: FunctionKeyChooserSession,
@@ -67,18 +87,22 @@ public struct CalculatorFunctionKeyChooser: View {
         palette: Palette,
         currencySymbol: String,
         title: String,
+        closeLabel: String,
         label: @escaping (CalculatorFunctionKey) -> String,
         onHighlight: @escaping (CalculatorFunctionKey?) -> Void,
-        onCommit: @escaping (CalculatorFunctionKey) -> Void
+        onCommit: @escaping (CalculatorFunctionKey) -> Void,
+        onClose: @escaping () -> Void
     ) {
         self.session = session
         self.assignments = assignments
         self.palette = palette
         self.currencySymbol = currencySymbol
         self.title = title
+        self.closeLabel = closeLabel
         self.label = label
         self.onHighlight = onHighlight
         self.onCommit = onCommit
+        self.onClose = onClose
     }
 
     private var options: [CalculatorFunctionKey] { CalculatorFunctionKey.chooserOrder }
@@ -92,10 +116,8 @@ public struct CalculatorFunctionKeyChooser: View {
             + CGFloat(Self.columns - 1) * Self.cellSpacing
             + Self.panelPadding * 2
         let gridHeight = CGFloat(rowCount) * Self.cellSize + CGFloat(rowCount - 1) * Self.cellSpacing
-        return CGSize(width: width, height: gridHeight + Self.panelPadding * 2 + titleHeight)
+        return CGSize(width: width, height: gridHeight + Self.panelPadding * 2 + Self.headerHeight + Self.cellSpacing)
     }
-
-    private var titleHeight: CGFloat { 22 }
 
     public var body: some View {
         GeometryReader { geometry in
@@ -117,11 +139,7 @@ public struct CalculatorFunctionKeyChooser: View {
 
     private var panel: some View {
         VStack(spacing: Self.cellSpacing) {
-            Text(title)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(palette.textSecondary)
-                .frame(height: titleHeight)
-                .accessibilityAddTraits(.isHeader)
+            header
 
             VStack(spacing: Self.cellSpacing) {
                 ForEach(0..<rowCount, id: \.self) { row in
@@ -150,6 +168,54 @@ public struct CalculatorFunctionKeyChooser: View {
         )
     }
 
+    /// The title centred, with a close button at the trailing edge like the
+    /// rounding, VAT and Tip panes (#131). Closing leaves the key as it was.
+    private var header: some View {
+        ZStack {
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(palette.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .accessibilityAddTraits(.isHeader)
+
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                closeButton
+            }
+        }
+        .frame(height: Self.headerHeight)
+    }
+
+    @ViewBuilder
+    private var closeButton: some View {
+        #if os(macOS)
+        Button(action: onClose) {
+            Image(systemName: "xmark")
+                .frame(width: 16, height: 16, alignment: .center)
+                .padding(6)
+                .background(isCloseHovering ? palette.headerHover : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(palette.textSecondary)
+        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .help(closeLabel)
+        .accessibilityLabel(Text(closeLabel))
+        .onHover { isCloseHovering = $0 }
+        #else
+        Button(action: onClose) {
+            Image(systemName: "xmark")
+                .font(EnterCalcFont.appFont(size: 16))
+                .frame(width: 28, height: 28)
+                .foregroundColor(palette.textSecondary)
+        }
+        .frame(width: 44, height: Self.headerHeight)
+        .contentShape(Rectangle())
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(closeLabel))
+        #endif
+    }
+
     private func cell(for function: CalculatorFunctionKey) -> some View {
         let isHighlighted = session.highlighted == function
         let isCurrent = assignments[session.slot] == function
@@ -160,7 +226,7 @@ public struct CalculatorFunctionKeyChooser: View {
             FunctionKeyGlyph(
                 function: function,
                 currencySymbol: currencySymbol,
-                fontSize: 20,
+                fontSize: Self.glyphSize,
                 color: palette.textPrimary
             )
             .frame(width: Self.cellSize, height: Self.cellSize)
@@ -203,21 +269,41 @@ public struct CalculatorFunctionKeyChooser: View {
         onHighlight(hit)
     }
 
-    /// Prefers sitting above the key that started the gesture, flips below when
-    /// there is no room, and always stays inside the container.
+    /// Keeps the key being edited in view: on touch the panel prefers to sit
+    /// above it, clear of the finger; with a pointer it opens below it, under
+    /// the menu it came from (#131). Either way it flips to the other side
+    /// when there is no room, and always stays inside the container.
     private func panelOrigin(in geometry: GeometryProxy) -> CGPoint {
-        let container = geometry.frame(in: .global)
-        let size = panelSize
+        Self.panelOrigin(anchor: session.anchor, panelSize: panelSize, container: geometry.frame(in: .global))
+    }
 
-        var x = session.anchor.midX - size.width / 2
-        x = min(max(x, container.minX + Self.screenMargin), max(container.maxX - size.width - Self.screenMargin, container.minX + Self.screenMargin))
+    static func panelOrigin(anchor: CGRect, panelSize size: CGSize, container: CGRect) -> CGPoint {
+        var x = anchor.midX - size.width / 2
+        x = min(max(x, container.minX + screenMargin), max(container.maxX - size.width - screenMargin, container.minX + screenMargin))
 
-        var y = session.anchor.minY - Self.anchorGap - size.height
-        if y < container.minY + Self.screenMargin {
-            let below = session.anchor.maxY + Self.anchorGap
-            y = below + size.height + Self.screenMargin <= container.maxY
-                ? below
-                : max(container.minY + Self.screenMargin, container.midY - size.height / 2)
+        let above = anchor.minY - anchorGap - size.height
+        let below = anchor.maxY + anchorGap
+        let fitsAbove = above >= container.minY + screenMargin
+        let fitsBelow = below + size.height + screenMargin <= container.maxY
+        #if os(macOS)
+        let prefersBelow = true
+        #else
+        let prefersBelow = false
+        #endif
+
+        let y: CGFloat
+        if prefersBelow ? fitsBelow : !fitsAbove && fitsBelow {
+            y = below
+        } else if fitsAbove {
+            y = above
+        } else if fitsBelow {
+            y = below
+        } else {
+            // No room either side: as close to the preferred side as fits.
+            let lowest = container.maxY - screenMargin - size.height
+            y = prefersBelow
+                ? max(container.minY + screenMargin, min(below, lowest))
+                : max(container.minY + screenMargin, min(above, lowest))
         }
 
         return CGPoint(x: x - container.minX, y: y - container.minY)
@@ -269,8 +355,8 @@ public struct FunctionKeyGlyph: View {
 /// succeeds — the chooser is a sibling overlay, not a child of the key — and a
 /// sequenced gesture reports locations relative to the key instead.
 ///
-/// macOS uses `secondaryClickToOpenFunctionChooser` instead; holding a mouse
-/// button down is not how a desktop opens a contextual chooser.
+/// macOS uses `functionKeyContextMenu` instead; holding a mouse button down
+/// is not how a desktop opens a contextual chooser.
 public struct FunctionKeyHoldModifier: ViewModifier {
     /// How long the finger has to stay down before the chooser appears.
     public static let holdDuration: TimeInterval = 0.4
@@ -439,73 +525,23 @@ public struct OptionalFunctionKeyHold: ViewModifier {
 }
 
 #if os(macOS)
-import AppKit
-
-/// Opens the function chooser on a secondary click — right-click, or
-/// Control-click, which macOS treats the same way.
-///
-/// SwiftUI has no secondary-click gesture, and `.contextMenu` would draw an
-/// AppKit menu rather than the chooser panel. The capture view therefore
-/// hit-tests itself *only* for secondary-click events, so ordinary left clicks
-/// pass straight through to the button underneath and keep working.
-private struct SecondaryClickCatcher: NSViewRepresentable {
-    let onSecondaryClick: () -> Void
-
-    final class CatcherView: NSView {
-        var onSecondaryClick: (() -> Void)?
-
-        override func hitTest(_ point: NSPoint) -> NSView? {
-            guard let event = NSApp.currentEvent else { return nil }
-
-            switch event.type {
-            case .rightMouseDown, .rightMouseUp, .rightMouseDragged:
-                return super.hitTest(point)
-            case .leftMouseDown, .leftMouseUp, .leftMouseDragged:
-                // Control-click is a secondary click on macOS.
-                return event.modifierFlags.contains(.control) ? super.hitTest(point) : nil
-            default:
-                return nil
-            }
-        }
-
-        override func rightMouseDown(with event: NSEvent) {
-            onSecondaryClick?()
-        }
-
-        override func mouseDown(with event: NSEvent) {
-            guard event.modifierFlags.contains(.control) else {
-                super.mouseDown(with: event)
-                return
-            }
-
-            onSecondaryClick?()
-        }
-    }
-
-    func makeNSView(context: Context) -> CatcherView {
-        let view = CatcherView()
-        view.onSecondaryClick = onSecondaryClick
-        return view
-    }
-
-    func updateNSView(_ nsView: CatcherView, context: Context) {
-        nsView.onSecondaryClick = onSecondaryClick
-    }
-}
-
 extension View {
-    /// Makes this key reassignable by right-clicking (or Control-clicking) it.
-    /// The key's frame is not derived from AppKit here: the caller already
-    /// tracks it through SwiftUI's own `.global` space, which is the space the
-    /// chooser positions itself in. Converting an `NSView` frame instead would
-    /// mean matching AppKit's flipped origin to SwiftUI's by hand.
+    /// Makes this key reassignable from its context menu: right-click (or
+    /// Control-click) shows the standard menu with one item, Edit, which
+    /// opens the chooser (#131). Fixed keys get no menu.
+    ///
+    /// The key's frame comes from the caller, which tracks it in SwiftUI's own
+    /// `.global` space: the space the chooser positions itself in.
     @ViewBuilder
-    public func secondaryClickToOpenFunctionChooser(
+    public func functionKeyContextMenu(
         slot: CalculatorFunctionSlot?,
-        onOpen: @escaping (CalculatorFunctionSlot) -> Void
+        editLabel: String,
+        onEdit: @escaping (CalculatorFunctionSlot) -> Void
     ) -> some View {
         if let slot {
-            overlay(SecondaryClickCatcher { onOpen(slot) })
+            contextMenu {
+                Button(editLabel) { onEdit(slot) }
+            }
         } else {
             self
         }

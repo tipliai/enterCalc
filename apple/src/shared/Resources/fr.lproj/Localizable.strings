@@ -72,6 +72,8 @@
 "functionKey.chooser.title" = "Choisir une fonction";
 "functionKey.change" = "Changer de fonction";
 "functionKey.hint" = "Maintenez appuyé pour changer cette touche";
+"functionKey.hint.mac" = "Cliquez avec le bouton droit et choisissez Modifier pour changer cette touche";
+"functionKey.edit" = "Modifier";
 
 /* Outils du mode devise : TVA et pourboire (ticket #92) */
 "currency.vat.title" = "TVA";

@@ -72,6 +72,8 @@
 "functionKey.chooser.title" = "Elegir función";
 "functionKey.change" = "Cambiar función";
 "functionKey.hint" = "Mantén pulsado para cambiar esta tecla";
+"functionKey.hint.mac" = "Haz clic derecho y elige Editar para cambiar esta tecla";
+"functionKey.edit" = "Editar";
 
 /* Herramientas del modo moneda: IVA y propina (incidencia #92) */
 "currency.vat.title" = "IVA";

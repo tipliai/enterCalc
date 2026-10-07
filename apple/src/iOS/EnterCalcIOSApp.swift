@@ -861,11 +861,19 @@ struct EnterCalcIOSView: View {
                     palette: palette,
                     currencySymbol: activeScreen.settings.currencySymbol,
                     title: localized("functionKey.chooser.title"),
+                    closeLabel: localized("currency.tool.close"),
                     label: { functionKeyLabel($0) },
                     onHighlight: { highlightFunctionChooserOption($0) },
-                    onCommit: { commitFunctionChooser($0) }
+                    onCommit: { commitFunctionChooser($0) },
+                    onClose: { dismissFunctionChooser() }
                 )
             }
+            // While the press that opened it is still down, the chooser must
+            // not take that touch: appearing under the finger, it left the
+            // key's own press gesture unfinished, so the key stayed drawn as
+            // pressed and the next tap anywhere was swallowed (#131). The drag
+            // is tracked by the key's gesture until the finger lifts.
+            .allowsHitTesting(session.dragLocation == nil)
             .transition(.opacity)
         }
     }
@@ -5506,6 +5514,15 @@ private struct IOSCompactActionButton: View {
     private static let popSpringDamping: Double = 0.62
     private var cornerRadius: CGFloat { min(max(height * 0.28, 6), 12) }
 
+    /// The folded-down corner marking a key whose function can be changed.
+    private var ear: CGFloat {
+        isConfigurable ? FunctionKeyEar.size(forKeyHeight: height, isActionRow: true) : 0
+    }
+
+    private var keyShape: FunctionKeyShape {
+        FunctionKeyShape(cornerRadius: cornerRadius, ear: ear)
+    }
+
     var body: some View {
         Button {
             // The same press that opened the chooser must not also run the
@@ -5565,11 +5582,12 @@ private struct IOSCompactActionButton: View {
             onRelease: onChooserRelease
         )
         .background(
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            keyShape
                 .fill(isHighlighted ? palette.accent : palette.buttonFunction)
         )
         .accessibilityAddTraits(isHighlighted ? [.isSelected] : [])
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .clipShape(keyShape)
+        .functionKeyEar(cornerRadius: cornerRadius, ear: ear, color: isHighlighted ? palette.accentText.opacity(0.3) : palette.functionKeyEar)
         .frame(height: height)
     }
 
@@ -5679,7 +5697,7 @@ private struct IOSKeypadButton: View {
         GeometryReader { geometry in
             buttonSurface
                 .frame(width: geometry.size.width, height: geometry.size.height)
-                .contentShape(RoundedRectangle(cornerRadius: scaledCornerRadius, style: .continuous))
+                .contentShape(keyShape)
                 .gesture(pressGesture(in: geometry.size))
                 .background(
                     GeometryReader { proxy in
@@ -5697,6 +5715,10 @@ private struct IOSKeypadButton: View {
                         onRelease: { onChooserRelease?() }
                     )
                 )
+                .onChange(of: suppressesTap) { _, suppressed in
+                    // The press became a hold that opened the chooser.
+                    if suppressed { isPressed = false }
+                }
                 .accessibilityElement()
                 .accessibilityLabel(Text(button.accessibilityLabel ?? button.title))
                 .accessibilityAddTraits(.isButton)
@@ -5713,6 +5735,15 @@ private struct IOSKeypadButton: View {
         .frame(height: buttonHeight)
     }
 
+    /// The folded-down corner marking a key whose function can be changed.
+    private var ear: CGFloat {
+        configurableSlot == nil ? 0 : FunctionKeyEar.size(forKeyHeight: buttonHeight, isActionRow: false)
+    }
+
+    private var keyShape: FunctionKeyShape {
+        FunctionKeyShape(cornerRadius: scaledCornerRadius, ear: ear)
+    }
+
     /// The slot this key occupies, when reassignment is available here.
     private var configurableSlot: CalculatorFunctionSlot? {
         isConfigurable ? button.slot : nil
@@ -5723,9 +5754,10 @@ private struct IOSKeypadButton: View {
             .foregroundStyle(isHighlighted ? palette.accentText : button.foregroundColor(palette: palette))
             .frame(maxWidth: .infinity, minHeight: buttonHeight, maxHeight: buttonHeight)
             .background(buttonBackground)
+            .functionKeyEar(cornerRadius: scaledCornerRadius, ear: ear, color: isHighlighted ? palette.accentText.opacity(0.3) : palette.functionKeyEar)
             .scaleEffect(reduceMotionEnabled ? 1.0 : pressPopScale)
             .overlay(
-                RoundedRectangle(cornerRadius: scaledCornerRadius, style: .continuous)
+                keyShape
                     .fill(palette.buttonHoverOverlay)
                     .opacity(isPressed && !reduceMotionEnabled ? 1 : 0)
                     .allowsHitTesting(false)
@@ -5737,7 +5769,7 @@ private struct IOSKeypadButton: View {
                         let travel = diagonal * 3.0
                         let offset = (0.5 - shimmerProgress) * travel
 
-                        RoundedRectangle(cornerRadius: scaledCornerRadius, style: .continuous)
+                        keyShape
                             .fill(Color.white.opacity(0.08))
                             .overlay {
                                 Rectangle()
@@ -5757,7 +5789,7 @@ private struct IOSKeypadButton: View {
                                     .offset(x: offset, y: offset)
                             }
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: scaledCornerRadius, style: .continuous))
+                    .clipShape(keyShape)
                     .allowsHitTesting(false)
                 }
             }
@@ -5873,25 +5905,24 @@ private struct IOSKeypadButton: View {
 
     @ViewBuilder
     private var buttonBackground: some View {
-        let cr = scaledCornerRadius
         if isEqualsButton {
-            RoundedRectangle(cornerRadius: cr, style: .continuous)
+            keyShape
                 .fill(equalsButtonGradient)
         } else if let revealOrder = Self.operatorRevealOrder[button.title],
            let gradColor = palette.operatorColumnColor(for: button.title) {
             let overlayOpacity = min(1.0, max(0.0, operatorRevealProgress - Double(revealOrder))) * operatorAnimFadeOpacity
             ZStack {
-                RoundedRectangle(cornerRadius: cr, style: .continuous)
+                keyShape
                     .fill(button.backgroundStyle(palette: palette))
-                RoundedRectangle(cornerRadius: cr, style: .continuous)
+                keyShape
                     .fill(gradColor)
                     .opacity(overlayOpacity)
             }
         } else if isHighlighted {
-            RoundedRectangle(cornerRadius: cr, style: .continuous)
+            keyShape
                 .fill(palette.accent)
         } else {
-            RoundedRectangle(cornerRadius: cr, style: .continuous)
+            keyShape
                 .fill(button.backgroundStyle(palette: palette))
         }
     }

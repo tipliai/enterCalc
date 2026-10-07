@@ -72,6 +72,8 @@
 "functionKey.chooser.title" = "Choose Function";
 "functionKey.change" = "Change Function";
 "functionKey.hint" = "Press and hold to change this key";
+"functionKey.hint.mac" = "Right-click and choose Edit to change this key";
+"functionKey.edit" = "Edit";
 
 /* Currency mode tools: VAT and tipping (issue #92) */
 "currency.vat.title" = "VAT";
