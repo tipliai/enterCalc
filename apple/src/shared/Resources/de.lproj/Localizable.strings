@@ -72,6 +72,8 @@
 "functionKey.chooser.title" = "Funktion wählen";
 "functionKey.change" = "Funktion ändern";
 "functionKey.hint" = "Gedrückt halten, um diese Taste zu ändern";
+"functionKey.hint.mac" = "Rechtsklick und „Bearbeiten“ wählen, um diese Taste zu ändern";
+"functionKey.edit" = "Bearbeiten";
 
 /* Werkzeuge im Währungsmodus: MwSt. und Trinkgeld (Issue #92) */
 "currency.vat.title" = "MwSt.";

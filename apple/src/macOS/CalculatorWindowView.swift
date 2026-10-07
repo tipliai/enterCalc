@@ -968,9 +968,11 @@ struct CalculatorWindowView: View {
                     palette: palette,
                     currencySymbol: windowSettings.currencySymbol,
                     title: macLocalized("functionKey.chooser.title", bundle: currentLocalizationBundle),
+                    closeLabel: macLocalized("currency.tool.close", bundle: currentLocalizationBundle),
                     label: { functionKeyLabel($0) },
                     onHighlight: { highlightFunctionChooserOption($0) },
-                    onCommit: { commitFunctionChooser($0) }
+                    onCommit: { commitFunctionChooser($0) },
+                    onClose: { dismissFunctionChooser() }
                 )
             }
             .transition(.opacity)
@@ -999,7 +1001,8 @@ struct CalculatorWindowView: View {
                                 currencySymbol: windowSettings.currencySymbol,
                                 accessibilityLabel: button.accessibilityLabel,
                                 changeActionName: macLocalized("functionKey.change", bundle: currentLocalizationBundle),
-                                holdHint: macLocalized("functionKey.hint", bundle: currentLocalizationBundle),
+                                editActionName: macLocalized("functionKey.edit", bundle: currentLocalizationBundle),
+                                holdHint: macLocalized("functionKey.hint.mac", bundle: currentLocalizationBundle),
                                 isBare: button.isBare,
                                 height: compactActionHeight,
                                 disabled: button.action == nil,
@@ -1037,7 +1040,8 @@ struct CalculatorWindowView: View {
                                     accessibilityLabelOverride: button.accessibilityLabel,
                                     slot: supportsConfigurableFunctionKeys ? button.slot : nil,
                                     changeActionName: macLocalized("functionKey.change", bundle: currentLocalizationBundle),
-                                    holdHint: macLocalized("functionKey.hint", bundle: currentLocalizationBundle),
+                                    editActionName: macLocalized("functionKey.edit", bundle: currentLocalizationBundle),
+                                    holdHint: macLocalized("functionKey.hint.mac", bundle: currentLocalizationBundle),
                                     onChooserOpen: { slot, anchor, dragging in
                                         openFunctionChooser(for: slot, anchor: anchor, dragging: dragging)
                                     },
@@ -1828,6 +1832,13 @@ struct CalculatorWindowView: View {
             if event.keyCode == 53 { return true }
         }
 
+        // The function chooser closes the same way, leaving the key as it was
+        // (#131).
+        if functionChooser != nil {
+            dismissFunctionChooser()
+            if event.keyCode == 53 { return true }
+        }
+
         let chars = event.charactersIgnoringModifiers ?? ""
         let inputChars = event.characters ?? chars
         let insertFunctionCharacter = Character(UnicodeScalar(NSInsertFunctionKey)!)
@@ -2267,6 +2278,7 @@ private struct CompactActionButton: View {
     let currencySymbol: String
     let accessibilityLabel: String
     let changeActionName: String
+    let editActionName: String
     let holdHint: String
     let isBare: Bool
     let height: CGFloat
@@ -2283,6 +2295,15 @@ private struct CompactActionButton: View {
     @State private var globalFrame: CGRect = .zero
 
     private var cornerRadius: CGFloat { min(max(height * 0.28, 5), 10) }
+
+    /// The folded-down corner marking a key whose function can be changed.
+    private var ear: CGFloat {
+        isConfigurable && !isBare ? FunctionKeyEar.size(forKeyHeight: height, isActionRow: true) : 0
+    }
+
+    private var keyShape: FunctionKeyShape {
+        FunctionKeyShape(cornerRadius: cornerRadius, ear: ear)
+    }
 
     var body: some View {
         Group {
@@ -2316,13 +2337,14 @@ private struct CompactActionButton: View {
                             .onChange(of: proxy.frame(in: .global)) { _, updated in globalFrame = updated }
                     }
                 )
-                .secondaryClickToOpenFunctionChooser(slot: isConfigurable ? slot : nil) { slot in
+                .functionKeyContextMenu(slot: isConfigurable ? slot : nil, editLabel: editActionName) { slot in
                     onChooserOpen(slot, globalFrame, false)
                 }
                 .background(background)
-                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .clipShape(keyShape)
+                .functionKeyEar(cornerRadius: cornerRadius, ear: ear, color: isHighlighted ? palette.accentText.opacity(0.3) : palette.functionKeyEar)
                 .overlay(
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    keyShape
                         .fill(palette.buttonHoverOverlay)
                         .opacity(hovering ? 1.0 : 0.0)
                         .allowsHitTesting(false)
@@ -2351,7 +2373,7 @@ private struct CompactActionButton: View {
         if isBare {
             Color.clear
         } else {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            keyShape
                 .fill(isHighlighted ? palette.accent : palette.buttonOperation)
         }
     }
@@ -2378,6 +2400,7 @@ private struct CompactActionButton: View {
         var accessibilityLabelOverride: String? = nil
         var slot: CalculatorFunctionSlot? = nil
         var changeActionName: String = ""
+        var editActionName: String = ""
         var holdHint: String = ""
         var onChooserOpen: ((CalculatorFunctionSlot, CGRect, Bool) -> Void)? = nil
         var operatorRevealProgress: Double = 0.0
@@ -2423,20 +2446,21 @@ private struct CompactActionButton: View {
                         .onChange(of: proxy.frame(in: .global)) { _, updated in globalFrame = updated }
                 }
             )
-            .secondaryClickToOpenFunctionChooser(slot: slot) { slot in
+            .functionKeyContextMenu(slot: slot, editLabel: editActionName) { slot in
                 onChooserOpen?(slot, globalFrame, false)
             }
             .background(buttonBackground)
             .foregroundStyle(foregroundColor)
             .opacity(enabled ? 1.0 : 0.35)
             .frame(height: max(height, 1))
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .clipShape(keyShape)
             .overlay(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                keyShape
                     .stroke(borderColor, lineWidth: 1)
             )
+            .functionKeyEar(cornerRadius: 6, ear: ear, color: isHighlighted ? palette.accentText.opacity(0.3) : palette.functionKeyEar)
             .overlay(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                keyShape
                     .fill(hoverOverlay)
                     .opacity(hovering ? 1.0 : 0.0)
                     .allowsHitTesting(false)
@@ -2448,7 +2472,7 @@ private struct CompactActionButton: View {
                         let travel = diagonal * 3.0
                         let offset = (0.5 - shimmerProgress) * travel
 
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        keyShape
                             .fill(Color.white.opacity(0.08))
                             .overlay {
                                 Rectangle()
@@ -2468,11 +2492,11 @@ private struct CompactActionButton: View {
                                     .offset(x: offset, y: offset)
                             }
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .clipShape(keyShape)
                     .allowsHitTesting(false)
                 }
             }
-            .contentShape(RoundedRectangle(cornerRadius: 6))
+            .contentShape(keyShape)
             .zIndex(pressPopScale > 1.001 ? 1 : 0)
             .disabled(!enabled)
             .simultaneousGesture(
@@ -2573,22 +2597,31 @@ private struct CompactActionButton: View {
         @ViewBuilder
         private var buttonBackground: some View {
             if kind == .accent {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                keyShape
                     .fill(accentButtonGradient)
             } else if let revealOrder = Self.operatorRevealOrder[title],
                let gradColor = palette.operatorColumnColor(for: title) {
                 let overlayOpacity = min(1.0, max(0.0, operatorRevealProgress - Double(revealOrder))) * operatorAnimFadeOpacity
                 ZStack {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    keyShape
                         .fill(backgroundColor)
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    keyShape
                         .fill(gradColor)
                         .opacity(overlayOpacity)
                 }
             } else {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                keyShape
                     .fill(isHighlighted ? AnyShapeStyle(palette.accent) : backgroundStyle)
             }
+        }
+
+        /// The folded-down corner marking a key whose function can be changed.
+        private var ear: CGFloat {
+            slot == nil ? 0 : FunctionKeyEar.size(forKeyHeight: height, isActionRow: false)
+        }
+
+        private var keyShape: FunctionKeyShape {
+            FunctionKeyShape(cornerRadius: 6, ear: ear)
         }
 
         private var hoverOverlay: Color {

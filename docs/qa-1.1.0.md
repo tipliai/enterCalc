@@ -79,12 +79,12 @@ Swipe intent, as revised by #122: a key accepts a press that travels up to 22pt,
 
 Every step below was driven end to end automatically — on the iPhone simulator by synthetic touches, on macOS by synthetic mouse events — confirming the key changed, the swap moved the displaced function, and the press or click that opened the chooser did **not** also run the function it was replacing. What needs a person is how it feels and how the panel looks.
 
-**macOS — right-click**
+**macOS — context menu** (changed by #131)
 
-1. Right-click any key in the top row. The chooser opens next to it, above where there is room and below where there is not.
+1. Right-click any key in the top row. The standard context menu shows one item, **Edit**; choose it and the chooser opens **below** the key, so the key and its current function stay in view (above it only when there is no room below).
 2. Control-click one. Same result; macOS treats it as a secondary click.
 3. Click an option. The key changes immediately.
-4. Click anywhere outside the panel. It closes and nothing changes.
+4. Click anywhere outside the panel, click its **✕**, or press **Escape**. It closes and nothing changes.
 5. Plain left-click still runs the key's function — the currency key should still enter and leave Currency mode.
 6. Repeat on the two large `( )` and `%` keys.
 
@@ -92,7 +92,7 @@ Every step below was driven end to end automatically — on the iPhone simulator
 
 7. Press and hold any top-row key. The chooser appears after about 0.4s and **stays open when you lift your finger**.
 8. Tap an option. The key changes immediately.
-9. Tap anywhere outside the panel. It closes and nothing changes — including no keypad key firing underneath.
+9. Tap anywhere outside the panel, or its **✕**. It closes and nothing changes — including no keypad key firing underneath.
 10. Without lifting, drag from the key straight onto an option and release there. That commits too, for anyone who prefers one continuous motion.
 11. Press and hold, then move off before the chooser opens. No chooser; the key behaves as a normal press or swipe.
 12. A plain quick tap still runs the key's function.
@@ -104,10 +104,19 @@ Every step below was driven end to end automatically — on the iPhone simulator
 15. Pick a function that is not on the keypad at all. The displaced function simply disappears; that is intended.
 16. Reassign a key, quit and reopen. The layout should survive.
 17. **iPad:** set up page 1 and page 2 differently and swipe between them. Each page keeps its own layout. **macOS:** with two windows open, change one — the other keeps its layout until it is closed. A newly opened window starts from the most recently changed layout, the same as theme, language and every other window setting.
-18. Switch to the **alternative keypad** in Settings. Its keys are deliberately fixed — press-and-hold and right-click should both do nothing there.
+18. Switch to the **alternative keypad** in Settings. Its keys are deliberately fixed — press-and-hold and right-click should both do nothing there, and no key has a dog-ear.
 19. Check the panel in Dark and Light themes, at the smallest window width, and in landscape on iPhone.
 20. **VoiceOver:** each configurable key should announce the *function's* name — "Undo", "Square Root" — not its glyph, and offer a **Change Function** action that opens the chooser.
 21. Run in another language and confirm the chooser title, the hint and every function name are translated.
+
+## Function keys: Edit menu, repeated edits, close button and dog-ear — #131
+
+1. **Dog-ear.** On the Basic keypad, the six action-row keys and the `( )` and `%` keys have their top-right corner turned down; no other key does. Compare with the design canvas (Light, Dark and Blue, iPhone and Mac): the fold is a soft triangle with a rounded tip and a faint shadow, about 15pt on iPhone and 10pt on Mac for the large keys. Check it with Increase Contrast too, and on the currency key while Currency mode is on (accent fill).
+2. **Pressing a dog-eared key** still pops and highlights in its cut-corner shape, and the hover highlight on Mac follows the cut.
+3. **Back-to-back edits.** Change a key, then immediately change it again, several times, then change the other large key. Every open, choice and close should work. On iOS, after a press-and-hold the key must not stay drawn as pressed, and the next tap anywhere must register.
+4. **Close.** The chooser's **✕** closes it without changing anything, on every platform; on Mac it has the same hover as the other panes' buttons.
+5. **Mac hint.** With VoiceOver, a changeable Mac key's hint says to right-click and choose Edit (not "press and hold").
+6. Run in another language: **Edit** in the context menu and the Mac hint are translated.
 
 If a check fails, `ENTERCALC_DEBUG_LOGS=1` makes the app log every chooser open and every reassignment as `[functionKeys] <slot> = <function>; layout = …`, which the macOS driver's `log` command prints. The accessibility tree cannot show which function a key carries, so that log is the only readable record.
 ## Percentage and VAT maths — #25
