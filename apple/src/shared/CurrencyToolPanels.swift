@@ -137,6 +137,12 @@ private struct RateChooser: View {
     let onPresetEdited: (Int, Decimal?) -> Void
     /// The Tip pane uses a slider instead of the − rate + selector.
     var showsStepper: Bool = true
+    /// When set, only this preset is shown as selected, rather than whichever
+    /// preset equals the rate. The Tip pane uses it so a preset lights up only
+    /// when pressed, not as the slider passes over its value.
+    var pressedSlot: Int?? = nil
+    /// Told which preset was pressed or edited.
+    var onPresetChosen: ((Int) -> Void)? = nil
 
     @State private var typedText = ""
 
@@ -207,7 +213,7 @@ private struct RateChooser: View {
     }
 
     private func presetButton(slot: Int, rate: Decimal) -> some View {
-        let isSelected = rate == selected
+        let isSelected = pressedSlot.map { $0 == slot } ?? (rate == selected)
         return Text("\(format(rate))%")
             .font(.system(size: 13, weight: .medium))
             .foregroundStyle(isSelected ? palette.accentText : palette.textPrimary)
@@ -218,14 +224,19 @@ private struct RateChooser: View {
                     .fill(isSelected ? palette.accent : palette.buttonFunction)
             )
             .contentShape(Rectangle())
-            .onTapGesture { onSelect(rate) }
+            .onTapGesture { choose(slot: slot, rate: rate) }
             .onLongPressGesture(minimumDuration: 0.45) { beginEditingPreset(slot) }
             .accessibilityElement()
             .accessibilityLabel(Text("\(format(rate))%"))
             .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : [.isButton])
             .accessibilityHint(Text(labels.presetHint))
-            .accessibilityAction { onSelect(rate) }
+            .accessibilityAction { choose(slot: slot, rate: rate) }
             .accessibilityAction(named: Text(labels.editPreset)) { beginEditingPreset(slot) }
+    }
+
+    private func choose(slot: Int, rate: Decimal) {
+        onPresetChosen?(slot)
+        onSelect(rate)
     }
 
     private func beginTypingRate() {
@@ -250,6 +261,7 @@ private struct RateChooser: View {
             onLive: onSelect,
             onCommit: { rate in
                 onPresetEdited(slot, rate)
+                onPresetChosen?(slot)
                 onSelect(rate)
             },
             onCancel: { onSelect(original) }
@@ -514,6 +526,10 @@ public struct CurrencyTipPanel: View {
     private let onRemove: () -> Void
     private let onDismiss: () -> Void
 
+    /// The preset last pressed in this pane. Moving the slider clears it, so a
+    /// preset is shown as selected only when it was actually pressed.
+    @State private var pressedPreset: Int?
+
     public init(
         bill: Decimal,
         rate: Decimal,
@@ -577,7 +593,9 @@ public struct CurrencyTipPanel: View {
                     editor: rateEditor,
                     onSelect: { onRateChange(max($0, 0)) },
                     onPresetEdited: onPresetEdited,
-                    showsStepper: false
+                    showsStepper: false,
+                    pressedSlot: .some(pressedPreset),
+                    onPresetChosen: { pressedPreset = $0 }
                 )
 
                 VStack(spacing: 6) {
@@ -594,12 +612,19 @@ public struct CurrencyTipPanel: View {
                     rate: rate,
                     label: localized("currency.tip.rate"),
                     palette: palette,
-                    onChange: { onRateChange($0) }
+                    onChange: { newRate in
+                        pressedPreset = nil
+                        onRateChange(newRate)
+                    }
                 )
             }
         }
         // Applied as soon as the panel opens, and again on every change.
-        .onAppear(perform: sendResult)
+        .onAppear {
+            // Reopening after choosing a preset shows it as chosen.
+            pressedPreset = presets.rates.firstIndex(of: rate)
+            sendResult()
+        }
         .onChange(of: total) { _, _ in sendResult() }
     }
 
