@@ -120,3 +120,32 @@ final class CompletedCalculationCountTests: XCTestCase {
         XCTAssertEqual(viewModel.completedCalculationCount, 1)
     }
 }
+
+final class CompletedCalculationTallyTests: XCTestCase {
+    func testAddsEachPagesGrowthOnce() {
+        let first = UUID(), second = UUID()
+        var tally = CompletedCalculationTally()
+        tally.record(count: 3, forPage: first)
+        tally.record(count: 3, forPage: first)
+        tally.record(count: 5, forPage: first)
+        tally.record(count: 4, forPage: second)
+        XCTAssertEqual(tally.total, 9)
+    }
+
+    // After a relaunch the stored total carries on, and the pages' in-memory
+    // counts start again from zero.
+    func testCarriesTheStoredTotalAcrossLaunches() {
+        var tally = CompletedCalculationTally(total: 22)
+        tally.record(count: 3, forPage: UUID())
+        XCTAssertEqual(tally.total, ReviewPromptPolicy.minimumCompletedCalculations)
+    }
+
+    func testAPageCountGoingBackDoesNotSubtract() {
+        let page = UUID()
+        var tally = CompletedCalculationTally()
+        tally.record(count: 4, forPage: page)
+        tally.record(count: 1, forPage: page)
+        tally.record(count: 2, forPage: page)
+        XCTAssertEqual(tally.total, 5)
+    }
+}

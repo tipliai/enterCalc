@@ -101,7 +101,9 @@ cmd_build() {
     -configuration Debug \
     -destination 'platform=macOS' \
     -derivedDataPath "$BUILD_DIR" \
-    build 2>&1 | grep -E "error:|warning: unable|BUILD" || true
+    build 2>&1 | { grep -E "error:|warning: unable|BUILD" || true; }
+  # pipefail carries xcodebuild's status through the filter, so a failed
+  # build stops here instead of reporting a stale .qa-build bundle as new.
   require_app
   echo "Built: $APP_PATH"
 }

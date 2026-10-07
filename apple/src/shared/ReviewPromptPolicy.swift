@@ -38,3 +38,26 @@ public enum ReviewPromptPolicy {
         return lastPromptedVersion != currentVersion
     }
 }
+
+/// Turns each calculator page's running count of completed calculations into
+/// one total across pages and launches, for `ReviewPromptPolicy`.
+///
+/// A page's count lives in memory and starts at zero, so only the growth since
+/// it was last seen is added. The total is what gets stored.
+public struct CompletedCalculationTally {
+    public private(set) var total: Int
+    private var lastSeen: [UUID: Int] = [:]
+
+    public init(total: Int = 0) {
+        self.total = max(total, 0)
+    }
+
+    /// Records a page's current count, adding what it gained since last time.
+    public mutating func record(count: Int, forPage page: UUID) {
+        let previous = lastSeen[page] ?? 0
+        if count > previous {
+            total += count - previous
+        }
+        lastSeen[page] = count
+    }
+}

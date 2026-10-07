@@ -250,7 +250,7 @@ public struct RateEntry: Equatable, Sendable {
         }
         let carried = RateEntry.rounded(value, scale: scale, mode: .plain)
         // Checked after rounding, so 999.99999999999999 can't round up to 1000.
-        guard carried < RateEntry.limit else { return nil }
+        guard RateEntry.isWithinLimit(carried) else { return nil }
         text = RateEntry.canonicalText(for: carried)
     }
 
@@ -303,7 +303,7 @@ public struct RateEntry: Equatable, Sendable {
         if candidate.filter(\.isNumber).count > RateEntry.maximumDigits { return false }
         guard let value = Decimal(string: candidate.hasSuffix(".") ? String(candidate.dropLast()) : candidate,
                                   locale: Locale(identifier: "en_US_POSIX")) else { return false }
-        return value < RateEntry.limit
+        return RateEntry.isWithinLimit(value)
     }
 
     /// Whether typed text is a well-formed number that is simply too large to
@@ -349,6 +349,13 @@ public struct RateEntry: Equatable, Sendable {
         guard (1...2).contains(parts.count),
               parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy { ("0"..."9").contains($0) } }) else { return nil }
         return Decimal(string: text, locale: Locale(identifier: "en_US_POSIX"))
+    }
+
+    /// Whether a rate can be used: not negative, and below `limit` even once
+    /// rounded to the three decimals it is shown with, so 999.9995 (shown as
+    /// 1000) is refused like 1000 itself.
+    public static func isWithinLimit(_ rate: Decimal) -> Bool {
+        rate >= 0 && roundedForDisplay(rate) < limit
     }
 
     /// The stepper's next rate. Whole rates step by 1; a rate with a fraction
