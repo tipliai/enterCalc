@@ -77,11 +77,24 @@ final class ReviewPromptTracker {
 
     private static let daysUsedKey = "review.daysUsed"
     private static let lastPromptedVersionKey = "review.lastPromptedVersion"
+    private static let completedCalculationsKey = "review.completedCalculations"
 
     private let defaults: UserDefaults
+    private var tally: CompletedCalculationTally
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        tally = CompletedCalculationTally(total: defaults.integer(forKey: Self.completedCalculationsKey))
+    }
+
+    /// Adds what a page has completed since it was last seen to the stored
+    /// total, so calculations count across pages and relaunches.
+    func recordCompletedCalculations(_ count: Int, forPage page: UUID) {
+        let before = tally.total
+        tally.record(count: count, forPage: page)
+        if tally.total != before {
+            defaults.set(tally.total, forKey: Self.completedCalculationsKey)
+        }
     }
 
     /// Records that the app was used today. Cheap and idempotent within a day.
@@ -100,9 +113,9 @@ final class ReviewPromptTracker {
         defaults.stringArray(forKey: Self.daysUsedKey)?.count ?? 0
     }
 
-    func shouldRequestReview(completedCalculations: Int) -> Bool {
+    func shouldRequestReview() -> Bool {
         ReviewPromptPolicy.shouldRequestReview(
-            completedCalculations: completedCalculations,
+            completedCalculations: tally.total,
             distinctDaysUsed: distinctDaysUsed,
             lastPromptedVersion: defaults.string(forKey: Self.lastPromptedVersionKey),
             currentVersion: Self.currentVersion
@@ -3265,8 +3278,9 @@ private extension EnterCalcIOSView {
     // it stays off the press-to-display path, and the gate is a couple of
     // integer comparisons before that.
     func requestReviewIfEarned(for screen: CalculatorScreenSession) {
-        let completed = screen.viewModel.completedCalculationCount
-        guard ReviewPromptTracker.shared.shouldRequestReview(completedCalculations: completed) else {
+        let tracker = ReviewPromptTracker.shared
+        tracker.recordCompletedCalculations(screen.viewModel.completedCalculationCount, forPage: screen.id)
+        guard tracker.shouldRequestReview() else {
             return
         }
 

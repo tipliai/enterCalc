@@ -189,6 +189,12 @@ final class RateFieldTextTests: XCTestCase {
     // trailing % (as in the placeholder) is accepted.
     func testRoundingUpToTheLimitIsOutOfRangeAndPercentIsAccepted() {
         XCTAssertNil(RateEntry(typed: "999.99999999999999", decimalSeparator: "."))
+        // Shown with three decimals this would read 1000%, which is refused.
+        XCTAssertNil(RateEntry(typed: "999.9995", decimalSeparator: "."))
+        XCTAssertTrue(RateEntry.isOutOfRange("999.9995", decimalSeparator: "."))
+        XCTAssertNotNil(RateEntry(typed: "999.9994", decimalSeparator: "."))
+        XCTAssertEqual(RateToolPreferences.rate(fromStored: "999.9995", fallback: 18), 18)
+        XCTAssertEqual(RatePresetOverrides(serialized: "0=999.9995"), RatePresetOverrides())
         XCTAssertTrue(RateEntry.isOutOfRange("999.99999999999999", decimalSeparator: "."))
         XCTAssertEqual(RateEntry(typed: "8.1%", decimalSeparator: ".")?.value, Decimal(string: "8.1"))
         XCTAssertEqual(RateEntry(typed: "12,5 %", decimalSeparator: ",")?.value, Decimal(string: "12.5"))
