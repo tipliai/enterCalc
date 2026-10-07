@@ -87,12 +87,8 @@
 "currency.tip.rate" = "小费";
 "currency.tip.rate.decrease" = "减少小费";
 "currency.tip.rate.increase" = "增加小费";
-"currency.tip.split" = "分摊";
-"currency.tip.split.decrease" = "减少人数";
-"currency.tip.split.increase" = "增加人数";
 "currency.tip.amount" = "小费";
 "currency.tip.total" = "总计";
-"currency.tip.perPerson" = "每人";
 "currency.tool.close" = "关闭";
 
 /* Typed rates and editable presets on the VAT and Tip panels (issue #124) */

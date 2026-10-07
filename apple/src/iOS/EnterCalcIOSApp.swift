@@ -464,7 +464,6 @@ struct EnterCalcIOSView: View {
     @AppStorage(RateToolPreferences.tipPresetOverridesKey) private var storedTipPresetOverrides = ""
     @StateObject private var rateEditor = RateEditor()
     @State private var vatRemovesTax: Bool = false
-    @State private var tipSplitCount: Int = TipBreakdown.defaultSplitCount
     @State private var counterRotatesForUpsideDownPortrait: Bool = false
     @State private var flashCopy: Bool = false
     @State private var showCopyToast: Bool = false
@@ -1515,11 +1514,11 @@ private extension EnterCalcIOSView {
                         value: activeScreen.viewModel.toolBase(for: .vat),
                         rate: vatRate,
                         presets: vatPresets,
-                        currencyFractionDigits: CurrencyCatalog.fractionDigits(forSymbol: activeScreen.viewModel.activeCurrencySymbol ?? ""),
+                        currencyFractionDigits: currencyFractionDigits,
                         isRemoving: vatRemovesTax,
                         palette: palette,
                         localized: { localized($0) },
-                        format: { activeScreen.viewModel.formattedValue($0) },
+                        format: { activeScreen.viewModel.formattedCurrencyAmount($0, fractionDigits: currencyFractionDigits) },
                         formatRate: { activeScreen.viewModel.formattedValue($0, includingCurrency: false) },
                         onRateChange: { vatRate = $0; triggerActionFeedback() },
                         rateEditor: rateEditor,
@@ -1545,17 +1544,16 @@ private extension EnterCalcIOSView {
                         bill: activeScreen.viewModel.toolBase(for: .tip),
                         rate: tipRate,
                         presets: tipPresets,
-                        splitCount: tipSplitCount,
+                        currencyFractionDigits: currencyFractionDigits,
                         palette: palette,
                         localized: { localized($0) },
-                        format: { activeScreen.viewModel.formattedValue($0) },
+                        format: { activeScreen.viewModel.formattedCurrencyAmount($0, fractionDigits: currencyFractionDigits) },
                         formatRate: { activeScreen.viewModel.formattedValue($0, includingCurrency: false) },
                         onRateChange: { tipRate = $0; triggerActionFeedback() },
                         rateEditor: rateEditor,
                         onPresetEdited: { slot, rate in
                             editPreset(slot, to: rate, in: tipPresets) { storedTipPresetOverrides = $0 }
                         },
-                        onSplitChange: { tipSplitCount = clampedSplitCount($0); triggerActionFeedback() },
                         onResult: { result in
                             let viewModel = activeScreen.viewModel
                             viewModel.applyLiveToolResult(result, tool: .tip, base: viewModel.toolBase(for: .tip), describedBy: tipSummary())
@@ -3010,8 +3008,9 @@ private extension EnterCalcIOSView {
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 
-    func clampedSplitCount(_ count: Int) -> Int {
-        min(max(count, TipBreakdown.splitCountRange.lowerBound), TipBreakdown.splitCountRange.upperBound)
+    /// Decimals for amounts in the active currency: 2 for most, 0 for the yen.
+    var currencyFractionDigits: Int {
+        CurrencyCatalog.fractionDigits(forSymbol: activeScreen.viewModel.activeCurrencySymbol ?? "")
     }
 
     /// The operation line left behind after a tool writes its result, so the

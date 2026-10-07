@@ -323,4 +323,25 @@ final class CurrencyModeTests: XCTestCase {
         XCTAssertEqual(viewModel.currentValue, 100)
         XCTAssertEqual(viewModel.toolBase(for: .vat), 100)
     }
+
+    // VAT and Tip amounts show full cents, trailing zeros kept, in the active
+    // number format, and none for the yen.
+    func testCurrencyAmountsShowTheCurrencysFullDecimals() {
+        let pounds = currencyViewModel("1", symbol: "£")
+        XCTAssertEqual(pounds.formattedCurrencyAmount(Decimal(string: "125.5")!, fractionDigits: 2), "£125.50")
+        XCTAssertEqual(pounds.formattedCurrencyAmount(1234, fractionDigits: 2), "£1,234.00")
+        XCTAssertEqual(pounds.formattedCurrencyAmount(Decimal(string: "0.005")!, fractionDigits: 2), "£0.01")
+
+        let euros = currencyViewModel("1", symbol: "€", style: .european)
+        XCTAssertEqual(euros.formattedCurrencyAmount(Decimal(string: "1234.5")!, fractionDigits: 2), "€1.234,50")
+
+        let yen = currencyViewModel("1", symbol: "¥")
+        XCTAssertEqual(yen.formattedCurrencyAmount(Decimal(string: "909.09")!, fractionDigits: 0), "¥909")
+    }
+
+    func testTipIsRoundedToTheCurrency() {
+        XCTAssertEqual(TipBreakdown.roundedTip(bill: Decimal(string: "33.33")!, rate: 15, scale: 2), Decimal(string: "5"))
+        XCTAssertEqual(TipBreakdown.roundedTip(bill: Decimal(string: "47.10")!, rate: 18, scale: 2), Decimal(string: "8.48"))
+        XCTAssertEqual(TipBreakdown.roundedTip(bill: 1234, rate: 15, scale: 0), 185)
+    }
 }

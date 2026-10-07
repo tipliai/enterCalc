@@ -112,7 +112,6 @@ struct CalculatorWindowView: View {
     @AppStorage(RateToolPreferences.tipPresetOverridesKey) private var storedTipPresetOverrides = ""
     @StateObject private var rateEditor = RateEditor()
     @State private var vatRemovesTax: Bool = false
-    @State private var tipSplitCount: Int = TipBreakdown.defaultSplitCount
     @AppStorage("window.width") private var storedWindowWidth: Double = 0
     @AppStorage("window.height") private var storedWindowHeight: Double = 0
     @AppStorage("window.historyOpen") private var storedHistoryOpen: Bool = false
@@ -1417,16 +1416,21 @@ struct CalculatorWindowView: View {
         store(overrides.serialized)
     }
 
+    /// Decimals for amounts in the active currency: 2 for most, 0 for the yen.
+    private var currencyFractionDigits: Int {
+        CurrencyCatalog.fractionDigits(forSymbol: viewModel.activeCurrencySymbol ?? "")
+    }
+
     private func vatOverlay() -> some View {
         CurrencyVATPanel(
             value: viewModel.toolBase(for: .vat),
             rate: vatRate,
             presets: vatPresets,
-            currencyFractionDigits: CurrencyCatalog.fractionDigits(forSymbol: viewModel.activeCurrencySymbol ?? ""),
+            currencyFractionDigits: currencyFractionDigits,
             isRemoving: vatRemovesTax,
             palette: palette,
             localized: { macLocalized($0, bundle: currentLocalizationBundle) },
-            format: { viewModel.formattedValue($0) },
+            format: { viewModel.formattedCurrencyAmount($0, fractionDigits: currencyFractionDigits) },
             formatRate: { viewModel.formattedValue($0, includingCurrency: false) },
             onRateChange: { vatRate = max($0, 0) },
             rateEditor: rateEditor,
@@ -1452,17 +1456,16 @@ struct CalculatorWindowView: View {
             bill: viewModel.toolBase(for: .tip),
             rate: tipRate,
             presets: tipPresets,
-            splitCount: tipSplitCount,
+            currencyFractionDigits: currencyFractionDigits,
             palette: palette,
             localized: { macLocalized($0, bundle: currentLocalizationBundle) },
-            format: { viewModel.formattedValue($0) },
+            format: { viewModel.formattedCurrencyAmount($0, fractionDigits: currencyFractionDigits) },
             formatRate: { viewModel.formattedValue($0, includingCurrency: false) },
             onRateChange: { tipRate = max($0, 0) },
             rateEditor: rateEditor,
             onPresetEdited: { slot, rate in
                 editPreset(slot, to: rate, in: tipPresets) { storedTipPresetOverrides = $0 }
             },
-            onSplitChange: { tipSplitCount = min(max($0, TipBreakdown.splitCountRange.lowerBound), TipBreakdown.splitCountRange.upperBound) },
             onResult: { result in
                 viewModel.applyLiveToolResult(result, tool: .tip, base: viewModel.toolBase(for: .tip), describedBy: tipSummary())
             },

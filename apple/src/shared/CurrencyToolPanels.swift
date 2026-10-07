@@ -490,13 +490,14 @@ public struct CurrencyVATPanel: View {
 
 // MARK: - Tip
 
-/// Bill, tip percentage and party size, with the tip, total and each share
-/// shown together (#92).
+/// The tip percentage, with the tip and the total shown together (#92). The
+/// tip is rounded to the currency's minor units, as it would be paid, and the
+/// total is the bill plus that tip.
 public struct CurrencyTipPanel: View {
     private let bill: Decimal
     private let rate: Decimal
     private let presets: RatePresets
-    private let splitCount: Int
+    private let currencyFractionDigits: Int
     private let palette: Palette
     private let localized: (String) -> String
     private let format: (Decimal) -> String
@@ -504,7 +505,6 @@ public struct CurrencyTipPanel: View {
     private let onRateChange: (Decimal) -> Void
     @ObservedObject private var rateEditor: RateEditor
     private let onPresetEdited: (Int, Decimal?) -> Void
-    private let onSplitChange: (Int) -> Void
     private let onResult: (Decimal) -> Void
     private let onRemove: () -> Void
     private let onDismiss: () -> Void
@@ -513,7 +513,7 @@ public struct CurrencyTipPanel: View {
         bill: Decimal,
         rate: Decimal,
         presets: RatePresets,
-        splitCount: Int,
+        currencyFractionDigits: Int = 2,
         palette: Palette,
         localized: @escaping (String) -> String,
         format: @escaping (Decimal) -> String,
@@ -521,7 +521,6 @@ public struct CurrencyTipPanel: View {
         onRateChange: @escaping (Decimal) -> Void,
         rateEditor: RateEditor,
         onPresetEdited: @escaping (Int, Decimal?) -> Void,
-        onSplitChange: @escaping (Int) -> Void,
         onResult: @escaping (Decimal) -> Void,
         onRemove: @escaping () -> Void,
         onDismiss: @escaping () -> Void
@@ -529,7 +528,7 @@ public struct CurrencyTipPanel: View {
         self.bill = bill
         self.rate = rate
         self.presets = presets
-        self.splitCount = splitCount
+        self.currencyFractionDigits = currencyFractionDigits
         self.palette = palette
         self.localized = localized
         self.format = format
@@ -537,15 +536,16 @@ public struct CurrencyTipPanel: View {
         self.onRateChange = onRateChange
         self.rateEditor = rateEditor
         self.onPresetEdited = onPresetEdited
-        self.onSplitChange = onSplitChange
         self.onResult = onResult
         self.onRemove = onRemove
         self.onDismiss = onDismiss
     }
 
-    private var breakdown: TipBreakdown {
-        TipBreakdown(bill: bill, rate: rate, splitCount: splitCount)
+    private var tip: Decimal {
+        TipBreakdown.roundedTip(bill: bill, rate: rate, scale: currencyFractionDigits)
     }
+
+    private var total: Decimal { bill + tip }
 
     public var body: some View {
         CurrencyToolChrome(
@@ -572,40 +572,19 @@ public struct CurrencyTipPanel: View {
                     onPresetEdited: onPresetEdited
                 )
 
-                HStack(spacing: 10) {
-                    Text(localized("currency.tip.split"))
-                        .font(.system(size: 13))
-                        .foregroundStyle(palette.textSecondary)
-
-                    Spacer(minLength: 8)
-
-                    StepperControl(
-                        value: "\(breakdown.splitCount)",
-                        decreaseLabel: localized("currency.tip.split.decrease"),
-                        increaseLabel: localized("currency.tip.split.increase"),
-                        palette: palette,
-                        onDecrease: { onSplitChange(splitCount - 1) },
-                        onIncrease: { onSplitChange(splitCount + 1) }
-                    )
-                }
-
                 VStack(spacing: 6) {
-                    ResultRow(label: localized("currency.tip.amount"), value: format(breakdown.tip), isEmphasised: false, palette: palette)
-                    ResultRow(label: localized("currency.tip.total"), value: format(breakdown.total), isEmphasised: breakdown.splitCount == 1, palette: palette)
-                    // Only meaningful once the bill is actually split.
-                    if breakdown.splitCount > 1 {
-                        ResultRow(label: localized("currency.tip.perPerson"), value: format(breakdown.perPerson), isEmphasised: true, palette: palette)
-                    }
+                    ResultRow(label: localized("currency.tip.amount"), value: format(tip), isEmphasised: false, palette: palette)
+                    ResultRow(label: localized("currency.tip.total"), value: format(total), isEmphasised: true, palette: palette)
                 }
             }
         }
         // Applied as soon as the panel opens, and again on every change.
         .onAppear(perform: sendResult)
-        .onChange(of: breakdown.total) { _, _ in sendResult() }
+        .onChange(of: total) { _, _ in sendResult() }
     }
 
     private func sendResult() {
         guard bill != 0 else { return }
-        onResult(breakdown.total)
+        onResult(total)
     }
 }
