@@ -66,15 +66,6 @@ private enum IOSActionHaptics {
 #endif
 import EnterCalcCore
 
-extension Notification.Name {
-    static let enterCalcIOSToggleHistoryPanel = Notification.Name("EnterCalc.iOS.ToggleHistoryPanel")
-    static let enterCalcIOSToggleRoundingPanel = Notification.Name("EnterCalc.iOS.ToggleRoundingPanel")
-    static let enterCalcIOSGrowDisplayArea = Notification.Name("EnterCalc.iOS.GrowDisplayArea")
-    static let enterCalcIOSShrinkDisplayArea = Notification.Name("EnterCalc.iOS.ShrinkDisplayArea")
-    static let enterCalcIOSGoToNextScreen = Notification.Name("EnterCalc.iOS.GoToNextScreen")
-    static let enterCalcIOSGoToPreviousScreen = Notification.Name("EnterCalc.iOS.GoToPreviousScreen")
-}
-
 // Tracks the usage the review prompt is gated on, and remembers which release
 // already asked.
 //
@@ -375,36 +366,40 @@ struct EnterCalcIOSApp: App {
 
             CommandGroup(after: .toolbar) {
                 Button {
-                    NotificationCenter.default.post(name: .enterCalcIOSToggleHistoryPanel, object: nil)
+                    actionContext?.toggleHistoryPanel?()
                 } label: {
                     Label(localized("history.toggle"), systemImage: "clock.arrow.circlepath")
                 }
                 .keyboardShortcut("h", modifiers: [.command, .shift])
+                .disabled(actionContext?.toggleHistoryPanel == nil)
 
                 Button {
-                    NotificationCenter.default.post(name: .enterCalcIOSToggleRoundingPanel, object: nil)
+                    actionContext?.toggleRoundingPanel?()
                 } label: {
                     Label(localized("rounding.toggle"), systemImage: "slider.horizontal.below.rectangle")
                 }
                 .keyboardShortcut("r", modifiers: [.command])
+                .disabled(actionContext?.toggleRoundingPanel == nil)
 
                 Divider()
 
                 // Also the only way to resize the display without touch: the
                 // split between display and keypad is otherwise drag-only.
                 Button {
-                    NotificationCenter.default.post(name: .enterCalcIOSGrowDisplayArea, object: nil)
+                    actionContext?.growDisplayArea?()
                 } label: {
                     Label(localized("display.grow"), systemImage: "arrow.up.and.down")
                 }
                 .keyboardShortcut(.upArrow, modifiers: [.shift])
+                .disabled(actionContext?.growDisplayArea == nil)
 
                 Button {
-                    NotificationCenter.default.post(name: .enterCalcIOSShrinkDisplayArea, object: nil)
+                    actionContext?.shrinkDisplayArea?()
                 } label: {
                     Label(localized("display.shrink"), systemImage: "arrow.up.and.down")
                 }
                 .keyboardShortcut(.downArrow, modifiers: [.shift])
+                .disabled(actionContext?.shrinkDisplayArea == nil)
 
                 Divider()
 
@@ -413,18 +408,20 @@ struct EnterCalcIOSApp: App {
                 // it follow the swipe's finger direction instead, which read as
                 // inverted on a keyboard in QA.
                 Button {
-                    NotificationCenter.default.post(name: .enterCalcIOSGoToPreviousScreen, object: nil)
+                    actionContext?.goToPreviousScreen?()
                 } label: {
                     Label(localized("screen.previous"), systemImage: "chevron.left")
                 }
                 .keyboardShortcut(.leftArrow, modifiers: [.shift])
+                .disabled(actionContext?.goToPreviousScreen == nil)
 
                 Button {
-                    NotificationCenter.default.post(name: .enterCalcIOSGoToNextScreen, object: nil)
+                    actionContext?.goToNextScreen?()
                 } label: {
                     Label(localized("screen.next"), systemImage: "chevron.right")
                 }
                 .keyboardShortcut(.rightArrow, modifiers: [.shift])
+                .disabled(actionContext?.goToNextScreen == nil)
             }
         }
     }
@@ -563,7 +560,13 @@ struct EnterCalcIOSView: View {
             canUndo: viewModel.canUndo,
             canRedo: viewModel.canRedo,
             clear: { viewModel.clearEntry() },
-            clearAll: { viewModel.clearAll() }
+            clearAll: { viewModel.clearAll() },
+            toggleHistoryPanel: currentDeviceFamily() == .pad ? { toggleOverlay(.history) } : nil,
+            toggleRoundingPanel: currentDeviceFamily() == .pad ? { toggleOverlay(.rounding) } : nil,
+            growDisplayArea: { adjustDisplayHeightFromKeyboard(byPoints: Self.keyboardDisplayResizeStep) },
+            shrinkDisplayArea: { adjustDisplayHeightFromKeyboard(byPoints: -Self.keyboardDisplayResizeStep) },
+            goToNextScreen: { goToNextScreenFromKeyboard() },
+            goToPreviousScreen: { goToPreviousScreenFromKeyboard() }
         )
     }
 
@@ -978,30 +981,6 @@ struct EnterCalcIOSView: View {
                 syncPhoneUpsideDownPresentation()
                 updateDisplayShimmerParallax()
                 reconcileDisplayLayoutAfterOrientationChange()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .enterCalcIOSGrowDisplayArea)) { _ in
-                adjustDisplayHeightFromKeyboard(byPoints: Self.keyboardDisplayResizeStep)
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .enterCalcIOSShrinkDisplayArea)) { _ in
-                adjustDisplayHeightFromKeyboard(byPoints: -Self.keyboardDisplayResizeStep)
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .enterCalcIOSGoToNextScreen)) { _ in
-                goToNextScreenFromKeyboard()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .enterCalcIOSGoToPreviousScreen)) { _ in
-                goToPreviousScreenFromKeyboard()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .enterCalcIOSToggleRoundingPanel)) { _ in
-                #if canImport(UIKit)
-                guard UIDevice.current.userInterfaceIdiom == .pad else { return }
-                #endif
-                toggleOverlay(.rounding)
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .enterCalcIOSToggleHistoryPanel)) { _ in
-                #if canImport(UIKit)
-                guard UIDevice.current.userInterfaceIdiom == .pad else { return }
-                #endif
-                toggleOverlay(.history)
             }
         }
     }
