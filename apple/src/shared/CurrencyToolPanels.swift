@@ -109,6 +109,9 @@ public struct RateEditingLabels {
     public let presetHint: String
     public let done: String
     public let cancel: String
+    /// Reuses the calculator's own error messages for a rate that can't be used.
+    public let invalidInput: String
+    public let outOfRange: String
 
     public init(localized: (String) -> String) {
         typeRate = localized("currency.rate.type")
@@ -116,6 +119,8 @@ public struct RateEditingLabels {
         presetHint = localized("currency.rate.presetHint")
         done = localized("currency.rate.done")
         cancel = localized("currency.rate.cancel")
+        invalidInput = localized("error.invalidInput")
+        outOfRange = localized("error.outOfRange")
     }
 }
 
@@ -149,9 +154,20 @@ private struct RateChooser: View {
     var onPresetChosen: ((Int) -> Void)? = nil
 
     @State private var typedText = ""
+    /// Shown after Done when the typed rate can't be used.
+    @State private var rateError: String?
 
     var body: some View {
         choosingView
+            .background(
+                Color.clear
+                    .alert(rateError ?? "", isPresented: Binding(
+                        get: { rateError != nil },
+                        set: { if !$0 { rateError = nil } }
+                    )) {
+                        Button(labels.done, role: .cancel) { rateError = nil }
+                    }
+            )
             .alert(alertTitle, isPresented: isEditingBinding) {
                 // The current rate as the placeholder, with a % sign so it reads
                 // as a percentage; the person types just the number.
@@ -183,12 +199,23 @@ private struct RateChooser: View {
 
     /// Applies the alert's text. An empty field keeps the rate it opened on;
     /// text that is not a valid rate leaves everything unchanged.
+    /// Applies the alert's text. An empty field keeps the rate it opened on.
+    /// Text that can't be used changes nothing and says why, with the
+    /// calculator's own messages: Out of range at 1000% or more, Invalid input
+    /// for anything that isn't a number.
     private func commitTypedText() {
         let text = typedText.trimmingCharacters(in: .whitespaces)
         if text.isEmpty || editor.setTypedText(text, decimalSeparator: decimalSeparator) {
             editor.press(.done)
-        } else {
-            editor.cancel()
+            return
+        }
+        let message = RateEntry.isOutOfRange(text, decimalSeparator: decimalSeparator)
+            ? labels.outOfRange
+            : labels.invalidInput
+        editor.cancel()
+        // Let the edit alert finish dismissing before presenting the error.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            rateError = message
         }
     }
 

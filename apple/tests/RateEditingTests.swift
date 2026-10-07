@@ -159,4 +159,14 @@ final class RateFieldTextTests: XCTestCase {
         editor.press(.done)
         XCTAssertEqual(committed, Decimal(string: "12.34567"))
     }
+
+    // Which message a rejected rate gets: Out of range for a number that is too
+    // big, Invalid input for anything that isn't a number.
+    func testRejectedRatesAreClassified() {
+        XCTAssertTrue(RateEntry.isOutOfRange("1000", decimalSeparator: "."))
+        XCTAssertTrue(RateEntry.isOutOfRange("2500,5", decimalSeparator: ","))
+        XCTAssertFalse(RateEntry.isOutOfRange("999.999", decimalSeparator: "."))
+        XCTAssertFalse(RateEntry.isOutOfRange("8a", decimalSeparator: "."))
+        XCTAssertFalse(RateEntry.isOutOfRange("1.2.3", decimalSeparator: "."))
+    }
 }

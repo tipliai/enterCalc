@@ -260,6 +260,20 @@ public struct RateEntry: Equatable, Sendable {
         return value < RateEntry.limit
     }
 
+    /// Whether typed text is a well-formed number that is simply too large to
+    /// be a rate (1000% or more), as opposed to not being a number at all.
+    public static func isOutOfRange(_ raw: String, decimalSeparator: String) -> Bool {
+        let normalized = raw.trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: decimalSeparator, with: ".")
+            .replacingOccurrences(of: ",", with: ".")
+        guard !normalized.isEmpty,
+              normalized.allSatisfy({ ($0.isASCII && $0.isNumber) || $0 == "." }),
+              normalized.filter({ $0 == "." }).count <= 1,
+              let value = Decimal(string: normalized.hasPrefix(".") ? "0" + normalized : normalized,
+                                  locale: Locale(identifier: "en_US_POSIX")) else { return false }
+        return value >= limit
+    }
+
     /// The rate in full, for storage and the maths.
     static func canonicalText(for rate: Decimal) -> String {
         NSDecimalNumber(decimal: rate).stringValue

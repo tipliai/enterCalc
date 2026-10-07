@@ -269,7 +269,7 @@ final class CalculatorFunctionKeyTests: XCTestCase {
             + ["functionKey.chooser.title", "functionKey.change", "functionKey.hint"]
             // The VAT and Tip panels' rate editing (#124).
             + ["currency.rate.type", "currency.rate.editPreset", "currency.rate.presetHint",
-               "currency.rate.done", "currency.rate.cancel"]
+               "currency.rate.done", "currency.rate.cancel", "error.invalidInput", "error.outOfRange"]
             // The VAT and Tip panels themselves (#92).
             + ["currency.vat.title", "currency.vat.add", "currency.vat.remove", "currency.vat.rate",
                "currency.vat.rate.decrease", "currency.vat.rate.increase", "currency.vat.net",
