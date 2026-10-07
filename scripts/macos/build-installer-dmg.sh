@@ -32,15 +32,17 @@ MANUAL_LAYOUT=false
 WINDOW_LEFT=120
 WINDOW_TOP=120
 
-# Window size and icon coordinates are derived from the background image.
-WINDOW_WIDTH=700
-WINDOW_HEIGHT=420
-ICON_SIZE=128
-TEXT_SIZE=13
-APP_ICON_X=180
-APP_ICON_Y=190
-APPS_ICON_X=520
-APPS_ICON_Y=190
+# The layout shipped in v1.0.0 (arranged by hand in Finder, then measured):
+# the window, icon size and icon positions that line the icons up with the
+# background's arrow.
+WINDOW_WIDTH=522
+WINDOW_HEIGHT=362
+ICON_SIZE=96
+TEXT_SIZE=12
+APP_ICON_X=169
+APP_ICON_Y=156
+APPS_ICON_X=361
+APPS_ICON_Y=156
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -95,21 +97,6 @@ if [[ ! -f "$BACKGROUND_PATH" ]]; then
   echo "Background image not found: $BACKGROUND_PATH" >&2
   exit 1
 fi
-
-BG_DIMENSIONS="$(sips -g pixelWidth -g pixelHeight "$BACKGROUND_PATH" 2>/dev/null)"
-BG_WIDTH="$(echo "$BG_DIMENSIONS" | awk '/pixelWidth:/ {print $2; exit}')"
-BG_HEIGHT="$(echo "$BG_DIMENSIONS" | awk '/pixelHeight:/ {print $2; exit}')"
-
-if [[ -n "$BG_WIDTH" && -n "$BG_HEIGHT" ]]; then
-  WINDOW_WIDTH="$BG_WIDTH"
-  WINDOW_HEIGHT="$BG_HEIGHT"
-fi
-
-# Position icons to stay centered and balanced for the chosen background size.
-APP_ICON_X=$((WINDOW_WIDTH * 26 / 100))
-APPS_ICON_X=$((WINDOW_WIDTH * 74 / 100))
-APP_ICON_Y=$((WINDOW_HEIGHT * 43 / 100))
-APPS_ICON_Y="$APP_ICON_Y"
 
 if [[ -d "/Volumes/$VOLUME_NAME" ]]; then
   echo "A mounted volume with this name already exists: /Volumes/$VOLUME_NAME" >&2
@@ -253,13 +240,23 @@ tell application "Finder"
     set background picture of viewOptions to file ".background:background.png"
     set position of item "$APP_NAME.app" of container window to {$APP_ICON_X, $APP_ICON_Y}
     set position of item "Applications" of container window to {$APPS_ICON_X, $APPS_ICON_Y}
+    -- Parked to the right, outside the window, as in v1.0.0, for Finders
+    -- set to show hidden files. A negative position shifts every icon.
     try
-      set position of item ".background" of container window to {-240, -240}
+      set position of item ".background" of container window to {$((WINDOW_WIDTH + 90)), $APP_ICON_Y}
     end try
     close
     open
     update without registering applications
     delay 2
+    -- Set again once the window has redrawn with the new icon size, which
+    -- otherwise nudges them off the background's arrow.
+    set position of item "$APP_NAME.app" of container window to {$APP_ICON_X, $APP_ICON_Y}
+    set position of item "Applications" of container window to {$APPS_ICON_X, $APPS_ICON_Y}
+    delay 1
+    -- Finder writes the layout to .DS_Store when the window closes; leaving
+    -- it open lets the detach discard the icon positions.
+    close
   end tell
 end tell
 EOF
@@ -267,6 +264,13 @@ then
   echo "Warning: Finder layout customization failed. Continuing with default Finder layout." >&2
 fi
 fi
+
+# Give Finder a moment to write the layout before the volume is detached.
+for _ in {1..10}; do
+  [[ -f "$MOUNT_DIR/.DS_Store" ]] && break
+  sleep 1
+done
+sleep 2
 
 sync
 
