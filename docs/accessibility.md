@@ -54,11 +54,13 @@ This page is a quick guide to accessibility features available in EnterCalc.
 - Supports OS Reduced Motion, Increase Contrast, and larger text behavior.
 - Compact action labels and history/settings text scaling are enabled.
 
-## Coming Soon (v1.10)
+## Planned for 1.2.0
 
-- VoiceOver value-context improvements for expression/result readout.
-- VoiceOver grouping and reading-order improvements across overlays.
-- Additional end-to-end VoiceOver validation for calculator, overlays, and settings.
+These VoiceOver improvements did not make 1.1.0 and are planned for 1.2.0 ([#145](https://github.com/tipliai/enterCalc/issues/145)):
+
+- Meaningful readout of the expression and result, with changes announced.
+- Overlays that keep VoiceOver focus inside them, read in a logical order, and close with the escape gesture.
+- End-to-end VoiceOver validation of the calculator, overlays, and settings on iPhone, iPad, and Mac.
 
 ## Notes
 
