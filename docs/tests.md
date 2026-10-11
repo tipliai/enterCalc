@@ -12,7 +12,7 @@ Current verification status on macOS:
 - `swift test list` discovers `192` `CalculatorViewModelTests` methods.
 - This matrix documents the same `192` methods with no missing or extra entries.
 - The current macOS run includes the AppKit-only clipboard tests guarded by `canImport(AppKit)`.
-- A full `swift test` run executes `402` tests across every suite, of which `6` fail. Those 6 failures span 2 methods in `CalculatorViewModelTests` (`testBackspaceCanFullyUnwindParenthesizedExpression` and `testRefreshLocalizationUpdatesActiveErrorMessage`) and pre-date the 1.1.0 work. The other two methods that used to fail described contradictory clear behaviour and were replaced in #143.
+- A full `swift test` run executes `403` tests across every suite, of which `6` fail. Those 6 failures span 2 methods in `CalculatorViewModelTests` (`testBackspaceCanFullyUnwindParenthesizedExpression` and `testRefreshLocalizationUpdatesActiveErrorMessage`) and pre-date the 1.1.0 work. The other two methods that used to fail described contradictory clear behaviour and were replaced in #143.
 
 ### Other suites
 

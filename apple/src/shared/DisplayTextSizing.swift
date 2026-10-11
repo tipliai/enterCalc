@@ -99,7 +99,7 @@ public enum DisplayTextSizing {
         let result = max(min(wanted, mostThatFits), floor)
         let operationScale = min(
             result / baseResultFontSize,
-            maximumOperationScale * max(textScale, 1)
+            maximumOperationScale * textScale
         )
         return FontSizes(result: result, operation: baseOperationFontSize * operationScale)
     }

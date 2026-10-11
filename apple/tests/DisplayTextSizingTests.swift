@@ -127,4 +127,15 @@ final class DisplayTextSizingTests: XCTestCase {
         let huge = sizes(contentHeight: 2_000)
         XCTAssertEqual(huge.operation, baseOperation * DisplayTextSizing.maximumOperationScale, accuracy: 0.001)
     }
+
+    func testSmallerTextSizeAlsoShrinksACappedOperationLine() {
+        let standard = sizes(contentHeight: 2_000)
+        let small = sizes(contentHeight: 2_000, textScale: 14.0 / 17.0)
+        XCTAssertLessThan(small.operation, standard.operation)
+        XCTAssertEqual(
+            small.operation,
+            baseOperation * DisplayTextSizing.maximumOperationScale * 14.0 / 17.0,
+            accuracy: 0.001
+        )
+    }
 }

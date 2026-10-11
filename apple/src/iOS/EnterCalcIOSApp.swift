@@ -4486,7 +4486,9 @@ private struct IOSHistoryPanel: View {
     }
 
     private func scaledHistoryFontSize(_ base: CGFloat, maxMultiplier: CGFloat = 2.1) -> CGFloat {
-        min(max(base, base * boundedHistoryTextScale), base * maxMultiplier)
+        // boundedHistoryTextScale already sets the floor, below 1 for the smaller
+        // Text Size settings (#148).
+        min(base * boundedHistoryTextScale, base * maxMultiplier)
     }
 
     var body: some View {
