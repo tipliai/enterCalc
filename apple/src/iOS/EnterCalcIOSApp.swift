@@ -2426,6 +2426,7 @@ private extension EnterCalcIOSView {
                     metrics: metrics,
                     screen: screen,
                     resultAreaHeight: resultAreaHeight,
+                    resultAreaWidth: geometry.size.width - metrics.innerHorizontalPadding * 2,
                     showsMemoryLabel: !isLandscapeMode
                 )
                     .frame(maxWidth: .infinity, minHeight: resultAreaHeight, maxHeight: resultAreaHeight, alignment: .top)
@@ -2649,6 +2650,7 @@ private extension EnterCalcIOSView {
         metrics: IOSLayoutMetrics,
         screen: CalculatorScreenSession,
         resultAreaHeight expandedResultAreaHeight: CGFloat,
+        resultAreaWidth: CGFloat,
         showsMemoryLabel: Bool
     ) -> some View {
         let isBlueTheme = activeTheme == .blue
@@ -2681,12 +2683,17 @@ private extension EnterCalcIOSView {
                 .init(color: .clear, location: 0.14),
                 .init(color: shimmerTailColor, location: 1.0)
             ]
-        let baseExpressionFontSize = metrics.mode == .phonePortrait
-            ? metrics.expressionFontSize
-            : metrics.expressionFontSize(for: metrics.displayHeight)
         let isLandscapeMode = metrics.mode == .phoneLandscape || metrics.mode == .padWide
         let verticalPaddingTotal = isLandscapeMode ? (metrics.displayVerticalPadding * 2) : metrics.displayVerticalPadding
-        let baseResultFontSize = metrics.displayFontSize(for: metrics.displayHeight)
+        // Sized from the room the display has before the Basic label's space is
+        // borrowed, which depends on the text, so the size can't feed back on itself.
+        let textSizingHeight = expandedResultAreaHeight - (showsMemoryLabel ? metrics.memoryHeight : 0) - verticalPaddingTotal
+        let displayTextScale = metrics.displayTextScale(
+            contentHeight: textSizingHeight,
+            contentWidth: resultAreaWidth - metrics.displayHorizontalPadding * 2
+        )
+        let baseExpressionFontSize = metrics.expressionFontSize * displayTextScale
+        let baseResultFontSize = metrics.displayFontSize * displayTextScale
         let resultFontSize = boundedDynamicTypeSize(
             baseResultFontSize,
             scale: displayDynamicTypeScale,
@@ -5196,14 +5203,16 @@ private struct IOSLayoutMetrics {
         return min(buttonHeight, max(minimumButtonHeight, fittedHeight))
     }
 
-    func expressionFontSize(for displayHeight: CGFloat) -> CGFloat {
-        let scale = min(max(displayHeight / max(self.displayHeight, 1), 1), 1.4)
-        return expressionFontSize * scale
-    }
-
-    func displayFontSize(for displayHeight: CGFloat) -> CGFloat {
-        let scale = min(max(displayHeight / max(self.displayHeight, 1), 1), 1.42)
-        return displayFontSize * scale
+    /// How much larger than the base sizes the display text can be drawn with
+    /// `contentHeight` of room (#136).
+    func displayTextScale(contentHeight: CGFloat, contentWidth: CGFloat) -> CGFloat {
+        DisplayTextSizing.scale(
+            contentHeight: contentHeight,
+            contentWidth: contentWidth,
+            baseResultFontSize: displayFontSize,
+            baseOperationFontSize: expressionFontSize,
+            spacing: displaySpacing
+        )
     }
 
     var keypadHeight: CGFloat {

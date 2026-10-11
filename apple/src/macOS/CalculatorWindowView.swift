@@ -584,13 +584,22 @@ struct CalculatorWindowView: View {
                 displayDynamicTypeScale,
                 macPreferredTextScale(for: .largeTitle, baseline: 26)
             )
+            // A taller display gets larger text (#136). The display's height comes
+            // from the window and keypad, not the text, so this holds still while typing.
+            let spaceScale = DisplayTextSizing.scale(
+                contentHeight: contentHeight - baseBasicRowHeight,
+                contentWidth: displayGeometry.size.width - 8 * 2, // the text's .padding(.horizontal, 8)
+                baseResultFontSize: baseResultFontSize,
+                baseOperationFontSize: baseBasicFontSize,
+                spacing: displaySpacing
+            )
             let resultFontSize = boundedDynamicTypeSize(
-                baseResultFontSize,
+                baseResultFontSize * spaceScale,
                 scale: effectiveDisplayScale,
-                maximum: max(baseResultFontSize, contentHeight * 0.78)
+                maximum: max(baseResultFontSize * spaceScale, contentHeight * 0.78)
             )
             let basicFontSize = boundedDynamicTypeSize(
-                baseBasicFontSize,
+                baseBasicFontSize * spaceScale,
                 scale: effectiveDisplayScale,
                 maximum: max(baseBasicFontSize, resultFontSize * 0.34)
             )
