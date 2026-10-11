@@ -2426,6 +2426,7 @@ private extension EnterCalcIOSView {
                     metrics: metrics,
                     screen: screen,
                     resultAreaHeight: resultAreaHeight,
+                    resultAreaWidth: geometry.size.width - metrics.innerHorizontalPadding * 2,
                     showsMemoryLabel: !isLandscapeMode
                 )
                     .frame(maxWidth: .infinity, minHeight: resultAreaHeight, maxHeight: resultAreaHeight, alignment: .top)
@@ -2649,6 +2650,7 @@ private extension EnterCalcIOSView {
         metrics: IOSLayoutMetrics,
         screen: CalculatorScreenSession,
         resultAreaHeight expandedResultAreaHeight: CGFloat,
+        resultAreaWidth: CGFloat,
         showsMemoryLabel: Bool
     ) -> some View {
         let isBlueTheme = activeTheme == .blue
@@ -2686,7 +2688,10 @@ private extension EnterCalcIOSView {
         // Sized from the room the display has before the Basic label's space is
         // borrowed, which depends on the text, so the size can't feed back on itself.
         let textSizingHeight = expandedResultAreaHeight - (showsMemoryLabel ? metrics.memoryHeight : 0) - verticalPaddingTotal
-        let displayTextScale = metrics.displayTextScale(forContentHeight: textSizingHeight)
+        let displayTextScale = metrics.displayTextScale(
+            contentHeight: textSizingHeight,
+            contentWidth: resultAreaWidth - metrics.displayHorizontalPadding * 2
+        )
         let baseExpressionFontSize = metrics.expressionFontSize * displayTextScale
         let baseResultFontSize = metrics.displayFontSize * displayTextScale
         let resultFontSize = boundedDynamicTypeSize(
@@ -5200,9 +5205,10 @@ private struct IOSLayoutMetrics {
 
     /// How much larger than the base sizes the display text can be drawn with
     /// `contentHeight` of room (#136).
-    func displayTextScale(forContentHeight contentHeight: CGFloat) -> CGFloat {
+    func displayTextScale(contentHeight: CGFloat, contentWidth: CGFloat) -> CGFloat {
         DisplayTextSizing.scale(
             contentHeight: contentHeight,
+            contentWidth: contentWidth,
             baseResultFontSize: displayFontSize,
             baseOperationFontSize: expressionFontSize,
             spacing: displaySpacing

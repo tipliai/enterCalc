@@ -2,10 +2,11 @@ import XCTest
 @testable import EnterCalcCore
 
 final class DisplayTextSizingTests: XCTestCase {
-    private func scale(contentHeight: CGFloat) -> CGFloat {
+    private func scale(contentHeight: CGFloat, contentWidth: CGFloat = 10_000) -> CGFloat {
         // iPhone portrait base sizes.
         DisplayTextSizing.scale(
             contentHeight: contentHeight,
+            contentWidth: contentWidth,
             baseResultFontSize: 56,
             baseOperationFontSize: 15,
             spacing: 6
@@ -39,10 +40,30 @@ final class DisplayTextSizingTests: XCTestCase {
     func testZeroBaseSizeDoesNotDivideByZero() {
         let factor = DisplayTextSizing.scale(
             contentHeight: 200,
+            contentWidth: 400,
             baseResultFontSize: 0,
             baseOperationFontSize: 15,
             spacing: 6
         )
         XCTAssertEqual(factor, 1)
+    }
+
+    func testNarrowDisplayLimitsGrowthEvenWithSpareHeight() {
+        let wide = scale(contentHeight: 400)
+        let narrow = scale(contentHeight: 400, contentWidth: 260)
+        XCTAssertEqual(wide, DisplayTextSizing.maximumScale)
+        XCTAssertLessThan(narrow, wide)
+        XCTAssertEqual(56 * narrow * DisplayTextSizing.referenceResultWidthInEms, 260, accuracy: 0.001)
+    }
+
+    func testWideningANarrowDisplayGrowsTheText() {
+        XCTAssertGreaterThan(
+            scale(contentHeight: 400, contentWidth: 300),
+            scale(contentHeight: 400, contentWidth: 260)
+        )
+    }
+
+    func testTooNarrowDisplayKeepsTheBaseSize() {
+        XCTAssertEqual(scale(contentHeight: 400, contentWidth: 100), 1)
     }
 }

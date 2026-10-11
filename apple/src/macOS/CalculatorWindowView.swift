@@ -588,6 +588,7 @@ struct CalculatorWindowView: View {
             // from the window and keypad, not the text, so this holds still while typing.
             let spaceScale = DisplayTextSizing.scale(
                 contentHeight: contentHeight - baseBasicRowHeight,
+                contentWidth: displayGeometry.size.width - 8 * 2, // the text's .padding(.horizontal, 8)
                 baseResultFontSize: baseResultFontSize,
                 baseOperationFontSize: baseBasicFontSize,
                 spacing: displaySpacing

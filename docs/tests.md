@@ -12,7 +12,7 @@ Current verification status on macOS:
 - `swift test list` discovers `190` `CalculatorViewModelTests` methods.
 - This matrix documents the same `190` methods with no missing or extra entries.
 - The current macOS run includes the AppKit-only clipboard tests guarded by `canImport(AppKit)`.
-- A full `swift test` run executes `387` tests across every suite, of which `13` fail. Those 13 failures span 4 methods, all in `CalculatorViewModelTests`, and reproduce identically on an untouched checkout — they pre-date the 1.1.0 work and are not regressions.
+- A full `swift test` run executes `390` tests across every suite, of which `13` fail. Those 13 failures span 4 methods, all in `CalculatorViewModelTests`, and reproduce identically on an untouched checkout — they pre-date the 1.1.0 work and are not regressions.
 
 ### Other suites
 
@@ -21,7 +21,7 @@ Current verification status on macOS:
 - `apple/tests/CurrencyModeTests.swift` — entering and leaving currency mode via the currency key, including that leaving preserves the entered value, that it clears a symbol differing from the configured one, that it survives All Clear, and that toggling is undoable, and that the display-edit caret never sits in front of the currency symbol (#118) — at the left edge, after Left past the first digit, or between the sign and symbol of a negative amount — while still stopping before grouping separators. Also sweeps the states a value can be in — untouched zero, typed zero, after All Clear, pending operator, after evaluate, backspace, sign toggle, square and undo — asserting the symbol is on screen in every one, for several currencies. Percent is excluded on purpose: its result is a ratio rather than an amount, so it drops the symbol.
 - `apple/tests/EqualsKeyLabelTests.swift` — whether the evaluate key shows `Enter` or `=`, derived from keypad layout and resolved language.
 - `apple/tests/ReviewPromptPolicyTests.swift` — the gates on the in-app review prompt, and the semantics of the completed-calculation counter.
-- `apple/tests/DisplayTextSizingTests.swift` — how much the display's result and operation text grow with the room the display has (#136): a cramped display keeps the base size, a taller one grows it, growth stops at the maximum scale, and below that cap the result plus one operation line fill exactly the intended share of the height.
+- `apple/tests/DisplayTextSizingTests.swift` — how much the display's result and operation text grow with the room the display has (#136): a cramped display keeps the base size, a taller one grows it, growth stops at the maximum scale, and below that cap the result plus one operation line fill exactly the intended share of the height. Width limits growth too: a narrow display with spare height grows only until a typical result fills the width, and widening it lets the text grow.
 - `apple/tests/SupportLinksTests.swift` — pins the support page URL used by the Feedback link.
 - `apple/tests/CalculatorPagerGestureIntentTests.swift` — how deliberate a swipe has to be before it counts as page navigation (#83). Covers the case the issue reports — a finger sliding a few points while pressing a key must not page — alongside the opposite one, that an ordinary swipe still does. Also pins the relationship the feel depends on: paging engages *above* the 8pt at which a keypad key gives up on its own tap, so the two thresholds bound a deliberate dead band rather than overlapping, and the axis threshold stays reachable given the minimum drag distance.
 
