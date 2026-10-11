@@ -623,13 +623,10 @@ public final class CalculatorViewModel: ObservableObject {
             return
         }
 
-        if pendingOperator != nil, shouldResetInputOnNextDigit {
-            // C should keep a pending expression intact when no right-hand entry is active.
-            updateDisplay()
-            completeUndoableChange(from: snapshot)
-            return
-        }
-
+        // After `1 + 2 +` the display still shows the last operand, which no
+        // longer does anything. C blanks it and turns the key to AC, leaving the
+        // operation line untouched and unevaluated (#69); AC then clears it all
+        // (#143). Same path as clearing a right-hand entry that was typed.
         if pendingOperator != nil {
             setBlankPendingEntryState()
         } else {

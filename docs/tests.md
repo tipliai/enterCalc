@@ -9,10 +9,10 @@ This document tracks the shared-module checks currently discovered by `swift tes
 Each row in the matrix below maps directly to a discovered test method in `apple/tests/CalculatorViewModelTests.swift`.
 
 Current verification status on macOS:
-- `swift test list` discovers `190` `CalculatorViewModelTests` methods.
-- This matrix documents the same `190` methods with no missing or extra entries.
+- `swift test list` discovers `192` `CalculatorViewModelTests` methods.
+- This matrix documents the same `192` methods with no missing or extra entries.
 - The current macOS run includes the AppKit-only clipboard tests guarded by `canImport(AppKit)`.
-- A full `swift test` run executes `390` tests across every suite, of which `13` fail. Those 13 failures span 4 methods, all in `CalculatorViewModelTests`, and reproduce identically on an untouched checkout — they pre-date the 1.1.0 work and are not regressions.
+- A full `swift test` run executes `392` tests across every suite, of which `6` fail. Those 6 failures span 2 methods in `CalculatorViewModelTests` (`testBackspaceCanFullyUnwindParenthesizedExpression` and `testRefreshLocalizationUpdatesActiveErrorMessage`) and pre-date the 1.1.0 work. The other two methods that used to fail described contradictory clear behaviour and were replaced in #143.
 
 ### Other suites
 
@@ -131,7 +131,7 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Error handling | Trigger `Invalid input`, then press backspace once | Error state clears and display restores to `-9` | `testBackspaceOnInvalidInputUndoesErrorOnce` |
 | Backspace | Enter `3 + 3 + 3 + 3`, then backspace repeatedly | Backspace walks the pending expression left-to-right without implicit evaluate, keeping history empty until `=` | `testBackspaceOnPendingExpressionDoesNotAutoEvaluateAndKeepsRollbackEditable` |
 | Backspace | Enter `6 + 55 + 777 + 8888`, then delete through `8888` and `+`, then delete `777` | Removing the final `777` digit immediately removes that operand from the operation line (no extra backspace step) | `testBackspaceRemovingFinalDigitAlsoRemovesExpressionOperandWithoutExtraStep` |
-| Clear button | Enter `3 + 3 + 3 +`, then press `C` | With no active right-hand entry, `C` is a no-op that preserves the pending operation line and avoids pre-equals history/evaluation side effects | `testClearEntryOnPendingExpressionDoesNotAutoEvaluateOrMutateOperationLine` |
+| Clear button | Enter `3 + 3 + 3 +`, then press `C` | `C` blanks the leftover operand but leaves the operation line as it is, with no evaluation and no history entry (#69, #143); Enter then ignores the trailing operator | `testClearEntryOnPendingExpressionDoesNotAutoEvaluateOrMutateOperationLine` |
 | Clear button | Enter `6 + 55 + 777`, then press `AC` | `AC` clears both the result display and operation line back to a fresh state | `testClearAllFromPendingExpressionClearsDisplayAndOperationLine` |
 | Error handling | Apply reciprocal to zero | Error state enabled, display `Cannot divide by zero` | `testReciprocalOfZeroSetsDivideByZeroError` |
 | Editing state | Enter `12`, then undo twice and redo twice | Display steps `12 -> 1 -> 0 -> 1 -> 12`; redo becomes unavailable at the end | `testUndoAndRedoRestorePriorDisplayStates` |
@@ -220,7 +220,9 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Clear button | Enter `5 + 3`, then clear only the right-hand entry and continue with `7 =` | Pending operation is preserved and the final result is `12` | `testClearEntryKeepsPendingOperation` |
 | Clear button | Enter `5 + 3`, clear the entry, then clear again and continue with `7 =` | Second clear performs all-clear; the final result is `7` | `testClearAllRemovesPendingOperation` |
 | Clear button | Enter `5 + 3`, clear the entry, then continue with `7 =` | Clearing the entry still allows the original operation to continue | `testClearEntryAfterOperationCanThenContinue` |
-| Clear button | Enter `9 ×`, then clear twice | First clear removes the pending operator context; second clear resets display to `0` | `testClearEntryRemovesPendingOperatorWhenNoRightHandEntry` |
+| Clear button | Enter `1 + 2 +`, then clear twice | First press blanks the leftover `2` and turns the key to AC; second press clears everything (#143) | `testClearAfterTrailingOperatorBlanksEntryThenAllClears` |
+| Clear button | Enter `9 ×`, clear, then `7 =` | Clearing keeps the pending operator, so the next entry continues the calculation | `testClearAfterSingleOperatorKeepsItForTheNextEntry` |
+| Clear button | Enter `5 + 5 +`, clear, then undo | Undo brings back the cleared operand and the C label | `testUndoRestoresOperandClearedAfterTrailingOperator` |
 | Clear button | Open a fresh view model | Initial state shows `0`, empty expression, and the all-clear button | `testInitialStateShowsAllClearButton` |
 | Clear button | Evaluate `195 + 65 =`, then press clear | Clear acts as all-clear immediately after evaluation | `testClearAfterEqualsUsesAllClearImmediately` |
 | Clear button | Evaluate `195 + 65 =`, clear, then enter `7` | New digit starts a fresh calculation with display `7` | `testDigitAfterAllClearFromEvaluatedResultStartsFreshCalculation` |
