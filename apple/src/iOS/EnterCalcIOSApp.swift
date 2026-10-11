@@ -2412,9 +2412,11 @@ private extension EnterCalcIOSView {
             let proposedKeypadHeight = actualButtonHeight * baseRowUnits + metrics.gridSpacing * keypadSpacingUnits
             let actualKeypadHeight = min(availableKeypadHeight, proposedKeypadHeight)
             let landscapeDisplayTrim: CGFloat = isLandscapeMode ? 6 : 0
+            // The result area takes whatever height the keypad leaves, so capped keys
+            // on tall phones don't leave an empty band under the keypad (#134).
             let resultAreaHeight = isLandscapeMode
                 ? max(0, availableSurfaceHeight - actualKeypadHeight - landscapeDisplayTrim)
-                : initialResultAreaHeight
+                : max(initialResultAreaHeight, availableSurfaceHeight - actualKeypadHeight)
 
             VStack(spacing: metrics.sectionSpacing) {
                 if showsInlineLandscapeHeader {
