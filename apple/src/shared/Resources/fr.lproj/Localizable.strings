@@ -107,3 +107,12 @@
 "currency.vat.short" = "TVA";
 "currency.tip.short" = "Pourboire";
 "currency.tip.off" = "Désactivé";
+
+/* Text Size setting (#148) */
+"settings.textSize" = "Taille du texte";
+"settings.textSize.useSystem" = "Utiliser la taille du système";
+"settings.textSize.extraSmall" = "Très petite";
+"settings.textSize.small" = "Petite";
+"settings.textSize.standard" = "Par défaut";
+"settings.textSize.large" = "Grande";
+"settings.textSize.extraLarge" = "Très grande";

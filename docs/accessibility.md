@@ -41,6 +41,13 @@ This page is a quick guide to accessibility features available in EnterCalc.
 - Dynamic Type and larger-text scaling are supported across major surfaces.
 - This includes display text, action rows, history UI, and settings/about text.
 - Shrink-to-fit behavior is retained where needed to preserve layout fit.
+- The result and operation line grow to use the room the display has, including when you drag the keypad smaller.
+
+### Text Size setting
+
+- **Settings ▸ Text Size** follows the system text size by default (**Use System Size**).
+- Turn it off to choose one of five sizes for EnterCalc only: Extra Small, Small, Default, Large, and Extra Large.
+- The chosen size applies to Settings, history, and the panels the same way the system's larger text does, and makes the calculator's numbers larger or smaller. Key sizes stay the same at every setting.
 
 ## Platform Notes
 

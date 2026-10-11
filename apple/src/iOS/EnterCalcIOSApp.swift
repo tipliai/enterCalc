@@ -322,6 +322,7 @@ struct EnterCalcIOSApp: App {
         WindowGroup {
             EnterCalcIOSView()
                 .iPadWindowMinimumSize()
+                .appTextSize()
         }
         .defaultSize(
             width: IOSLayoutMetrics.defaultPadWindowSize.width,
@@ -462,6 +463,7 @@ struct EnterCalcIOSView: View {
     @Environment(\.requestReview) private var requestReview
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotionEnabled
     @ScaledMetric(relativeTo: .largeTitle) private var displayDynamicTypeScale: CGFloat = 1.0
+    @AppStorage(TextSizePreference.storageKey) private var storedTextSize = TextSizePreference.system.rawValue
     @State private var activeOverlay: IOSOverlayPane? = nil
     @State private var showSettingsSheet: Bool = false
     /// Live hold-and-drag reassignment of a configurable key, if one is running.
@@ -1078,6 +1080,9 @@ struct EnterCalcIOSView: View {
                     availableLanguages: availableLanguageOptions(),
                     counterRotatesForUpsideDownPortrait: counterRotatesForUpsideDownPortrait
                 )
+                // A sheet takes its text size from the window, not the root
+                // view's environment, so the Text Size setting is applied here too.
+                .appTextSize()
             }
             .onIOSDeviceOrientationChange {
                 isResizingKeypadHeight = false
@@ -2688,22 +2693,13 @@ private extension EnterCalcIOSView {
         // Sized from the room the display has before the Basic label's space is
         // borrowed, which depends on the text, so the size can't feed back on itself.
         let textSizingHeight = expandedResultAreaHeight - (showsMemoryLabel ? metrics.memoryHeight : 0) - verticalPaddingTotal
-        let displayTextScale = metrics.displayTextScale(
+        let displayFontSizes = metrics.displayFontSizes(
             contentHeight: textSizingHeight,
-            contentWidth: resultAreaWidth - metrics.displayHorizontalPadding * 2
+            contentWidth: resultAreaWidth - metrics.displayHorizontalPadding * 2,
+            textScale: TextSizePreference(storedValue: storedTextSize).relativeScale ?? displayDynamicTypeScale
         )
-        let baseExpressionFontSize = metrics.expressionFontSize * displayTextScale
-        let baseResultFontSize = metrics.displayFontSize * displayTextScale
-        let resultFontSize = boundedDynamicTypeSize(
-            baseResultFontSize,
-            scale: displayDynamicTypeScale,
-            maximum: max(baseResultFontSize, metrics.displayHeight * 0.82)
-        )
-        let expressionFontSize = boundedDynamicTypeSize(
-            baseExpressionFontSize,
-            scale: displayDynamicTypeScale,
-            maximum: max(baseExpressionFontSize, resultFontSize * 0.62)
-        )
+        let resultFontSize = displayFontSizes.result
+        let expressionFontSize = displayFontSizes.operation
         let resultLineHeight = resultFontSize * 1.12
         let measuredOperationHeight = max(
             operationTextHeightByScreen[screen.id] ?? (expressionFontSize * 1.3),
@@ -3670,9 +3666,6 @@ private extension EnterCalcIOSView {
         withAnimation(animation, updates)
     }
 
-    func boundedDynamicTypeSize(_ baseSize: CGFloat, scale: CGFloat, maximum: CGFloat) -> CGFloat {
-        min(max(baseSize, baseSize * scale), maximum)
-    }
 
     func handleHistoryOverlayHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
         guard activeOverlay == .history else { return false }
@@ -3935,6 +3928,9 @@ private struct IOSSettingsSheet: View {
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.dismiss) private var dismiss
     @ScaledMetric(relativeTo: .body) private var settingsDynamicTypeScale: CGFloat = 1.0
+    // Global and live, unlike the per-page drafts below: the sheet resizes as the
+    // slider moves, which is the preview.
+    @AppStorage(TextSizePreference.storageKey) private var storedTextSize = TextSizePreference.system.rawValue
 
     init(
         titleKey: String,
@@ -4023,7 +4019,54 @@ private struct IOSSettingsSheet: View {
     }
 
     private var settingsAboutTextSize: CGFloat {
-        min(max(15, 15 * settingsDynamicTypeScale), 30)
+        min(max(12, 15 * settingsDynamicTypeScale), 30)
+    }
+
+    private var textSizePreference: TextSizePreference {
+        TextSizePreference(storedValue: storedTextSize)
+    }
+
+    private var usesSystemTextSize: Binding<Bool> {
+        Binding(
+            get: { textSizePreference.followsSystem },
+            set: { followsSystem in
+                storedTextSize = (followsSystem ? TextSizePreference.system : .standard).rawValue
+            }
+        )
+    }
+
+    private var textSizeIndex: Binding<Double> {
+        Binding(
+            get: { Double(textSizePreference.sizeIndex ?? TextSizePreference.sizes.firstIndex(of: .standard) ?? 0) },
+            set: { storedTextSize = TextSizePreference.size(atIndex: Int($0.rounded())).rawValue }
+        )
+    }
+
+    @ViewBuilder
+    private var textSizeSection: some View {
+        Section(localized("settings.textSize")) {
+            Toggle(localized("settings.textSize.useSystem"), isOn: usesSystemTextSize)
+
+            if !textSizePreference.followsSystem {
+                HStack(spacing: 12) {
+                    Image(systemName: "textformat.size.smaller")
+                        .accessibilityHidden(true)
+                    Slider(
+                        value: textSizeIndex,
+                        in: 0...Double(TextSizePreference.sizes.count - 1),
+                        step: 1
+                    )
+                    .accessibilityLabel(Text(localized("settings.textSize")))
+                    .accessibilityValue(Text(localized(textSizePreference.localizationKey)))
+                    Image(systemName: "textformat.size.larger")
+                        .accessibilityHidden(true)
+                }
+
+                Text(localized(textSizePreference.localizationKey))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+        }
     }
 
     var body: some View {
@@ -4040,6 +4083,8 @@ private struct IOSSettingsSheet: View {
                             }
                         }
                     }
+
+                    textSizeSection
 
                     Section(localized("settings.language")) {
                         Picker(localized("settings.language.label"), selection: $draftLanguage) {
@@ -4437,7 +4482,7 @@ private struct IOSHistoryPanel: View {
     }
 
     private var boundedHistoryTextScale: CGFloat {
-        min(max(historyDynamicTypeScale, 1.0), 2.25)
+        min(max(historyDynamicTypeScale, 0.8), 2.25)
     }
 
     private func scaledHistoryFontSize(_ base: CGFloat, maxMultiplier: CGFloat = 2.1) -> CGFloat {
@@ -4965,6 +5010,31 @@ private enum IOSDeviceFamily {
 
 // Precomputed sizing values for one layout mode. Centralizing the magic numbers
 // here keeps the view body declarative and avoids recomputing them per frame.
+/// Applies the Text Size setting (#148) to everything below it: Settings,
+/// history, panes and the display all read Dynamic Type, so overriding it here
+/// scales them the way the system's own larger text does. Key sizes come from
+/// the layout metrics, so they stay put. Following the system leaves the
+/// environment alone. Transforming the value rather than branching keeps the
+/// view's identity, so changing the size never resets the calculator.
+private struct AppTextSizeModifier: ViewModifier {
+    @AppStorage(TextSizePreference.storageKey) private var storedTextSize = TextSizePreference.system.rawValue
+
+    func body(content: Content) -> some View {
+        let override = TextSizePreference(storedValue: storedTextSize).dynamicTypeSize
+        content.transformEnvironment(\.dynamicTypeSize) { size in
+            if let override {
+                size = override
+            }
+        }
+    }
+}
+
+private extension View {
+    func appTextSize() -> some View {
+        modifier(AppTextSizeModifier())
+    }
+}
+
 private struct IOSLayoutMetrics {
     static let minimumPadWindowSize = CGSize(width: 340, height: 440)
     static let defaultPadWindowSize = minimumPadWindowSize
@@ -5205,13 +5275,14 @@ private struct IOSLayoutMetrics {
 
     /// How much larger than the base sizes the display text can be drawn with
     /// `contentHeight` of room (#136).
-    func displayTextScale(contentHeight: CGFloat, contentWidth: CGFloat) -> CGFloat {
-        DisplayTextSizing.scale(
+    func displayFontSizes(contentHeight: CGFloat, contentWidth: CGFloat, textScale: CGFloat) -> DisplayTextSizing.FontSizes {
+        DisplayTextSizing.fontSizes(
             contentHeight: contentHeight,
             contentWidth: contentWidth,
             baseResultFontSize: displayFontSize,
             baseOperationFontSize: expressionFontSize,
-            spacing: displaySpacing
+            spacing: displaySpacing,
+            textScale: textScale
         )
     }
 
