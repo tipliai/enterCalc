@@ -1494,17 +1494,19 @@ final class CalculatorViewModelTests: XCTestCase {
         enter("3", into: viewModel)
         viewModel.setOperator(.add)
 
-        let displayBeforeClear = viewModel.display
         let expressionBeforeClear = viewModel.expressionDisplay
 
         viewModel.clearEntry()
 
-        XCTAssertEqual(viewModel.display, displayBeforeClear)
+        // C blanks the leftover operand but never evaluates or edits the
+        // operation line (#69, #143).
+        XCTAssertEqual(viewModel.display, "")
         XCTAssertEqual(viewModel.expressionDisplay, expressionBeforeClear)
         XCTAssertTrue(viewModel.history.isEmpty)
 
+        // Enter ignores the trailing operator (#84).
         viewModel.evaluate()
-        XCTAssertEqual(viewModel.display, "12")
+        XCTAssertEqual(viewModel.display, "9")
     }
 
     func testBackspaceRemovingFinalDigitAlsoRemovesExpressionOperandWithoutExtraStep() {
@@ -3090,15 +3092,22 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.display, "12")
     }
 
-    func testClearEntryRemovesPendingOperatorWhenNoRightHandEntry() {
+    func testClearAfterTrailingOperatorBlanksEntryThenAllClears() {
+        // #143: after `1 + 2 +` the display still shows a 2 that does nothing.
+        // The first press clears it and turns the key to AC; the second clears all.
         let viewModel = CalculatorViewModel()
-        enter("9", into: viewModel)
-        viewModel.setOperator(.multiply)
+        enter("1", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("2", into: viewModel)
+        viewModel.setOperator(.add)
+
+        XCTAssertEqual(viewModel.display, "2")
+        XCTAssertFalse(viewModel.shouldShowAllClearButton)
 
         viewModel.clearEntry()
 
-        XCTAssertEqual(viewModel.display, "9")
-        XCTAssertEqual(viewModel.expressionDisplay, "")
+        XCTAssertEqual(viewModel.display, "")
+        XCTAssertEqual(viewModel.expressionDisplay, "1 + 2 +")
         XCTAssertTrue(viewModel.shouldShowAllClearButton)
 
         viewModel.clearEntry()
@@ -3106,11 +3115,38 @@ final class CalculatorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.display, "0")
         XCTAssertEqual(viewModel.expressionDisplay, "")
         XCTAssertTrue(viewModel.shouldShowAllClearButton)
+    }
+
+    func testClearAfterSingleOperatorKeepsItForTheNextEntry() {
+        let viewModel = CalculatorViewModel()
+        enter("9", into: viewModel)
+        viewModel.setOperator(.multiply)
+
+        viewModel.clearEntry()
+
+        XCTAssertEqual(viewModel.display, "")
+        XCTAssertEqual(viewModel.expressionDisplay, "9 ×")
+        XCTAssertTrue(viewModel.shouldShowAllClearButton)
 
         enter("7", into: viewModel)
         viewModel.evaluate()
 
-        XCTAssertEqual(viewModel.display, "7")
+        XCTAssertEqual(viewModel.display, "63")
+    }
+
+    func testUndoRestoresOperandClearedAfterTrailingOperator() {
+        let viewModel = CalculatorViewModel()
+        enter("5", into: viewModel)
+        viewModel.setOperator(.add)
+        enter("5", into: viewModel)
+        viewModel.setOperator(.add)
+
+        viewModel.clearEntry()
+        viewModel.undo()
+
+        XCTAssertEqual(viewModel.display, "5")
+        XCTAssertEqual(viewModel.expressionDisplay, "5 + 5 +")
+        XCTAssertFalse(viewModel.shouldShowAllClearButton)
     }
 
     func testInitialStateShowsAllClearButton() {
