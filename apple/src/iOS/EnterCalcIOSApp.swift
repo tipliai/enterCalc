@@ -4043,27 +4043,24 @@ private struct IOSSettingsSheet: View {
     }
 
     @ViewBuilder
-    private var textSizeSection: some View {
-        Section(localized("settings.textSize")) {
-            Toggle(localized("settings.textSize.useSystem"), isOn: usesSystemTextSize)
+    private var textSizeRows: some View {
+        Toggle(localized("settings.textSize.useSystem"), isOn: usesSystemTextSize)
 
-            if !textSizePreference.followsSystem {
-                HStack(spacing: 12) {
-                    Image(systemName: "textformat.size.smaller")
-                        .accessibilityHidden(true)
-                    Slider(
-                        value: textSizeIndex,
-                        in: 0...Double(TextSizePreference.sizes.count - 1),
-                        step: 1
-                    )
-                    .accessibilityLabel(Text(localized("settings.textSize")))
-                    .accessibilityValue(Text(localized(textSizePreference.localizationKey)))
-                    Image(systemName: "textformat.size.larger")
-                        .accessibilityHidden(true)
-                }
+        if !textSizePreference.followsSystem {
+            LabeledContent(localized("settings.textSize"), value: localized(textSizePreference.localizationKey))
+                .accessibilityHidden(true)
 
-                Text(localized(textSizePreference.localizationKey))
-                    .foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Image(systemName: "textformat.size.smaller")
+                    .accessibilityHidden(true)
+                Slider(
+                    value: textSizeIndex,
+                    in: 0...Double(TextSizePreference.sizes.count - 1),
+                    step: 1
+                )
+                .accessibilityLabel(Text(localized("settings.textSize")))
+                .accessibilityValue(Text(localized(textSizePreference.localizationKey)))
+                Image(systemName: "textformat.size.larger")
                     .accessibilityHidden(true)
             }
         }
@@ -4084,8 +4081,6 @@ private struct IOSSettingsSheet: View {
                         }
                     }
 
-                    textSizeSection
-
                     Section(localized("settings.language")) {
                         Picker(localized("settings.language.label"), selection: $draftLanguage) {
                             ForEach(availableLanguages, id: \.code) { language in
@@ -4100,6 +4095,8 @@ private struct IOSSettingsSheet: View {
                     }
 
                     Section(localized("settings.userInterface")) {
+                        textSizeRows
+
                         Picker(localized("settings.numberFormat.style"), selection: numberFormatSelection) {
                             ForEach(NumberFormatStyle.allCases, id: \.self) { style in
                                 Text(style.example).tag(style)

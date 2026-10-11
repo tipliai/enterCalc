@@ -110,7 +110,7 @@
 
 /* Text Size setting (#148) */
 "settings.textSize" = "文字大小";
-"settings.textSize.useSystem" = "使用系统大小";
+"settings.textSize.useSystem" = "使用系统文字大小";
 "settings.textSize.extraSmall" = "特小";
 "settings.textSize.small" = "小";
 "settings.textSize.standard" = "默认";

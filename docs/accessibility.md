@@ -45,7 +45,7 @@ This page is a quick guide to accessibility features available in EnterCalc.
 
 ### Text Size setting
 
-- **Settings ▸ Text Size** follows the system text size by default (**Use System Size**).
+- **Settings ▸ User Interface** has a Text Size control that follows the system text size by default (**Use System Text Size**).
 - Turn it off to choose one of five sizes for EnterCalc only: Extra Small, Small, Default, Large, and Extra Large.
 - The chosen size applies to Settings, history, and the panels the same way the system's larger text does, and makes the calculator's numbers larger or smaller. Key sizes stay the same at every setting.
 

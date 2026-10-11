@@ -3104,35 +3104,6 @@ private struct SettingsSheet: View {
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
-                        Text(macLocalized("settings.textSize", bundle: localizationBundle))
-                            .font(.system(size: settingsSectionSize))
-                        Toggle(macLocalized("settings.textSize.useSystem", bundle: localizationBundle), isOn: usesSystemTextSize)
-                            .font(.system(size: settingsBodySize))
-
-                        if !textSizePreference.followsSystem {
-                            HStack(spacing: 10) {
-                                Image(systemName: "textformat.size.smaller")
-                                    .accessibilityHidden(true)
-                                Slider(
-                                    value: textSizeIndex,
-                                    in: 0...Double(TextSizePreference.sizes.count - 1),
-                                    step: 1
-                                )
-                                .accessibilityLabel(Text(macLocalized("settings.textSize", bundle: localizationBundle)))
-                                .accessibilityValue(Text(macLocalized(textSizePreference.localizationKey, bundle: localizationBundle)))
-                                Image(systemName: "textformat.size.larger")
-                                    .accessibilityHidden(true)
-                            }
-                            .font(.system(size: settingsBodySize))
-
-                            Text(macLocalized(textSizePreference.localizationKey, bundle: localizationBundle))
-                                .font(.system(size: settingsSecondarySize))
-                                .foregroundStyle(.secondary)
-                                .accessibilityHidden(true)
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 10) {
                         Picker(macLocalized("settings.language.label", bundle: localizationBundle), selection: $selectedLanguage) {
                             ForEach(availableLanguages, id: \.code) { lang in
                                 Text(lang.displayName).tag(lang.code)
@@ -3161,6 +3132,32 @@ private struct SettingsSheet: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text(macLocalized("settings.userInterface", bundle: localizationBundle))
                             .font(.system(size: settingsSectionSize))
+                        Toggle(macLocalized("settings.textSize.useSystem", bundle: localizationBundle), isOn: usesSystemTextSize)
+                            .font(.system(size: settingsBodySize))
+
+                        if !textSizePreference.followsSystem {
+                            LabeledContent(
+                                macLocalized("settings.textSize", bundle: localizationBundle),
+                                value: macLocalized(textSizePreference.localizationKey, bundle: localizationBundle)
+                            )
+                            .font(.system(size: settingsBodySize))
+                            .accessibilityHidden(true)
+
+                            HStack(spacing: 10) {
+                                Image(systemName: "textformat.size.smaller")
+                                    .accessibilityHidden(true)
+                                Slider(
+                                    value: textSizeIndex,
+                                    in: 0...Double(TextSizePreference.sizes.count - 1),
+                                    step: 1
+                                )
+                                .accessibilityLabel(Text(macLocalized("settings.textSize", bundle: localizationBundle)))
+                                .accessibilityValue(Text(macLocalized(textSizePreference.localizationKey, bundle: localizationBundle)))
+                                Image(systemName: "textformat.size.larger")
+                                    .accessibilityHidden(true)
+                            }
+                            .font(.system(size: settingsBodySize))
+                        }
                         Toggle(macLocalized("settings.numberFormat.scientific", bundle: localizationBundle), isOn: $usesScientificNotation)
                             .font(.system(size: settingsBodySize))
                         Toggle(macLocalized("settings.percent.classicBehavior", bundle: localizationBundle), isOn: $usesAlternativeKeypad)

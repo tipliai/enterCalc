@@ -110,7 +110,7 @@
 
 /* Text Size setting (#148) */
 "settings.textSize" = "文字サイズ";
-"settings.textSize.useSystem" = "システムのサイズを使用";
+"settings.textSize.useSystem" = "システムの文字サイズを使用";
 "settings.textSize.extraSmall" = "極小";
 "settings.textSize.small" = "小";
 "settings.textSize.standard" = "デフォルト";
