@@ -103,8 +103,8 @@ These behaviors are product expectations for the app UI and persistence model. T
 | Percent | Enter `1 + 2 × ( 100%` and evaluate | Before `=`, display stays `100%`; evaluation treats `%` as decimal and resolves to `3` with expression `1 + 2 × ( 100% ) =` | `testPercentInsideParenthesizedExpressionStaysVisibleUntilEvaluate` |
 | Percent | Enter `1 + 5 × ( 200% ) =` | Evaluation treats `%` as decimal inside parentheses, resulting in `11`; history stores `1 + 5 × ( 200% )` | `testPercentInsideParenthesizedExpressionEvaluatesAsDecimalPercent` |
 | Arithmetic | Enter `50`, apply percent | Display `0.5`, expression `50%`, no error state | `testPercentConvertsCurrentInputToDecimalValue` |
-| Percent | Enable classic percent mode, evaluate `50`, then apply percent | Display `25`; expression remains `50%` | `testClassicPercentModeTreatsEvaluatedValuesLikeClassicBehavior` |
-| Percent | Enable classic percent mode, enter `50`, then apply percent as standalone input | Display `0`; expression remains `50%` | `testClassicPercentModeTreatsStandaloneInputLikeCalculator` |
+| Percent | Evaluate `50`, then apply percent | Display `0.5`; expression `50%`; no error state | `testPercentAfterEvaluateUsesCanonicalBehavior` |
+| Percent | Enter `50`, then apply percent as standalone input | Display `0.5`; expression `50%`; no error state | `testPercentStandaloneInputUsesCanonicalBehavior` |
 | Percent | Evaluate `10 + 10%` | Display `11`; expression preserves percent as `10 + 10% =`; history stores `10 + 10%` | `testPercentMatchesCalculatorForAddition` |
 | Percent | Repeat evaluate after `100 + 50% =` | First evaluation shows `100 + 50% = 150`; repeated equals does not advance or collapse expression and keeps the same result/context | `testRepeatedEqualsAfterPercentDoesNotAdvanceResult` |
 | Percent | Evaluate `200 − 10%` | Pre-equals display shows `10%`; expression stays `200 − 10%`; final history stores `200 − 10% -> 180` | `testPercentMatchesCalculatorForSubtraction` |
