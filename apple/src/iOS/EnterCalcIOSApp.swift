@@ -4103,13 +4103,14 @@ private struct IOSSettingsSheet: View {
                     }
 
                     Section(localized("settings.userInterface")) {
-                        textSizeRows
-
                         Picker(localized("settings.numberFormat.style"), selection: numberFormatSelection) {
                             ForEach(NumberFormatStyle.allCases, id: \.self) { style in
                                 Text(style.example).tag(style)
                             }
                         }
+
+                        textSizeRows
+
                         Toggle(localized("settings.numberFormat.scientific"), isOn: $draftScientificNotation)
                         Toggle(localized("settings.percent.classicBehavior"), isOn: $draftUsesAlternativeKeypad)
                         Toggle(localized("settings.rounding.disableSwipeDown"), isOn: $draftDisablesSwipeDownToRound)
