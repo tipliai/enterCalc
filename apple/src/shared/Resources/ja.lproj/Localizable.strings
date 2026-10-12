@@ -115,3 +115,7 @@
 "settings.textSize.standard" = "デフォルト";
 "settings.textSize.large" = "大";
 "settings.textSize.extraLarge" = "特大";
+
+/* Mode picker (#142) */
+"calculator.mode.menu" = "モード";
+"calculator.mode.picker.hint" = "計算機のモードを選択";

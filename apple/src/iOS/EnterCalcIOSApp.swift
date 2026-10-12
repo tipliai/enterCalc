@@ -436,6 +436,12 @@ struct EnterCalcIOSApp: App {
                 }
                 .keyboardShortcut(.rightArrow, modifiers: [.shift])
                 .disabled(actionContext?.goToNextScreen == nil)
+
+                Divider()
+
+                Menu(localized("calculator.mode.menu")) {
+                    ModeMenuItems(context: actionContext) { localized($0.localizationKey) }
+                }
             }
         }
     }
@@ -586,7 +592,9 @@ struct EnterCalcIOSView: View {
             growDisplayArea: { adjustDisplayHeightFromKeyboard(byPoints: Self.keyboardDisplayResizeStep) },
             shrinkDisplayArea: { adjustDisplayHeightFromKeyboard(byPoints: -Self.keyboardDisplayResizeStep) },
             goToNextScreen: { goToNextScreenFromKeyboard() },
-            goToPreviousScreen: { goToPreviousScreenFromKeyboard() }
+            goToPreviousScreen: { goToPreviousScreenFromKeyboard() },
+            currentMode: CalculatorMode.current(for: viewModel),
+            selectMode: { selectMode($0) }
         )
     }
 
@@ -2934,12 +2942,11 @@ private extension EnterCalcIOSView {
                     )
                     .opacity(isBasicSpaceInUse ? 0 : 1)
                     .animation(reduceMotionEnabled ? nil : .easeInOut(duration: 0.5), value: isBasicSpaceInUse)
-                    // The row carries the VAT and TIP buttons in currency
-                    // mode, so it has to take taps then; the label inside opts
-                    // out individually so tapping the display still copies. In
-                    // Basic mode there is nothing to hit, and a fully faded row
-                    // is never tappable.
-                    .allowsHitTesting(activeScreen.viewModel.activeCurrencySymbol != nil && !isBasicSpaceInUse)
+                    // The mode picker and the VAT and TIP buttons take taps;
+                    // the empty rest of the row lets them through, so tapping
+                    // the display still copies. A fully faded row is never
+                    // tappable.
+                    .allowsHitTesting(!isBasicSpaceInUse)
                 }
             }
             .overlay(alignment: .top) {
@@ -2960,12 +2967,6 @@ private extension EnterCalcIOSView {
                 copyDisplayToPasteboardWithFlash(from: screen.viewModel)
             }
         }
-    }
-
-    // Currency mode is derived state, not a separate selection: the calculator
-    // is in it exactly when a currency symbol is showing.
-    var currentModeLabelKey: String {
-        activeScreen.viewModel.activeCurrencySymbol == nil ? "calculator.mode.basic" : "calculator.mode.currency"
     }
 
     /// Compact outlined pill, deliberately unlike a keypad key: it opens a tool
@@ -3035,23 +3036,68 @@ private extension EnterCalcIOSView {
         return min(metrics.memoryFontSize * scale, metrics.memoryHeight * 0.85)
     }
 
+    /// The mode name, as a native menu of every mode with the current one
+    /// checked (#142). It is the only part of its row that takes a tap, so
+    /// tapping the rest of the display still copies the result.
+    func modePicker(metrics: IOSLayoutMetrics, opacity: Double) -> some View {
+        let current = CalculatorMode.current(for: activeScreen.viewModel)
+        let fontSize = modeLabelFontSize(metrics: metrics)
+        return Menu {
+            Picker(selection: Binding(get: { current }, set: { selectMode($0) })) {
+                ForEach(CalculatorMode.allCases) { mode in
+                    Label(localized(mode.localizationKey), systemImage: mode.systemImage)
+                        .tag(mode)
+                }
+            } label: {
+                Text(localized("calculator.mode.menu"))
+            }
+            .pickerStyle(.inline)
+        } label: {
+            HStack(spacing: 4) {
+                Text(localized(current.localizationKey))
+                    .font(EnterCalcFont.appFont(size: fontSize))
+                    .lineLimit(1)
+                    .contentTransition(.opacity)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: fontSize * 0.55, weight: .semibold))
+            }
+            .foregroundStyle(palette.textPrimary.opacity(opacity))
+            .animation(ModeControlsTransition.animation, value: current)
+            .frame(minHeight: metrics.memoryHeight)
+            // Meets the 44pt target without growing the row.
+            .contentShape(Rectangle().inset(by: -max(0, (44 - metrics.memoryHeight) / 2)))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(localized("calculator.mode.menu")))
+        .accessibilityValue(Text(localized(current.localizationKey)))
+        .accessibilityHint(Text(localized("calculator.mode.picker.hint")))
+    }
+
+    func selectMode(_ mode: CalculatorMode) {
+        let screen = activeScreen
+        guard CalculatorMode.current(for: screen.viewModel) != mode else { return }
+        triggerActionFeedback()
+        withAnimation(ModeControlsTransition.animation) {
+            mode.select(on: screen.viewModel, currencySymbol: screen.settings.currencySymbol)
+        }
+    }
+
     func memoryControls(metrics: IOSLayoutMetrics, opacity: Double) -> some View {
         let showsCurrencyTools = activeScreen.viewModel.activeCurrencySymbol != nil
         return HStack(spacing: 8) {
-            Text(localized(currentModeLabelKey))
-                .font(EnterCalcFont.appFont(size: modeLabelFontSize(metrics: metrics)))
-                .foregroundStyle(palette.textPrimary.opacity(opacity))
-                .lineLimit(1)
-                // Keeps tapping the display area a copy action, as before.
-                .allowsHitTesting(false)
+            modePicker(metrics: metrics, opacity: opacity)
 
             Spacer(minLength: 4)
 
             if showsCurrencyTools {
-                currencyToolButton(metrics: metrics, titleKey: "currency.vat.short", pane: .vat, opacity: opacity)
-                currencyToolButton(metrics: metrics, titleKey: "currency.tip.short", pane: .tip, opacity: opacity)
+                HStack(spacing: 8) {
+                    currencyToolButton(metrics: metrics, titleKey: "currency.vat.short", pane: .vat, opacity: opacity)
+                    currencyToolButton(metrics: metrics, titleKey: "currency.tip.short", pane: .tip, opacity: opacity)
+                }
+                .modeControlTransition()
             }
         }
+            .animation(ModeControlsTransition.animation, value: showsCurrencyTools)
             .frame(maxWidth: .infinity, minHeight: metrics.memoryHeight, maxHeight: metrics.memoryHeight, alignment: .leading)
             .padding(.horizontal, metrics.displayHorizontalPadding)
             .clipped()

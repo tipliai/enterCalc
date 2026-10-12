@@ -138,6 +138,12 @@ struct EnterCalcMacApp: App {
                     Label(localized("display.shrink"), systemImage: "arrow.up.and.down")
                 }
                 .keyboardShortcut(.downArrow, modifiers: [.shift])
+
+                Divider()
+
+                Menu(localized("calculator.mode.menu")) {
+                    ModeMenuItems(context: actionContext) { localized($0.localizationKey) }
+                }
             }
         }
     }
