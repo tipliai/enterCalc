@@ -18,7 +18,6 @@
 "settings.numberFormat.style" = "数字样式";
 "settings.currency.symbol" = "货币符号";
 "settings.numberFormat.scientific" = "使用科学计数法";
-"settings.percent.classicBehavior" = "使用备用键盘布局";
 "settings.buttonSound.disabled" = "关闭按键音";
 "settings.credits" = "关于";
 "settings.feedback" = "反馈";

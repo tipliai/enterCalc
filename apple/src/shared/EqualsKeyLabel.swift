@@ -4,14 +4,12 @@ import Foundation
 ///
 /// This is derived rather than configured. "Enter" is an English word, and a
 /// translated equivalent reads as prose on a key sized for a symbol, so every
-/// other language uses `=`, which needs no translation. The alternative keypad
-/// was laid out around the symbol, so it uses `=` regardless of language.
+/// other language uses `=`, which needs no translation.
 public enum EqualsKeyLabel {
     public static let symbol = "="
 
-    public static func usesEnterWord(usesAlternativeKeypad: Bool, resolvedLocalizationCode: String) -> Bool {
-        guard !usesAlternativeKeypad else { return false }
-        return isEnglish(resolvedLocalizationCode)
+    public static func usesEnterWord(resolvedLocalizationCode: String) -> Bool {
+        isEnglish(resolvedLocalizationCode)
     }
 
     /// Matches the language subtag so regional variants (`en-GB`, `en_AU`) are

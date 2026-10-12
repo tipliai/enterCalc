@@ -12,14 +12,15 @@ Current verification status on macOS:
 - `swift test list` discovers `192` `CalculatorViewModelTests` methods.
 - This matrix documents the same `192` methods with no missing or extra entries.
 - The current macOS run includes the AppKit-only clipboard tests guarded by `canImport(AppKit)`.
-- A full `swift test` run executes `403` tests across every suite, of which `6` fail. Those 6 failures span 2 methods in `CalculatorViewModelTests` (`testBackspaceCanFullyUnwindParenthesizedExpression` and `testRefreshLocalizationUpdatesActiveErrorMessage`) and pre-date the 1.1.0 work. The other two methods that used to fail described contradictory clear behaviour and were replaced in #143.
+- A full `swift test` run executes `406` tests across every suite, of which `6` fail. Those 6 failures span 2 methods in `CalculatorViewModelTests` (`testBackspaceCanFullyUnwindParenthesizedExpression` and `testRefreshLocalizationUpdatesActiveErrorMessage`) and pre-date the 1.1.0 work. The other two methods that used to fail described contradictory clear behaviour and were replaced in #143.
 
 ### Other suites
 
 - `apple/tests/SystemAppearanceTests.swift` — maps the macOS global-domain `AppleInterfaceStyle` value to a color scheme for the `system` theme. macOS only writes that key while Dark Mode is on, so the absent case must resolve to light, and accent variants such as `DarkAqua` must resolve to dark.
 - `apple/tests/CurrencyCatalogTests.swift` — region-to-symbol detection for the default currency (en-GB gives £, en-US gives $, de-DE gives €), the fallback for regions whose currency the catalog does not carry, and invariants that keep the catalog usable: symbols unique, currency codes not shared between symbols, and every offered symbol actually accepted by the calculator engine.
 - `apple/tests/CurrencyModeTests.swift` — entering and leaving currency mode via the currency key, including that leaving preserves the entered value, that it clears a symbol differing from the configured one, that it survives All Clear, and that toggling is undoable, and that the display-edit caret never sits in front of the currency symbol (#118) — at the left edge, after Left past the first digit, or between the sign and symbol of a negative amount — while still stopping before grouping separators. Also sweeps the states a value can be in — untouched zero, typed zero, after All Clear, pending operator, after evaluate, backspace, sign toggle, square and undo — asserting the symbol is on screen in every one, for several currencies. Percent is excluded on purpose: its result is a ratio rather than an amount, so it drops the symbol.
-- `apple/tests/EqualsKeyLabelTests.swift` — whether the evaluate key shows `Enter` or `=`, derived from keypad layout and resolved language.
+- `apple/tests/EqualsKeyLabelTests.swift` — whether the evaluate key shows `Enter` or `=`, derived from the resolved language.
+- `apple/tests/CalculatorScreenSettingsPersistenceTests.swift` — page settings load and save through `UserDefaults`, and an upgrade from 1.1.0 with the alternative keypad on still loads: the retired keypad keys are cleared and every other setting is kept (#151).
 - `apple/tests/ReviewPromptPolicyTests.swift` — the gates on the in-app review prompt, and the semantics of the completed-calculation counter.
 - `apple/tests/DisplayTextSizingTests.swift` — how the display's result and operation text size to the room the display has (#136, #148): a cramped display keeps the base size and a taller one grows it, with no fixed ceiling; a narrow display grows only until a typical result fills the width; the Text Size setting scales the text up or down from there, never past what fits the display's height; and the operation line grows with the result up to its own cap.
 - `apple/tests/TextSizePreferenceTests.swift` — the Text Size setting (#148): follows the system by default and for unknown stored values, stored values round-trip, five sizes smallest first with Default in the middle mapping to the system's default Dynamic Type size, the slider index maps to sizes and clamps, and every label exists in all seven languages.
@@ -45,7 +46,7 @@ These behaviors are product expectations for the app UI and persistence model. T
 - iPad new pages: each new page is seeded from the current home-page settings at the moment the page is created.
 - iPad existing secondary pages: once created, a secondary page keeps its own settings and does not automatically update when the home page changes later.
 - iPad future secondary pages: if the home page changes language from `default` to an explicit language such as German, pages created after that change should inherit German.
-- Evaluate key label: the default keypad shows `Enter` in English and `=` in every other language; the alternative keypad shows `=` in all languages. This is derived from layout and resolved language, not a user setting, and follows a live language change without a restart. Covered by `apple/tests/EqualsKeyLabelTests.swift`.
+- Evaluate key label: `Enter` in English and `=` in every other language. This is derived from the resolved language, not a user setting, and follows a live language change without a restart. Covered by `apple/tests/EqualsKeyLabelTests.swift`.
 
 | Area | Test Value | Expected Result | Method |
 | --- | --- | --- | --- |

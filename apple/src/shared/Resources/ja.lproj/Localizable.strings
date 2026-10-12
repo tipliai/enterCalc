@@ -18,7 +18,6 @@
 "settings.numberFormat.style" = "数値スタイル";
 "settings.currency.symbol" = "通貨記号";
 "settings.numberFormat.scientific" = "科学表記を使用";
-"settings.percent.classicBehavior" = "代替キーパッドを使用";
 "settings.buttonSound.disabled" = "ボタン音を無効にする";
 "settings.credits" = "このアプリについて";
 "settings.feedback" = "フィードバック";
