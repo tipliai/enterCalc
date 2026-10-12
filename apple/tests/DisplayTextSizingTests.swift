@@ -2,16 +2,41 @@ import XCTest
 @testable import EnterCalcCore
 
 final class DisplayTextSizingTests: XCTestCase {
+    // iPhone portrait base sizes.
+    private let baseResult: CGFloat = 56
+    private let baseOperation: CGFloat = 15
+    private let spacing: CGFloat = 6
+
     private func scale(contentHeight: CGFloat, contentWidth: CGFloat = 10_000) -> CGFloat {
-        // iPhone portrait base sizes.
         DisplayTextSizing.scale(
             contentHeight: contentHeight,
             contentWidth: contentWidth,
-            baseResultFontSize: 56,
-            baseOperationFontSize: 15,
-            spacing: 6
+            baseResultFontSize: baseResult,
+            baseOperationFontSize: baseOperation,
+            spacing: spacing
         )
     }
+
+    private func sizes(
+        contentHeight: CGFloat,
+        contentWidth: CGFloat = 10_000,
+        textScale: CGFloat = 1
+    ) -> DisplayTextSizing.FontSizes {
+        DisplayTextSizing.fontSizes(
+            contentHeight: contentHeight,
+            contentWidth: contentWidth,
+            baseResultFontSize: baseResult,
+            baseOperationFontSize: baseOperation,
+            spacing: spacing,
+            textScale: textScale
+        )
+    }
+
+    private func stackHeight(_ sizes: DisplayTextSizing.FontSizes) -> CGFloat {
+        sizes.result * 1.12 + sizes.operation * 1.3 + spacing
+    }
+
+    // MARK: Growing with the display (#136)
 
     func testCrampedDisplayKeepsTheBaseSize() {
         XCTAssertEqual(scale(contentHeight: 60), 1)
@@ -25,16 +50,11 @@ final class DisplayTextSizingTests: XCTestCase {
         XCTAssertGreaterThan(taller, shorter)
     }
 
-    func testGrowthStopsAtTheMaximum() {
-        XCTAssertEqual(scale(contentHeight: 2_000), DisplayTextSizing.maximumScale)
-    }
-
     func testGrownTextFitsTheFillShareOfTheHeight() {
         let contentHeight: CGFloat = 170
         let factor = scale(contentHeight: contentHeight)
-        let stackHeight = 56 * factor * 1.12 + 15 * factor * 1.3 + 6
-        XCTAssertLessThan(factor, DisplayTextSizing.maximumScale)
-        XCTAssertEqual(stackHeight, contentHeight * DisplayTextSizing.fillRatio, accuracy: 0.001)
+        let stack = baseResult * factor * 1.12 + baseOperation * factor * 1.3 + spacing
+        XCTAssertEqual(stack, contentHeight * DisplayTextSizing.fillRatio, accuracy: 0.001)
     }
 
     func testZeroBaseSizeDoesNotDivideByZero() {
@@ -51,9 +71,8 @@ final class DisplayTextSizingTests: XCTestCase {
     func testNarrowDisplayLimitsGrowthEvenWithSpareHeight() {
         let wide = scale(contentHeight: 400)
         let narrow = scale(contentHeight: 400, contentWidth: 260)
-        XCTAssertEqual(wide, DisplayTextSizing.maximumScale)
         XCTAssertLessThan(narrow, wide)
-        XCTAssertEqual(56 * narrow * DisplayTextSizing.referenceResultWidthInEms, 260, accuracy: 0.001)
+        XCTAssertEqual(baseResult * narrow * DisplayTextSizing.referenceResultWidthInEms, 260, accuracy: 0.001)
     }
 
     func testWideningANarrowDisplayGrowsTheText() {
@@ -65,5 +84,58 @@ final class DisplayTextSizingTests: XCTestCase {
 
     func testTooNarrowDisplayKeepsTheBaseSize() {
         XCTAssertEqual(scale(contentHeight: 400, contentWidth: 100), 1)
+    }
+
+    // MARK: No fixed ceiling, and the Text Size setting (#148)
+
+    func testGrowthHasNoFixedCeiling() {
+        // A display dragged much taller keeps growing the text; #136 stopped at 1.6x.
+        XCTAssertGreaterThan(scale(contentHeight: 600), 2)
+        XCTAssertGreaterThan(scale(contentHeight: 800), scale(contentHeight: 600))
+    }
+
+    func testDefaultTextScaleMatchesTheSpaceScale() {
+        let result = sizes(contentHeight: 170)
+        XCTAssertEqual(result.result, baseResult * scale(contentHeight: 170), accuracy: 0.001)
+    }
+
+    func testLargerTextSizeGrowsTheResult() {
+        let standard = sizes(contentHeight: 170)
+        let large = sizes(contentHeight: 170, textScale: 21.0 / 17.0)
+        XCTAssertGreaterThan(large.result, standard.result)
+    }
+
+    func testSmallerTextSizeShrinksTheResultEvenInACrampedDisplay() {
+        let small = sizes(contentHeight: 60, textScale: 14.0 / 17.0)
+        XCTAssertEqual(small.result, baseResult * 14.0 / 17.0, accuracy: 0.001)
+    }
+
+    func testLargestTextSizeNeverOverflowsTheDisplayHeight() {
+        let contentHeight: CGFloat = 170
+        let extraLarge = sizes(contentHeight: contentHeight, textScale: 28.0 / 17.0)
+        XCTAssertLessThanOrEqual(
+            stackHeight(extraLarge),
+            contentHeight * DisplayTextSizing.maximumFillRatio + 0.001
+        )
+        XCTAssertGreaterThan(extraLarge.result, sizes(contentHeight: contentHeight).result)
+    }
+
+    func testOperationLineGrowsWithTheResultUpToItsCap() {
+        let modest = sizes(contentHeight: 170)
+        XCTAssertEqual(modest.operation / baseOperation, modest.result / baseResult, accuracy: 0.001)
+
+        let huge = sizes(contentHeight: 2_000)
+        XCTAssertEqual(huge.operation, baseOperation * DisplayTextSizing.maximumOperationScale, accuracy: 0.001)
+    }
+
+    func testSmallerTextSizeAlsoShrinksACappedOperationLine() {
+        let standard = sizes(contentHeight: 2_000)
+        let small = sizes(contentHeight: 2_000, textScale: 14.0 / 17.0)
+        XCTAssertLessThan(small.operation, standard.operation)
+        XCTAssertEqual(
+            small.operation,
+            baseOperation * DisplayTextSizing.maximumOperationScale * 14.0 / 17.0,
+            accuracy: 0.001
+        )
     }
 }

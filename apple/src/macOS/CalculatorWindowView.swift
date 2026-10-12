@@ -11,6 +11,13 @@ private func macPreferredTextScale(for style: NSFont.TextStyle, baseline: CGFloa
     return max(1.0, preferredSize / baseline)
 }
 
+// The Text Size setting's scale when the user has chosen one (#148), otherwise
+// the system's preferred size for the style, as above.
+private func macTextScale(_ storedTextSize: String, for style: NSFont.TextStyle, baseline: CGFloat) -> CGFloat {
+    TextSizePreference(storedValue: storedTextSize).relativeScale
+        ?? macPreferredTextScale(for: style, baseline: baseline)
+}
+
 // Plays the button click sound, but only for genuine mouse clicks. Keyboard and
 // programmatic activations are filtered out so typing stays silent.
 @MainActor
@@ -62,6 +69,7 @@ struct CalculatorWindowView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.scenePhase) private var scenePhase
     @ScaledMetric(relativeTo: .largeTitle) private var displayDynamicTypeScale: CGFloat = 1.0
+    @AppStorage(TextSizePreference.storageKey) private var storedTextSize = TextSizePreference.system.rawValue
     @State private var showHistory: Bool = false
     @State private var userToggledHistory: Bool = false
     @State private var flashCopy: Bool = false
@@ -157,7 +165,7 @@ struct CalculatorWindowView: View {
     }
 
     private var effectiveHistoryTextScale: CGFloat {
-        macPreferredTextScale(for: .body, baseline: 13)
+        macTextScale(storedTextSize, for: .body, baseline: 13)
     }
 
     private var currentLocalizationBundle: Bundle? {
@@ -580,29 +588,20 @@ struct CalculatorWindowView: View {
 
         return GeometryReader { displayGeometry in
             let contentHeight = max(1, displayGeometry.size.height - 8 - 3)
-            let effectiveDisplayScale = max(
-                displayDynamicTypeScale,
-                macPreferredTextScale(for: .largeTitle, baseline: 26)
-            )
-            // A taller display gets larger text (#136). The display's height comes
+            let textScale = TextSizePreference(storedValue: storedTextSize).relativeScale
+                ?? max(displayDynamicTypeScale, macPreferredTextScale(for: .largeTitle, baseline: 26))
+            // A bigger display gets larger text (#136, #148). The display's size comes
             // from the window and keypad, not the text, so this holds still while typing.
-            let spaceScale = DisplayTextSizing.scale(
+            let fontSizes = DisplayTextSizing.fontSizes(
                 contentHeight: contentHeight - baseBasicRowHeight,
                 contentWidth: displayGeometry.size.width - 8 * 2, // the text's .padding(.horizontal, 8)
                 baseResultFontSize: baseResultFontSize,
                 baseOperationFontSize: baseBasicFontSize,
-                spacing: displaySpacing
+                spacing: displaySpacing,
+                textScale: textScale
             )
-            let resultFontSize = boundedDynamicTypeSize(
-                baseResultFontSize * spaceScale,
-                scale: effectiveDisplayScale,
-                maximum: max(baseResultFontSize * spaceScale, contentHeight * 0.78)
-            )
-            let basicFontSize = boundedDynamicTypeSize(
-                baseBasicFontSize * spaceScale,
-                scale: effectiveDisplayScale,
-                maximum: max(baseBasicFontSize, resultFontSize * 0.34)
-            )
+            let resultFontSize = fontSizes.result
+            let basicFontSize = fontSizes.operation
             let resultLineHeight = resultFontSize * 1.12
             let basicRowHeight = max(baseBasicRowHeight, basicFontSize * 1.32)
             let measuredOperationHeight = max(operationTextMeasuredHeight, basicFontSize * 1.3)
@@ -859,10 +858,16 @@ struct CalculatorWindowView: View {
         viewModel.activeCurrencySymbol == nil ? "calculator.mode.basic" : "calculator.mode.currency"
     }
 
+    // The mode name follows the text size (#148); the row grows to fit it. The
+    // VAT and TIP buttons keep their size.
+    private var modeLabelFontSize: CGFloat {
+        12 * macTextScale(storedTextSize, for: .body, baseline: 13)
+    }
+
     private func memoryControls(opacity: Double) -> some View {
         return HStack(spacing: 6) {
             Text(macLocalized(currentModeLabelKey, bundle: currentLocalizationBundle))
-                .font(EnterCalcFont.appFont(size: 12))
+                .font(EnterCalcFont.appFont(size: modeLabelFontSize))
                 .foregroundStyle(primaryForeground.opacity(opacity))
                 .lineLimit(1)
 
@@ -874,7 +879,7 @@ struct CalculatorWindowView: View {
             }
         }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: 16, alignment: .leading)
+            .frame(height: max(16, modeLabelFontSize * 1.32), alignment: .leading)
             .clipped()
             .animation(reduceMotionEnabled ? nil : .easeInOut(duration: 0.18), value: opacity)
             .anchorPreference(
@@ -910,10 +915,6 @@ struct CalculatorWindowView: View {
         let overlap = max(0, resultBottom - basicTop)
         let visibility = max(0, min(1, 1 - Double(overlap / clampedBasicHeight)))
         return baseOpacity * visibility
-    }
-
-    private func boundedDynamicTypeSize(_ baseSize: CGFloat, scale: CGFloat, maximum: CGFloat) -> CGFloat {
-        min(max(baseSize, baseSize * scale), maximum)
     }
 
     private var keypadArea: some View {
@@ -2334,6 +2335,7 @@ private struct CompactActionButton: View {
     /// currency key in Currency mode, since All Clear does not leave it.
     var isHighlighted: Bool = false
     @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
+        @AppStorage(TextSizePreference.storageKey) private var storedTextSize = TextSizePreference.system.rawValue
     @State private var hovering: Bool = false
     @State private var globalFrame: CGRect = .zero
 
@@ -2404,7 +2406,7 @@ private struct CompactActionButton: View {
     private var boundedIconFontSize: CGFloat {
         let effectiveControlScale = max(
             controlDynamicTypeScale,
-            macPreferredTextScale(for: .title2, baseline: 22)
+            macTextScale(storedTextSize, for: .title2, baseline: 22)
         )
         let baseSize = min(max(height * 0.52, 11), 17)
         let maxSize = max(baseSize, height * 0.82)
@@ -2453,6 +2455,7 @@ private struct CompactActionButton: View {
         /// in Currency mode).
         var isHighlighted: Bool = false
         @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
+        @AppStorage(TextSizePreference.storageKey) private var storedTextSize = TextSizePreference.system.rawValue
 
         @State private var hovering: Bool = false
         @State private var globalFrame: CGRect = .zero
@@ -2674,7 +2677,7 @@ private struct CompactActionButton: View {
         private var primaryFontSize: CGFloat {
             let effectiveControlScale = max(
                 controlDynamicTypeScale,
-                macPreferredTextScale(for: .title2, baseline: 22)
+                macTextScale(storedTextSize, for: .title2, baseline: 22)
             )
             let baseSize = min(max(height * 0.38, 14), 28)
             let maxSize = max(baseSize, height * 0.82)
@@ -3043,9 +3046,31 @@ private struct SettingsSheet: View {
     let availableLanguages: [LanguageOption]
     let onClose: () -> Void
     @Environment(\.macLocalizationBundle) private var localizationBundle
+    // Global and live: the sheet resizes as the slider moves, which is the preview.
+    @AppStorage(TextSizePreference.storageKey) private var storedTextSize = TextSizePreference.system.rawValue
 
     private var settingsTextScale: CGFloat {
-        macPreferredTextScale(for: .body, baseline: 13)
+        macTextScale(storedTextSize, for: .body, baseline: 13)
+    }
+
+    private var textSizePreference: TextSizePreference {
+        TextSizePreference(storedValue: storedTextSize)
+    }
+
+    private var usesSystemTextSize: Binding<Bool> {
+        Binding(
+            get: { textSizePreference.followsSystem },
+            set: { followsSystem in
+                storedTextSize = (followsSystem ? TextSizePreference.system : .standard).rawValue
+            }
+        )
+    }
+
+    private var textSizeIndex: Binding<Double> {
+        Binding(
+            get: { Double(textSizePreference.sizeIndex ?? TextSizePreference.sizes.firstIndex(of: .standard) ?? 0) },
+            set: { storedTextSize = TextSizePreference.size(atIndex: Int($0.rounded())).rawValue }
+        )
     }
 
     private var settingsTitleSize: CGFloat { (NSFont.systemFontSize + 1) * settingsTextScale }
@@ -3115,6 +3140,32 @@ private struct SettingsSheet: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text(macLocalized("settings.userInterface", bundle: localizationBundle))
                             .font(.system(size: settingsSectionSize))
+                        Toggle(macLocalized("settings.textSize.useSystem", bundle: localizationBundle), isOn: usesSystemTextSize)
+                            .font(.system(size: settingsBodySize))
+
+                        if !textSizePreference.followsSystem {
+                            LabeledContent(
+                                macLocalized("settings.textSize", bundle: localizationBundle),
+                                value: macLocalized(textSizePreference.localizationKey, bundle: localizationBundle)
+                            )
+                            .font(.system(size: settingsBodySize))
+                            .accessibilityHidden(true)
+
+                            HStack(spacing: 10) {
+                                Image(systemName: "textformat.size.smaller")
+                                    .accessibilityHidden(true)
+                                Slider(
+                                    value: textSizeIndex,
+                                    in: 0...Double(TextSizePreference.sizes.count - 1),
+                                    step: 1
+                                )
+                                .accessibilityLabel(Text(macLocalized("settings.textSize", bundle: localizationBundle)))
+                                .accessibilityValue(Text(macLocalized(textSizePreference.localizationKey, bundle: localizationBundle)))
+                                Image(systemName: "textformat.size.larger")
+                                    .accessibilityHidden(true)
+                            }
+                            .font(.system(size: settingsBodySize))
+                        }
                         Toggle(macLocalized("settings.numberFormat.scientific", bundle: localizationBundle), isOn: $usesScientificNotation)
                             .font(.system(size: settingsBodySize))
                         Toggle(macLocalized("settings.percent.classicBehavior", bundle: localizationBundle), isOn: $usesAlternativeKeypad)
