@@ -200,7 +200,9 @@ struct CalculatorWindowView: View {
             canUndo: viewModel.canUndo,
             canRedo: viewModel.canRedo,
             clear: { closeToolPane(); viewModel.clearEntry() },
-            clearAll: { closeToolPane(); viewModel.clearAll() }
+            clearAll: { closeToolPane(); viewModel.clearAll() },
+            currentMode: CalculatorMode.current(for: viewModel),
+            selectMode: { selectMode($0) }
         )
     }
 
@@ -850,10 +852,47 @@ struct CalculatorWindowView: View {
             .allowsHitTesting(false)
     }
 
-    // Currency mode is derived state, not a separate selection: the calculator
-    // is in it exactly when a currency symbol is showing.
-    private var currentModeLabelKey: String {
-        viewModel.activeCurrencySymbol == nil ? "calculator.mode.basic" : "calculator.mode.currency"
+    /// The mode name, as a native menu of every mode with the current one
+    /// checked (#142).
+    private func modePicker(opacity: Double) -> some View {
+        let current = CalculatorMode.current(for: viewModel)
+        return Menu {
+            Picker(selection: Binding(get: { current }, set: { selectMode($0) })) {
+                ForEach(CalculatorMode.allCases) { mode in
+                    Label(macLocalized(mode.localizationKey, bundle: currentLocalizationBundle), systemImage: mode.systemImage)
+                        .tag(mode)
+                }
+            } label: {
+                Text(macLocalized("calculator.mode.menu", bundle: currentLocalizationBundle))
+            }
+            .pickerStyle(.inline)
+        } label: {
+            HStack(spacing: 3) {
+                Text(macLocalized(current.localizationKey, bundle: currentLocalizationBundle))
+                    .font(EnterCalcFont.appFont(size: modeLabelFontSize))
+                    .lineLimit(1)
+                    .contentTransition(.opacity)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: modeLabelFontSize * 0.6, weight: .semibold))
+            }
+            .foregroundStyle(primaryForeground.opacity(opacity))
+            .animation(ModeControlsTransition.animation, value: current)
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(macLocalized("calculator.mode.picker.hint", bundle: currentLocalizationBundle))
+        .accessibilityLabel(Text(macLocalized("calculator.mode.menu", bundle: currentLocalizationBundle)))
+        .accessibilityValue(Text(macLocalized(current.localizationKey, bundle: currentLocalizationBundle)))
+        .accessibilityHint(Text(macLocalized("calculator.mode.picker.hint", bundle: currentLocalizationBundle)))
+    }
+
+    private func selectMode(_ mode: CalculatorMode) {
+        guard CalculatorMode.current(for: viewModel) != mode else { return }
+        withAnimation(ModeControlsTransition.animation) {
+            mode.select(on: viewModel, currencySymbol: windowSettings.currencySymbol)
+        }
     }
 
     // The mode name follows the text size (#148); the row grows to fit it. The
@@ -863,19 +902,21 @@ struct CalculatorWindowView: View {
     }
 
     private func memoryControls(opacity: Double) -> some View {
+        let showsCurrencyTools = viewModel.activeCurrencySymbol != nil
         return HStack(spacing: 6) {
-            Text(macLocalized(currentModeLabelKey, bundle: currentLocalizationBundle))
-                .font(EnterCalcFont.appFont(size: modeLabelFontSize))
-                .foregroundStyle(primaryForeground.opacity(opacity))
-                .lineLimit(1)
+            modePicker(opacity: opacity)
 
             Spacer(minLength: 4)
 
-            if viewModel.activeCurrencySymbol != nil {
-                currencyToolButton(titleKey: "currency.vat.short", pane: .vat, opacity: opacity)
-                currencyToolButton(titleKey: "currency.tip.short", pane: .tip, opacity: opacity)
+            if showsCurrencyTools {
+                HStack(spacing: 6) {
+                    currencyToolButton(titleKey: "currency.vat.short", pane: .vat, opacity: opacity)
+                    currencyToolButton(titleKey: "currency.tip.short", pane: .tip, opacity: opacity)
+                }
+                .modeControlTransition()
             }
         }
+            .animation(ModeControlsTransition.animation, value: showsCurrencyTools)
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: max(16, modeLabelFontSize * 1.32), alignment: .leading)
             .clipped()
