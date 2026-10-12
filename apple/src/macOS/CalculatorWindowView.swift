@@ -858,10 +858,16 @@ struct CalculatorWindowView: View {
         viewModel.activeCurrencySymbol == nil ? "calculator.mode.basic" : "calculator.mode.currency"
     }
 
+    // The mode name follows the text size (#148); the row grows to fit it. The
+    // VAT and TIP buttons keep their size.
+    private var modeLabelFontSize: CGFloat {
+        12 * macTextScale(storedTextSize, for: .body, baseline: 13)
+    }
+
     private func memoryControls(opacity: Double) -> some View {
         return HStack(spacing: 6) {
             Text(macLocalized(currentModeLabelKey, bundle: currentLocalizationBundle))
-                .font(EnterCalcFont.appFont(size: 12))
+                .font(EnterCalcFont.appFont(size: modeLabelFontSize))
                 .foregroundStyle(primaryForeground.opacity(opacity))
                 .lineLimit(1)
 
@@ -873,7 +879,7 @@ struct CalculatorWindowView: View {
             }
         }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: 16, alignment: .leading)
+            .frame(height: max(16, modeLabelFontSize * 1.32), alignment: .leading)
             .clipped()
             .animation(reduceMotionEnabled ? nil : .easeInOut(duration: 0.18), value: opacity)
             .anchorPreference(
@@ -2329,6 +2335,7 @@ private struct CompactActionButton: View {
     /// currency key in Currency mode, since All Clear does not leave it.
     var isHighlighted: Bool = false
     @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
+        @AppStorage(TextSizePreference.storageKey) private var storedTextSize = TextSizePreference.system.rawValue
     @State private var hovering: Bool = false
     @State private var globalFrame: CGRect = .zero
 
@@ -2399,7 +2406,7 @@ private struct CompactActionButton: View {
     private var boundedIconFontSize: CGFloat {
         let effectiveControlScale = max(
             controlDynamicTypeScale,
-            macPreferredTextScale(for: .title2, baseline: 22)
+            macTextScale(storedTextSize, for: .title2, baseline: 22)
         )
         let baseSize = min(max(height * 0.52, 11), 17)
         let maxSize = max(baseSize, height * 0.82)
@@ -2448,6 +2455,7 @@ private struct CompactActionButton: View {
         /// in Currency mode).
         var isHighlighted: Bool = false
         @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
+        @AppStorage(TextSizePreference.storageKey) private var storedTextSize = TextSizePreference.system.rawValue
 
         @State private var hovering: Bool = false
         @State private var globalFrame: CGRect = .zero
@@ -2669,7 +2677,7 @@ private struct CompactActionButton: View {
         private var primaryFontSize: CGFloat {
             let effectiveControlScale = max(
                 controlDynamicTypeScale,
-                macPreferredTextScale(for: .title2, baseline: 22)
+                macTextScale(storedTextSize, for: .title2, baseline: 22)
             )
             let baseSize = min(max(height * 0.38, 14), 28)
             let maxSize = max(baseSize, height * 0.82)

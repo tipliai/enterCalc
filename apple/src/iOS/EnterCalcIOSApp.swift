@@ -463,6 +463,7 @@ struct EnterCalcIOSView: View {
     @Environment(\.requestReview) private var requestReview
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotionEnabled
     @ScaledMetric(relativeTo: .largeTitle) private var displayDynamicTypeScale: CGFloat = 1.0
+    @ScaledMetric(relativeTo: .body) private var modeLabelDynamicTypeScale: CGFloat = 1.0
     @AppStorage(TextSizePreference.storageKey) private var storedTextSize = TextSizePreference.system.rawValue
     @State private var activeOverlay: IOSOverlayPane? = nil
     @State private var showSettingsSheet: Bool = false
@@ -3103,11 +3104,18 @@ private extension EnterCalcIOSView {
         dismissActiveOverlay()
     }
 
+    // The mode name follows the text size (#148), held inside its row so the
+    // display's layout doesn't move. The VAT and TIP buttons keep their size.
+    func modeLabelFontSize(metrics: IOSLayoutMetrics) -> CGFloat {
+        let scale = TextSizePreference(storedValue: storedTextSize).relativeScale ?? modeLabelDynamicTypeScale
+        return min(metrics.memoryFontSize * scale, metrics.memoryHeight * 0.85)
+    }
+
     func memoryControls(metrics: IOSLayoutMetrics, opacity: Double) -> some View {
         let showsCurrencyTools = activeScreen.viewModel.activeCurrencySymbol != nil
         return HStack(spacing: 8) {
             Text(localized(currentModeLabelKey))
-                .font(EnterCalcFont.appFont(size: metrics.memoryFontSize))
+                .font(EnterCalcFont.appFont(size: modeLabelFontSize(metrics: metrics)))
                 .foregroundStyle(palette.textPrimary.opacity(opacity))
                 .lineLimit(1)
                 // Keeps tapping the display area a copy action, as before.
@@ -6115,6 +6123,8 @@ private struct IOSKeypadButton: View {
         default:
             Text(button.title)
                 .font(buttonFont)
+                .lineLimit(1)
+                .minimumScaleFactor(isEnterWordButton ? 0.6 : 1)
         }
     }
 
@@ -6136,12 +6146,21 @@ private struct IOSKeypadButton: View {
         symbolBaseSize * 0.72
     }
 
+    // The word on the Enter key scales with the text size like the other key
+    // labels (#148), capped so it stays inside the key; longer translations
+    // shrink to fit rather than wrap.
     private var enterKeyTextFontSize: CGFloat {
-        max(10, metrics.memoryFontSize)
+        let baseSize = max(10, metrics.memoryFontSize)
+        let maxSize = max(baseSize, buttonHeight * 0.5)
+        return min(max(baseSize, baseSize * controlDynamicTypeScale), maxSize)
+    }
+
+    private var isEnterWordButton: Bool {
+        button.kind == .equals && button.title != "="
     }
 
     private var buttonFont: Font {
-        if button.kind == .equals && button.title != "=" {
+        if isEnterWordButton {
             return EnterCalcFont.thinAppFont(size: enterKeyTextFontSize)
         }
         return EnterCalcFont.thinAppFont(size: symbolBaseSize)
