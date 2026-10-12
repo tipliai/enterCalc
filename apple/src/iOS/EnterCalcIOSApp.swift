@@ -450,7 +450,6 @@ struct EnterCalcIOSView: View {
             languageCode: defaultLocalizationSelectionCode,
             usesScientificNotation: true,
             numberFormatStyleRawValue: NumberFormatStyle.detected().rawValue,
-            usesAlternativeKeypad: false,
             disablesSwipeDownToRound: false,
             disablesButtonSound: false,
             keypadHeightMultiplier: 1.0
@@ -517,7 +516,6 @@ struct EnterCalcIOSView: View {
     @AppStorage("settings.language") private var preferredLanguage: String = defaultLocalizationSelectionCode
     @AppStorage("settings.numberFormat.scientific") private var preferredScientificNotation: Bool = true
     @AppStorage("settings.numberFormat.style") private var preferredNumberFormatRaw: String = NumberFormatStyle.detected().rawValue
-    @AppStorage("settings.keypad.alternative") private var preferredUsesAlternativeKeypad: Bool = false
     @AppStorage("settings.rounding.disableSwipeDown") private var preferredDisablesSwipeDownToRound: Bool = false
     @AppStorage("settings.keypadHeightMultiplier") private var preferredKeypadHeightMultiplier: Double = 1.0
     @AppStorage("settings.reduceMotion.enabled") private var preferredReduceMotionEnabled: Bool = false
@@ -543,7 +541,6 @@ struct EnterCalcIOSView: View {
             languageCode: preferredLanguage,
             usesScientificNotation: preferredScientificNotation,
             numberFormatStyleRawValue: preferredNumberFormatRaw,
-            usesAlternativeKeypad: preferredUsesAlternativeKeypad,
             disablesSwipeDownToRound: preferredDisablesSwipeDownToRound,
             disablesButtonSound: false,
             keypadHeightMultiplier: keypadHeightMultiplier,
@@ -554,7 +551,6 @@ struct EnterCalcIOSView: View {
 
     private var equalsButtonTitle: String {
         EqualsKeyLabel.usesEnterWord(
-            usesAlternativeKeypad: activeScreen.settings.usesAlternativeKeypad,
             resolvedLocalizationCode: resolvedLocalizationCode(for: activeScreen.settings.languageCode)
         ) ? localized("key.enter") : EqualsKeyLabel.symbol
     }
@@ -600,10 +596,6 @@ struct EnterCalcIOSView: View {
 
     private var activeAppearanceLabelKey: String {
         activeScreen.isHomeScreen ? "settings.appearance.label" : "settings.appearance.screenLabel"
-    }
-
-    private var usesAlternativeKeypad: Bool {
-        activeScreen.settings.usesAlternativeKeypad
     }
 
     // The rate in use belongs to this window (or iPad scene) for the session,
@@ -664,40 +656,6 @@ struct EnterCalcIOSView: View {
     /// page change itself.
     static let themeTransitionDuration: Double = 0.28
 
-    // The alternative keypad has no configurable keys, so unlike `basicRows`
-    // it needs nothing from the screen.
-    private var legacyRows: [[IOSCalcButton]] {
-        [
-            [
-                .function(clearButtonTitle, action: { _ in self.handleContextualClear() }),
-                .function("( )", action: { $0.inputParentheses() }),
-                .function("%", action: { $0.applyPercent() }),
-                .function("⌫", action: { $0.backspace() })
-            ],
-            [
-                .function("1/x", action: { $0.reciprocal() }),
-                .function("x²", action: { $0.square() }),
-                .function("²√x", action: { $0.squareRoot() }),
-                .operation("÷", action: { $0.setOperator(.divide) })
-            ],
-            [
-                .digit("7"), .digit("8"), .digit("9"), .operation("×", action: { $0.setOperator(.multiply) })
-            ],
-            [
-                .digit("4"), .digit("5"), .digit("6"), .operation("−", action: { $0.setOperator(.subtract) })
-            ],
-            [
-                .digit("1"), .digit("2"), .digit("3"), .operation("+", action: { $0.setOperator(.add) })
-            ],
-            [
-                .function("+/−", action: { $0.toggleSign() }),
-                .digit("0"),
-                .decimal(),
-                .equals(title: equalsButtonTitle)
-            ]
-        ]
-    }
-
     private func basicRows(for screen: CalculatorScreenSession) -> [[IOSCalcButton]] {
         [
             [
@@ -723,10 +681,6 @@ struct EnterCalcIOSView: View {
         ]
     }
 
-    private func mainRows(for screen: CalculatorScreenSession) -> [[IOSCalcButton]] {
-        screen.settings.usesAlternativeKeypad ? legacyRows : basicRows(for: screen)
-    }
-
     // MARK: - Configurable function keys (#67)
 
     /// Which functions the page currently shows. Per page, so two pages can be
@@ -739,22 +693,6 @@ struct EnterCalcIOSView: View {
     /// belongs to the page the user is interacting with.
     var functionKeyAssignments: CalculatorFunctionKeyAssignments {
         functionKeyAssignments(for: activeScreen)
-    }
-
-    /// Only the default keypad has configurable keys. The alternative keypad
-    /// has no action row and already carries fixed 1/x, x² and √x keys, so
-    /// reassigning its two large keys could put the same function on screen
-    /// twice.
-    func supportsConfigurableFunctionKeys(for screen: CalculatorScreenSession) -> Bool {
-        !screen.settings.usesAlternativeKeypad
-    }
-
-    var supportsConfigurableFunctionKeys: Bool {
-        supportsConfigurableFunctionKeys(for: activeScreen)
-    }
-
-    private func actionRowSlots(for screen: CalculatorScreenSession) -> [CalculatorFunctionSlot] {
-        supportsConfigurableFunctionKeys(for: screen) ? CalculatorFunctionSlot.actionRowSlots : []
     }
 
     func functionKeyLabel(_ function: CalculatorFunctionKey) -> String {
@@ -788,7 +726,6 @@ struct EnterCalcIOSView: View {
     }
 
     func openFunctionChooser(for slot: CalculatorFunctionSlot, anchor: CGRect, dragging: Bool) {
-        guard supportsConfigurableFunctionKeys else { return }
         DebugLog.emit("functionKeys", "chooser opened for \(slot.rawValue)")
         animateIfAllowed(.easeOut(duration: 0.14)) {
             functionChooser = FunctionKeyChooserSession(
@@ -1036,9 +973,6 @@ struct EnterCalcIOSView: View {
             .onValueChange(of: preferredNumberFormatRaw) { _ in
                 syncHomeScreenFromStoredSettings()
             }
-            .onValueChange(of: preferredUsesAlternativeKeypad) { _ in
-                syncHomeScreenFromStoredSettings()
-            }
             .onValueChange(of: showSettingsSheet) { isPresented in
                 if isPresented {
                     stopDisplayShimmerParallaxMotion()
@@ -1076,7 +1010,6 @@ struct EnterCalcIOSView: View {
                     usesScientificNotation: activeScientificNotationBinding,
                     selectedNumberFormat: activeNumberFormatBinding,
                     selectedCurrencySymbol: activeCurrencySymbolBinding,
-                    usesAlternativeKeypad: activeAlternativeKeypadBinding,
                     disablesSwipeDownToRound: activeDisableSwipeDownToRoundBinding,
                     availableLanguages: availableLanguageOptions(),
                     counterRotatesForUpsideDownPortrait: counterRotatesForUpsideDownPortrait
@@ -1149,15 +1082,6 @@ private extension EnterCalcIOSView {
                 if activeScreen.viewModel.activeCurrencySymbol != nil {
                     activeScreen.viewModel.inputCurrencySymbol(newValue)
                 }
-            }
-        )
-    }
-
-    var activeAlternativeKeypadBinding: Binding<Bool> {
-        Binding(
-            get: { activeScreen.settings.usesAlternativeKeypad },
-            set: { newValue in
-                updateActiveScreenSettings { $0.usesAlternativeKeypad = newValue }
             }
         )
     }
@@ -1447,7 +1371,6 @@ private extension EnterCalcIOSView {
             preferredLanguage = updated.languageCode
             preferredScientificNotation = updated.usesScientificNotation
             preferredNumberFormatRaw = updated.numberFormatStyleRawValue
-            preferredUsesAlternativeKeypad = updated.usesAlternativeKeypad
             preferredDisablesSwipeDownToRound = updated.disablesSwipeDownToRound
             preferredKeypadHeightMultiplier = updated.keypadHeightMultiplier
             preferredCurrencySymbol = updated.currencySymbol
@@ -2385,13 +2308,14 @@ private extension EnterCalcIOSView {
             let isLandscapeMode = metrics.mode == .phoneLandscape || metrics.mode == .padWide
             let fillsHeightWithoutScaling = metrics.mode == .padWide || (metrics.isPadWindow && metrics.mode == .phonePortrait)
             let allowsKeypadResize = !isLandscapeMode
-            let usesAlternativeKeypad = screen.settings.usesAlternativeKeypad
             let showsInlineLandscapeHeader = !metrics.usesTitlebarHeader && !metrics.usesLandscapeNavigationRail
             let keypadHeightMultiplier = allowsKeypadResize ? normalizedKeypadHeightMultiplier(for: screen) : 1.0
             let baseKeypadHeight = metrics.keypadHeight
             let baseButtonHeight = metrics.buttonHeight * keypadHeightMultiplier
-            let baseRowUnits: CGFloat = usesAlternativeKeypad ? 6 : (5 + (1.0 / 3.0))
-            let keypadSpacingUnits: CGFloat = usesAlternativeKeypad ? 5 : 6
+            // Five key rows plus the action row at a third of a key's height,
+            // with a gap between each.
+            let baseRowUnits: CGFloat = 5 + (1.0 / 3.0)
+            let keypadSpacingUnits: CGFloat = 6
             let baseActualKeypadHeight = baseButtonHeight * baseRowUnits + metrics.gridSpacing * keypadSpacingUnits
             let baseResultAreaHeight = metrics.displayHeight + metrics.memoryHeight + (baseKeypadHeight - baseActualKeypadHeight)
             let separatorHeight: CGFloat = 10
@@ -3378,51 +3302,48 @@ private extension EnterCalcIOSView {
     }
 
     func keypad(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, buttonHeight: CGFloat) -> some View {
-        let slots = actionRowSlots(for: screen)
+        let slots = CalculatorFunctionSlot.actionRowSlots
         let actionColumns = Array(repeating: GridItem(.flexible(), spacing: metrics.gridSpacing), count: max(slots.count, 1))
         let isLandscapeMode = metrics.mode == .phoneLandscape || metrics.mode == .padWide
         let compactActionHeight = max(18, buttonHeight / 3)
-        let showsCompactActionRow = !slots.isEmpty
         let assignments = functionKeyAssignments(for: screen)
 
         return VStack(spacing: metrics.gridSpacing) {
-            if showsCompactActionRow {
-                LazyVGrid(columns: actionColumns, spacing: metrics.gridSpacing) {
-                    ForEach(slots) { slot in
-                        let function = assignments[slot]
-                        IOSCompactActionButton(
-                            button: IOSActionRowButton(slot: slot, function: function),
-                            accessibilityLabel: functionKeyLabel(function),
-                            currencySymbol: screen.settings.currencySymbol,
-                            changeActionName: localized("functionKey.change"),
-                            holdHint: localized("functionKey.hint"),
-                            palette: palette,
-                            height: compactActionHeight,
-                            reduceMotionEnabled: reduceMotionEnabled,
-                            isConfigurable: supportsConfigurableFunctionKeys(for: screen),
-                            isHighlighted: function == .currency && screen.viewModel.activeCurrencySymbol != nil,
-                            pressFeedback: triggerActionFeedback,
-                            action: {
-                                performFunction(function, on: screen)
-                                if isLandscapeMode {
-                                    resetLandscapeDisplayScroll(for: screen)
-                                }
-                            },
-                            onChooserOpen: { slot, anchor, dragging in
-                                openFunctionChooser(for: slot, anchor: anchor, dragging: dragging)
-                            },
-                            onChooserDrag: { updateFunctionChooserDrag($0) },
-                            onChooserRelease: { releaseFunctionChooser() }
-                        )
-                    }
+            LazyVGrid(columns: actionColumns, spacing: metrics.gridSpacing) {
+                ForEach(slots) { slot in
+                    let function = assignments[slot]
+                    IOSCompactActionButton(
+                        button: IOSActionRowButton(slot: slot, function: function),
+                        accessibilityLabel: functionKeyLabel(function),
+                        currencySymbol: screen.settings.currencySymbol,
+                        changeActionName: localized("functionKey.change"),
+                        holdHint: localized("functionKey.hint"),
+                        palette: palette,
+                        height: compactActionHeight,
+                        reduceMotionEnabled: reduceMotionEnabled,
+                        isConfigurable: true,
+                        isHighlighted: function == .currency && screen.viewModel.activeCurrencySymbol != nil,
+                        pressFeedback: triggerActionFeedback,
+                        action: {
+                            performFunction(function, on: screen)
+                            if isLandscapeMode {
+                                resetLandscapeDisplayScroll(for: screen)
+                            }
+                        },
+                        onChooserOpen: { slot, anchor, dragging in
+                            openFunctionChooser(for: slot, anchor: anchor, dragging: dragging)
+                        },
+                        onChooserDrag: { updateFunctionChooserDrag($0) },
+                        onChooserRelease: { releaseFunctionChooser() }
+                    )
                 }
-                .padding(.bottom, metrics.gridSpacing)
             }
+            .padding(.bottom, metrics.gridSpacing)
 
             GeometryReader { keypadGeometry in
                 let spacing = metrics.gridSpacing
                 let cellWidth = max(0, (keypadGeometry.size.width - spacing * 3) / 4)
-                let rows = mainRows(for: screen)
+                let rows = basicRows(for: screen)
 
                 VStack(spacing: spacing) {
                     ForEach(rows.indices, id: \.self) { rowIndex in
@@ -3453,7 +3374,7 @@ private extension EnterCalcIOSView {
                                         requestReviewIfEarned(for: screen)
                                     },
                                     reduceMotionEnabled: reduceMotionEnabled,
-                                    isConfigurable: supportsConfigurableFunctionKeys(for: screen) && button.slot != nil,
+                                    isConfigurable: button.slot != nil,
                                     changeActionName: localized("functionKey.change"),
                                     holdHint: localized("functionKey.hint"),
                                     onChooserOpen: { slot, anchor, dragging in
@@ -3921,7 +3842,6 @@ private struct IOSSettingsSheet: View {
     @Binding var usesScientificNotation: Bool
     @Binding var selectedNumberFormat: String
     @Binding var selectedCurrencySymbol: String
-    @Binding var usesAlternativeKeypad: Bool
     @Binding var disablesSwipeDownToRound: Bool
     let availableLanguages: [LanguageOption]
     let counterRotatesForUpsideDownPortrait: Bool
@@ -3930,7 +3850,6 @@ private struct IOSSettingsSheet: View {
     @State private var draftScientificNotation: Bool
     @State private var draftNumberFormat: NumberFormatStyle
     @State private var draftCurrencySymbol: String
-    @State private var draftUsesAlternativeKeypad: Bool
     @State private var draftDisablesSwipeDownToRound: Bool
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -3948,7 +3867,6 @@ private struct IOSSettingsSheet: View {
         usesScientificNotation: Binding<Bool>,
         selectedNumberFormat: Binding<String>,
         selectedCurrencySymbol: Binding<String>,
-        usesAlternativeKeypad: Binding<Bool>,
         disablesSwipeDownToRound: Binding<Bool>,
         availableLanguages: [LanguageOption],
         counterRotatesForUpsideDownPortrait: Bool
@@ -3960,7 +3878,6 @@ private struct IOSSettingsSheet: View {
         self._usesScientificNotation = usesScientificNotation
         self._selectedNumberFormat = selectedNumberFormat
         self._selectedCurrencySymbol = selectedCurrencySymbol
-        self._usesAlternativeKeypad = usesAlternativeKeypad
         self._disablesSwipeDownToRound = disablesSwipeDownToRound
         self.availableLanguages = availableLanguages
         self.counterRotatesForUpsideDownPortrait = counterRotatesForUpsideDownPortrait
@@ -3969,7 +3886,6 @@ private struct IOSSettingsSheet: View {
         _draftScientificNotation = State(initialValue: usesScientificNotation.wrappedValue)
         _draftNumberFormat = State(initialValue: NumberFormatStyle(rawValue: selectedNumberFormat.wrappedValue) ?? NumberFormatStyle.detected())
         _draftCurrencySymbol = State(initialValue: selectedCurrencySymbol.wrappedValue)
-        _draftUsesAlternativeKeypad = State(initialValue: usesAlternativeKeypad.wrappedValue)
         _draftDisablesSwipeDownToRound = State(initialValue: disablesSwipeDownToRound.wrappedValue)
     }
 
@@ -3997,7 +3913,6 @@ private struct IOSSettingsSheet: View {
         usesScientificNotation = draftScientificNotation
         selectedNumberFormat = draftNumberFormat.rawValue
         selectedCurrencySymbol = draftCurrencySymbol
-        usesAlternativeKeypad = draftUsesAlternativeKeypad
         disablesSwipeDownToRound = draftDisablesSwipeDownToRound
     }
 
@@ -4112,7 +4027,6 @@ private struct IOSSettingsSheet: View {
                         textSizeRows
 
                         Toggle(localized("settings.numberFormat.scientific"), isOn: $draftScientificNotation)
-                        Toggle(localized("settings.percent.classicBehavior"), isOn: $draftUsesAlternativeKeypad)
                         Toggle(localized("settings.rounding.disableSwipeDown"), isOn: $draftDisablesSwipeDownToRound)
                     }
 
@@ -5376,6 +5290,7 @@ private extension EnterCalcIOSView {
         }
 
         defaults.set(systemSettingsVersionString(), forKey: "settings.about.version")
+        CalculatorScreenSettingsPersistence.removeRetiredKeys(from: defaults)
     }
 
     // Read once and cached: this is consulted on every key press, and it was
@@ -5762,23 +5677,6 @@ private struct IOSKeypadButton: View {
 
     // Reveal order from bottom (+) to top (÷): +→0, −→1, ×→2, ÷→3
     private static let operatorRevealOrder: [String: Int] = ["+": 0, "−": 1, "×": 2, "÷": 3]
-    private struct GlyphOffset {
-        var horizontal: CGFloat = 0
-        var vertical: CGFloat = 0
-    }
-
-    private struct SignToggleLabelTuning {
-        var overallLabelOffset: GlyphOffset = GlyphOffset()
-        var glyphSpacing: CGFloat = 0
-        var plusGlyphOffset: GlyphOffset = GlyphOffset()
-        var slashGlyphOffset: GlyphOffset = GlyphOffset()
-        var minusGlyphOffset: GlyphOffset = GlyphOffset()
-    }
-
-    private enum SpecialButtonLabelTuning {
-        static let signToggle = SignToggleLabelTuning()
-    }
-
     private static let pressedScale: CGFloat = 0.97
 
     private var isEqualsButton: Bool { button.kind == .equals }
@@ -6088,7 +5986,7 @@ private struct IOSKeypadButton: View {
                 .frame(width: iconFrameWidth, height: iconFrameHeight)
                 .scaleEffect(x: iconScaleX, y: iconScaleY)
                 .offset(x: iconOffsetX, y: iconOffsetY)
-        case "²√x", "√x":
+        case "√x":
             let iconWidth = boundedIconSquareSize
             let iconHeight = boundedIconSquareSize
             let iconFrameWidth = iconWidth
@@ -6106,21 +6004,6 @@ private struct IOSKeypadButton: View {
                 .frame(width: iconFrameWidth, height: iconFrameHeight)
                 .scaleEffect(x: iconScaleX, y: iconScaleY)
                 .offset(x: iconOffsetX, y: iconOffsetY)
-        case "+/−":
-            let tuning = SpecialButtonLabelTuning.signToggle
-
-            HStack(spacing: tuning.glyphSpacing) {
-                Text("+")
-                    .font(EnterCalcFont.thinAppFont(size: signSize))
-                    .offset(x: tuning.plusGlyphOffset.horizontal, y: tuning.plusGlyphOffset.vertical)
-                Text("/")
-                    .font(EnterCalcFont.thinAppFont(size: slashSize))
-                    .offset(x: tuning.slashGlyphOffset.horizontal, y: tuning.slashGlyphOffset.vertical)
-                Text("−")
-                    .font(EnterCalcFont.thinAppFont(size: signSize))
-                    .offset(x: tuning.minusGlyphOffset.horizontal, y: tuning.minusGlyphOffset.vertical)
-            }
-            .offset(x: tuning.overallLabelOffset.horizontal, y: tuning.overallLabelOffset.vertical)
         default:
             Text(button.title)
                 .font(buttonFont)
@@ -6137,14 +6020,6 @@ private struct IOSKeypadButton: View {
 
     private var boundedIconSquareSize: CGFloat {
         min(max(symbolBaseSize * 1.35, 24), buttonHeight * 0.9)
-    }
-
-    private var slashSize: CGFloat {
-        symbolBaseSize * 1.02
-    }
-
-    private var signSize: CGFloat {
-        symbolBaseSize * 0.72
     }
 
     // The word on the Enter key scales with the text size like the other key

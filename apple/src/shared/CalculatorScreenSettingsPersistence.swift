@@ -1,19 +1,23 @@
 import Foundation
 
-// Reads/writes CalculatorScreenSettings to UserDefaults and runs one-time
-// migrations for renamed legacy keys (classic-percent -> alternative keypad).
+// Reads/writes CalculatorScreenSettings to UserDefaults, and clears out keys
+// for settings that no longer exist.
 public enum CalculatorScreenSettingsPersistence {
     private static let defaultThemeRawValue = "system"
     private static let defaultKeypadHeightMultiplier: Double = 1.0
-    private static let alternativeKeypadKey = "settings.keypad.alternative"
-    private static let newDefaultKeypadMigrationKey = "settings.keypad.newDefault.v1"
-    private static let legacyClassicPercentKey = "settings.percent.classic"
+    /// The alternative keypad and the settings it grew out of, removed in 1.2.0
+    /// (#151). Its keys live on as configurable function keys, so a page that
+    /// used it simply opens on the standard keypad.
+    static let retiredKeys = [
+        "settings.keypad.alternative",
+        "settings.keypad.newDefault.v1",
+        "settings.percent.classic"
+    ]
     private static let currencySymbolKey = "settings.currency.symbol"
     private static let functionKeyAssignmentsKey = "settings.functionKeys.assignments"
 
     public static func load(from defaults: UserDefaults = .standard) -> CalculatorScreenSettings {
-        migrateLegacyKeypadPreferenceIfNeeded(in: defaults)
-        migrateToNewDefaultKeypadIfNeeded(in: defaults)
+        removeRetiredKeys(from: defaults)
 
         let storedKeypadHeightMultiplier = defaults.object(forKey: "settings.keypadHeightMultiplier") as? Double ?? defaultKeypadHeightMultiplier
         return CalculatorScreenSettings(
@@ -21,7 +25,6 @@ public enum CalculatorScreenSettingsPersistence {
             languageCode: storedLanguageCode(from: defaults),
             usesScientificNotation: defaults.object(forKey: "settings.numberFormat.scientific") as? Bool ?? true,
             numberFormatStyleRawValue: defaults.string(forKey: "settings.numberFormat.style") ?? NumberFormatStyle.detected().rawValue,
-            usesAlternativeKeypad: usesAlternativeKeypad(from: defaults),
             disablesSwipeDownToRound: defaults.object(forKey: "settings.rounding.disableSwipeDown") as? Bool ?? false,
             disablesButtonSound: defaults.object(forKey: "settings.buttonSound.disabled") as? Bool ?? false,
             keypadHeightMultiplier: min(max(storedKeypadHeightMultiplier, 0.5), 1.0),
@@ -35,9 +38,6 @@ public enum CalculatorScreenSettingsPersistence {
         defaults.set(settings.languageCode, forKey: "settings.language")
         defaults.set(settings.usesScientificNotation, forKey: "settings.numberFormat.scientific")
         defaults.set(settings.numberFormatStyleRawValue, forKey: "settings.numberFormat.style")
-        defaults.set(settings.usesAlternativeKeypad, forKey: alternativeKeypadKey)
-        defaults.removeObject(forKey: legacyClassicPercentKey)
-        defaults.set(true, forKey: newDefaultKeypadMigrationKey)
         defaults.set(settings.disablesSwipeDownToRound, forKey: "settings.rounding.disableSwipeDown")
         defaults.set(settings.disablesButtonSound, forKey: "settings.buttonSound.disabled")
         defaults.set(settings.keypadHeightMultiplier, forKey: "settings.keypadHeightMultiplier")
@@ -64,20 +64,13 @@ public enum CalculatorScreenSettingsPersistence {
         return stored
     }
 
-    private static func usesAlternativeKeypad(from defaults: UserDefaults) -> Bool {
-        defaults.object(forKey: alternativeKeypadKey) as? Bool ?? false
-    }
-
-    private static func migrateLegacyKeypadPreferenceIfNeeded(in defaults: UserDefaults) {
-        guard defaults.object(forKey: legacyClassicPercentKey) != nil else { return }
-        defaults.removeObject(forKey: legacyClassicPercentKey)
-        defaults.set(false, forKey: alternativeKeypadKey)
-    }
-
-    private static func migrateToNewDefaultKeypadIfNeeded(in defaults: UserDefaults) {
-        guard defaults.object(forKey: newDefaultKeypadMigrationKey) == nil else { return }
-        defaults.set(false, forKey: alternativeKeypadKey)
-        defaults.set(true, forKey: newDefaultKeypadMigrationKey)
+    /// Clears stored values for settings that no longer exist. `load` does
+    /// this; iOS, which reads its settings through `@AppStorage`, calls it at
+    /// launch.
+    public static func removeRetiredKeys(from defaults: UserDefaults = .standard) {
+        for key in retiredKeys where defaults.object(forKey: key) != nil {
+            defaults.removeObject(forKey: key)
+        }
     }
 
     public static func storedLanguageCode(from defaults: UserDefaults = .standard) -> String {

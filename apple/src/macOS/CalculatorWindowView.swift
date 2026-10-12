@@ -148,11 +148,9 @@ struct CalculatorWindowView: View {
         AppTheme(rawValue: windowSettings.themeRawValue) ?? .system
     }
 
-    // "Enter" is an English word; every other language uses the symbol, as does
-    // the alternative keypad regardless of language.
+    // "Enter" is an English word; every other language uses the symbol.
     private var equalsButtonTitle: String {
         let usesEnterWord = EqualsKeyLabel.usesEnterWord(
-            usesAlternativeKeypad: windowSettings.usesAlternativeKeypad,
             resolvedLocalizationCode: resolvedLocalizationCode(for: windowSettings.languageCode)
         )
         return usesEnterWord
@@ -924,7 +922,6 @@ struct CalculatorWindowView: View {
     // MARK: - Function key chooser
 
     func openFunctionChooser(for slot: CalculatorFunctionSlot, anchor: CGRect, dragging: Bool) {
-        guard supportsConfigurableFunctionKeys else { return }
         DebugLog.emit("functionKeys", "chooser opened for \(slot.rawValue)")
         withAnimation(reduceMotionEnabled ? nil : .easeOut(duration: 0.14)) {
             functionChooser = FunctionKeyChooserSession(
@@ -1020,43 +1017,41 @@ struct CalculatorWindowView: View {
 
     private var keypadGrid: some View {
         GeometryReader { geo in
-            let usesAlternativeKeypad = windowSettings.usesAlternativeKeypad
-            let rows: CGFloat = usesAlternativeKeypad ? 6 : (5 + (1.0 / 3.0))
+            // Five key rows plus the action row at a third of a key's height.
+            let rows: CGFloat = 5 + (1.0 / 3.0)
             let spacing: CGFloat = 4
             let availableHeight = max(geo.size.height, spacing * 5 + rows)
             let cellHeight = (availableHeight - spacing * (rows - 1)) / rows
-            let buttons = keypadButtons()
+            let buttons = basicKeypadButtons()
             let compactActionHeight = max(16, cellHeight / 3)
             let compactButtons = compactActionRowButtons()
 
             VStack(spacing: spacing) {
-                if !usesAlternativeKeypad {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: max(compactButtons.count, 1)), spacing: spacing) {
-                        ForEach(compactButtons.indices, id: \.self) { index in
-                            let button = compactButtons[index]
-                            CompactActionButton(
-                                slot: button.slot,
-                                function: button.function,
-                                currencySymbol: windowSettings.currencySymbol,
-                                accessibilityLabel: button.accessibilityLabel,
-                                changeActionName: macLocalized("functionKey.change", bundle: currentLocalizationBundle),
-                                editActionName: macLocalized("functionKey.edit", bundle: currentLocalizationBundle),
-                                holdHint: macLocalized("functionKey.hint.mac", bundle: currentLocalizationBundle),
-                                isBare: button.isBare,
-                                height: compactActionHeight,
-                                disabled: button.action == nil,
-                                isConfigurable: supportsConfigurableFunctionKeys,
-                                palette: palette,
-                                action: { button.action?() },
-                                onChooserOpen: { slot, anchor, dragging in
-                                    openFunctionChooser(for: slot, anchor: anchor, dragging: dragging)
-                                },
-                                isHighlighted: button.function == .currency && viewModel.activeCurrencySymbol != nil
-                            )
-                        }
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: max(compactButtons.count, 1)), spacing: spacing) {
+                    ForEach(compactButtons.indices, id: \.self) { index in
+                        let button = compactButtons[index]
+                        CompactActionButton(
+                            slot: button.slot,
+                            function: button.function,
+                            currencySymbol: windowSettings.currencySymbol,
+                            accessibilityLabel: button.accessibilityLabel,
+                            changeActionName: macLocalized("functionKey.change", bundle: currentLocalizationBundle),
+                            editActionName: macLocalized("functionKey.edit", bundle: currentLocalizationBundle),
+                            holdHint: macLocalized("functionKey.hint.mac", bundle: currentLocalizationBundle),
+                            isBare: button.isBare,
+                            height: compactActionHeight,
+                            disabled: button.action == nil,
+                            isConfigurable: true,
+                            palette: palette,
+                            action: { button.action?() },
+                            onChooserOpen: { slot, anchor, dragging in
+                                openFunctionChooser(for: slot, anchor: anchor, dragging: dragging)
+                            },
+                            isHighlighted: button.function == .currency && viewModel.activeCurrencySymbol != nil
+                        )
                     }
-                    .padding(.bottom, spacing)
                 }
+                .padding(.bottom, spacing)
 
                 let buttonRows = groupedKeypadRows(from: buttons)
                 let cellWidth = max(0, (geo.size.width - spacing * 3) / 4)
@@ -1077,7 +1072,7 @@ struct CalculatorWindowView: View {
                                     palette: palette,
                                     symbolName: button.symbolName,
                                     accessibilityLabelOverride: button.accessibilityLabel,
-                                    slot: supportsConfigurableFunctionKeys ? button.slot : nil,
+                                    slot: button.slot,
                                     changeActionName: macLocalized("functionKey.change", bundle: currentLocalizationBundle),
                                     editActionName: macLocalized("functionKey.edit", bundle: currentLocalizationBundle),
                                     holdHint: macLocalized("functionKey.hint.mac", bundle: currentLocalizationBundle),
@@ -2108,58 +2103,8 @@ struct CalculatorWindowView: View {
         let action: (() -> Void)?
     }
 
-    // Selects the active keypad layout based on the user's preference.
-    private func keypadButtons() -> [ButtonItem] {
-        windowSettings.usesAlternativeKeypad ? legacyKeypadButtons() : basicKeypadButtons()
-    }
-
-    // Full keypad including scientific functions (1/x, x squared, square root).
-    // In error state only digits and clear/parenthesis keys stay enabled.
-    private func legacyKeypadButtons() -> [ButtonItem] {
-        let errorMode = viewModel.isErrorState
-        func isEnabled(title: String, kind: CalculatorButton.Kind) -> Bool {
-            guard errorMode else { return true }
-            let allowedTitles: Set<String> = ["C", "AC", "( )", "⌫", ".", "0","1","2","3","4","5","6","7","8","9"]
-            if allowedTitles.contains(title) { return true }
-            return kind == .number
-        }
-
-        let clearButtonTitle = viewModel.shouldShowAllClearButton ? "AC" : "C"
-
-        return [
-            ButtonItem(title: clearButtonTitle, kind: .function, action: { self.handleContextualClear() }, enabled: isEnabled(title: clearButtonTitle, kind: .function)),
-            ButtonItem(title: "( )", kind: .function, action: { viewModel.inputParentheses() }, enabled: isEnabled(title: "( )", kind: .function)),
-            ButtonItem(title: "%", kind: .function, action: { viewModel.applyPercent() }, enabled: isEnabled(title: "%", kind: .function)),
-            ButtonItem(title: "⌫", kind: .function, action: { viewModel.backspace() }, enabled: isEnabled(title: "⌫", kind: .function)),
-            ButtonItem(title: "1/x", kind: .function, action: { viewModel.reciprocal() }, enabled: isEnabled(title: "1/x", kind: .function)),
-            ButtonItem(title: "x²", kind: .function, action: { viewModel.square() }, enabled: isEnabled(title: "x²", kind: .function)),
-            ButtonItem(title: "√x", kind: .function, action: { viewModel.squareRoot() }, enabled: isEnabled(title: "√x", kind: .function)),
-            ButtonItem(title: "÷", kind: .operation, action: { viewModel.setOperator(.divide) }, enabled: isEnabled(title: "÷", kind: .operation)),
-            ButtonItem(title: "7", kind: .number, action: { viewModel.inputDigit("7") }, enabled: isEnabled(title: "7", kind: .number)),
-            ButtonItem(title: "8", kind: .number, action: { viewModel.inputDigit("8") }, enabled: isEnabled(title: "8", kind: .number)),
-            ButtonItem(title: "9", kind: .number, action: { viewModel.inputDigit("9") }, enabled: isEnabled(title: "9", kind: .number)),
-            ButtonItem(title: "×", kind: .operation, action: { viewModel.setOperator(.multiply) }, enabled: isEnabled(title: "×", kind: .operation)),
-            ButtonItem(title: "4", kind: .number, action: { viewModel.inputDigit("4") }, enabled: isEnabled(title: "4", kind: .number)),
-            ButtonItem(title: "5", kind: .number, action: { viewModel.inputDigit("5") }, enabled: isEnabled(title: "5", kind: .number)),
-            ButtonItem(title: "6", kind: .number, action: { viewModel.inputDigit("6") }, enabled: isEnabled(title: "6", kind: .number)),
-            ButtonItem(title: "−", kind: .operation, action: { viewModel.setOperator(.subtract) }, enabled: isEnabled(title: "−", kind: .operation)),
-            ButtonItem(title: "1", kind: .number, action: { viewModel.inputDigit("1") }, enabled: isEnabled(title: "1", kind: .number)),
-            ButtonItem(title: "2", kind: .number, action: { viewModel.inputDigit("2") }, enabled: isEnabled(title: "2", kind: .number)),
-            ButtonItem(title: "3", kind: .number, action: { viewModel.inputDigit("3") }, enabled: isEnabled(title: "3", kind: .number)),
-            ButtonItem(title: "+", kind: .operation, action: { viewModel.setOperator(.add) }, enabled: isEnabled(title: "+", kind: .operation)),
-            ButtonItem(title: "+/−", kind: .function, action: { viewModel.toggleSign() }, enabled: isEnabled(title: "+/−", kind: .function)),
-            ButtonItem(title: "0", kind: .number, action: { viewModel.inputDigit("0") }, enabled: isEnabled(title: "0", kind: .number)),
-            ButtonItem(title: ".", kind: .number, action: { viewModel.inputDecimal() }, enabled: isEnabled(title: ".", kind: .number)),
-            ButtonItem(
-                title: equalsButtonTitle,
-                kind: .accent,
-                action: { viewModel.evaluate() },
-                enabled: isEnabled(title: equalsButtonTitle, kind: .accent)
-            )
-        ]
-    }
-
-    // Simplified keypad (the alternative layout) without the scientific row.
+    // The keypad below the action row: clear, two configurable keys, digits,
+    // operators and the equals key.
     private func basicKeypadButtons() -> [ButtonItem] {
         let errorMode = viewModel.isErrorState
         func isEnabled(title: String, kind: CalculatorButton.Kind) -> Bool {
@@ -2209,14 +2154,6 @@ struct CalculatorWindowView: View {
         windowSettings.functionKeyAssignments
     }
 
-    /// Only the default keypad has configurable keys. The alternative keypad has
-    /// no action row and already carries fixed 1/x, x² and √x keys, so
-    /// reassigning its two large keys could put the same function on screen
-    /// twice.
-    var supportsConfigurableFunctionKeys: Bool {
-        !windowSettings.usesAlternativeKeypad
-    }
-
     func functionKeyLabel(_ function: CalculatorFunctionKey) -> String {
         macLocalized(function.accessibilityLabelKey, bundle: currentLocalizationBundle)
     }
@@ -2238,7 +2175,6 @@ struct CalculatorWindowView: View {
     }
 
     private func compactActionRowButtons() -> [CompactActionItem] {
-        guard supportsConfigurableFunctionKeys else { return [] }
         let assignments = functionKeyAssignments
         return CalculatorFunctionSlot.actionRowSlots.map { slot in
             let function = assignments[slot]
@@ -2740,22 +2676,6 @@ private struct CompactActionButton: View {
                     .frame(width: iconFrameWidth, height: iconFrameHeight)
                     .scaleEffect(x: iconScaleX, y: iconScaleY)
                     .offset(x: iconOffsetX, y: iconOffsetY)
-            } else if title == "+/−" {
-                let secondaryFontSize = min(max(primaryFontSize * 0.74, 10), height * 0.62)
-                let slashFontSize = min(max(primaryFontSize * 0.95, 14), height * 0.78)
-
-                HStack(spacing: 0) {
-                    Text("+")
-                        .font(EnterCalcFont.thinAppFont(size: secondaryFontSize * 0.9))
-                        .offset(x: -0.2, y: -0.1)
-                    Text("/")
-                        .font(EnterCalcFont.thinAppFont(size: slashFontSize))
-                        .offset(x: 0, y: -0.15)
-                    Text("−")
-                        .font(EnterCalcFont.thinAppFont(size: secondaryFontSize * 0.9))
-                        .offset(x: 0.2, y: 0.1)
-                }
-                .offset(x: 0, y: -0.2)
             } else if title == "√x" {
                 let iconWidth = boundedIconSquareSize
                 let iconHeight = boundedIconSquareSize
@@ -3040,7 +2960,6 @@ private struct SettingsSheet: View {
     @Binding var usesScientificNotation: Bool
     @Binding var selectedNumberFormat: NumberFormatStyle
     @Binding var selectedCurrencySymbol: String
-    @Binding var usesAlternativeKeypad: Bool
     @Binding var disablesSwipeDownToRound: Bool
     @Binding var disablesButtonSound: Bool
     let availableLanguages: [LanguageOption]
@@ -3167,8 +3086,6 @@ private struct SettingsSheet: View {
                             .font(.system(size: settingsBodySize))
                         }
                         Toggle(macLocalized("settings.numberFormat.scientific", bundle: localizationBundle), isOn: $usesScientificNotation)
-                            .font(.system(size: settingsBodySize))
-                        Toggle(macLocalized("settings.percent.classicBehavior", bundle: localizationBundle), isOn: $usesAlternativeKeypad)
                             .font(.system(size: settingsBodySize))
                         Toggle(macLocalized("settings.buttonSound.disabled", bundle: localizationBundle), isOn: $disablesButtonSound)
                             .font(.system(size: settingsBodySize))
@@ -3555,12 +3472,6 @@ private extension CalculatorWindowView {
                     if viewModel.activeCurrencySymbol != nil {
                         viewModel.inputCurrencySymbol(newValue)
                     }
-                }
-            ),
-            usesAlternativeKeypad: Binding(
-                get: { windowSettings.usesAlternativeKeypad },
-                set: { newValue in
-                    updateWindowSettings { $0.usesAlternativeKeypad = newValue }
                 }
             ),
             disablesSwipeDownToRound: Binding(

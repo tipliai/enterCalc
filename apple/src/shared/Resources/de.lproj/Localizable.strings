@@ -18,7 +18,6 @@
 "settings.numberFormat.style" = "Zahlenstil";
 "settings.currency.symbol" = "Währungssymbol";
 "settings.numberFormat.scientific" = "Wissenschaftliche Notation verwenden";
-"settings.percent.classicBehavior" = "Alternatives Tastenfeld verwenden";
 "settings.buttonSound.disabled" = "Tastenton deaktivieren";
 "settings.credits" = "Info";
 "settings.feedback" = "Feedback";

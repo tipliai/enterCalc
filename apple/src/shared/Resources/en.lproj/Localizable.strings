@@ -18,7 +18,6 @@
 "settings.numberFormat.style" = "Number style";
 "settings.currency.symbol" = "Currency symbol";
 "settings.numberFormat.scientific" = "Use scientific notation";
-"settings.percent.classicBehavior" = "Use alternative keypad";
 "settings.rounding.disableSwipeDown" = "Disable swipe down to round";
 "settings.buttonSound.disabled" = "Disable button sound";
 "settings.credits" = "About";

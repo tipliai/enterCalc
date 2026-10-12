@@ -1854,7 +1854,7 @@ final class CalculatorViewModelTests: XCTestCase {
             $0.languageCode = "de"
             $0.usesScientificNotation = false
             $0.numberFormatStyleRawValue = NumberFormatStyle.european.rawValue
-            $0.usesAlternativeKeypad = true
+            $0.disablesSwipeDownToRound = true
         }
 
         XCTAssertTrue(store.insertScreenAfterActive(homeSettings: homeSettings))
@@ -2603,15 +2603,13 @@ final class CalculatorViewModelTests: XCTestCase {
         themeRawValue: String = "system",
         languageCode: String = "en",
         usesScientificNotation: Bool = true,
-        numberFormatStyleRawValue: String = NumberFormatStyle.western.rawValue,
-        usesAlternativeKeypad: Bool = false
+        numberFormatStyleRawValue: String = NumberFormatStyle.western.rawValue
     ) -> CalculatorScreenSettings {
         CalculatorScreenSettings(
             themeRawValue: themeRawValue,
             languageCode: languageCode,
             usesScientificNotation: usesScientificNotation,
-            numberFormatStyleRawValue: numberFormatStyleRawValue,
-            usesAlternativeKeypad: usesAlternativeKeypad
+            numberFormatStyleRawValue: numberFormatStyleRawValue
         )
     }
 
