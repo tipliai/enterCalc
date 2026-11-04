@@ -59,6 +59,20 @@ final class AccentGradientContrastTests: XCTestCase {
         }
     }
 
+    /// A slider's fill is a graphic, so it needs 3:1 (WCAG 1.4.11) against
+    /// the backgrounds a slider sits on, in every theme.
+    func testSliderTintMeetsNonTextContrastOnEveryBackground() {
+        for (name, palette) in palettes {
+            for (background, color) in [("surface", palette.surface), ("panel", palette.panel), ("function key", palette.buttonFunction), ("history", palette.historyBackground)] {
+                XCTAssertGreaterThanOrEqual(contrast(palette.sliderTint, color), 3, "\(name): slider fill on \(background)")
+            }
+        }
+    }
+
+    func testSliderTintIsTheAccentInLight() {
+        XCTAssertEqual(relativeLuminance(Palette.light.sliderTint), relativeLuminance(Palette.light.accent), accuracy: 0.0001)
+    }
+
     func testForegroundAccentIsTheGradientMiddleInLight() {
         XCTAssertEqual(relativeLuminance(Palette.light.foregroundAccent), relativeLuminance(Palette.light.accentGradientMid), accuracy: 0.0001)
     }

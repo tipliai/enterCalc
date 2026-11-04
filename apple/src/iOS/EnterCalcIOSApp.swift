@@ -4044,7 +4044,7 @@ private struct IOSSettingsSheet: View {
                     in: 0...Double(TextSizePreference.sizes.count - 1),
                     step: 1
                 )
-                .tint(palette.foregroundAccent)
+                .tint(palette.sliderTint)
                 .accessibilityLabel(Text(localized("settings.textSize")))
                 .accessibilityValue(Text(localized(textSizePreference.localizationKey)))
                 Image(systemName: "textformat.size.larger")
@@ -4235,7 +4235,7 @@ private struct IOSRoundingPanel: View {
                 )
                 // Only sliders and links take the accent (#137); every other
                 // control keeps its system colours.
-                .tint(palette.foregroundAccent)
+                .tint(palette.sliderTint)
 
                 GeometryReader { geometry in
                     ZStack(alignment: .topLeading) {

@@ -3008,9 +3008,11 @@ private struct SettingsSheet: View {
     @Binding var disablesButtonSound: Bool
     let availableLanguages: [LanguageOption]
     let onClose: () -> Void
-    /// The accent for the sheet's slider and links (#137); other controls keep
-    /// their system colours.
+    /// The accent for the sheet's links (#137); other controls keep their
+    /// system colours.
     let accent: Color
+    /// The Text Size slider's fill: the accent, or a light gradient blue on dark themes.
+    let sliderAccent: Color
     @Environment(\.macLocalizationBundle) private var localizationBundle
     // Global and live: the sheet resizes as the slider moves, which is the preview.
     @AppStorage(TextSizePreference.storageKey) private var storedTextSize = TextSizePreference.system.rawValue
@@ -3125,7 +3127,7 @@ private struct SettingsSheet: View {
                                     in: 0...Double(TextSizePreference.sizes.count - 1),
                                     step: 1
                                 )
-                                .tint(accent)
+                                .tint(sliderAccent)
                                 .accessibilityLabel(Text(macLocalized("settings.textSize", bundle: localizationBundle)))
                                 .accessibilityValue(Text(macLocalized(textSizePreference.localizationKey, bundle: localizationBundle)))
                                 Image(systemName: "textformat.size.larger")
@@ -3250,7 +3252,7 @@ private struct MacRoundingPanel: View {
             )
             // Only sliders and links take the accent (#137); every other
             // control keeps its system colours.
-            .tint(palette.foregroundAccent)
+            .tint(palette.sliderTint)
 
             GeometryReader { geometry in
                 ZStack(alignment: .topLeading) {
@@ -3549,7 +3551,8 @@ private extension CalculatorWindowView {
             ),
             availableLanguages: availableLanguageOptions(),
             onClose: { closeSettingsOverlay() },
-            accent: palette.foregroundAccent
+            accent: palette.foregroundAccent,
+            sliderAccent: palette.sliderTint
         )
     }
 

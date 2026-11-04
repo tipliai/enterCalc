@@ -781,7 +781,7 @@ private struct TipRateSlider: View {
                 in: Self.range,
                 step: Self.step
             )
-            .tint(palette.foregroundAccent)
+            .tint(palette.sliderTint)
             .accessibilityLabel(Text(label))
             .accessibilityValue(Text(rate == 0 ? offLabel : "\(formatRate(rate))%"))
 
