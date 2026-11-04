@@ -34,6 +34,15 @@ public struct Palette {
     /// background. Fills keep the gradient.
     public var foregroundAccent: Color { foregroundAccentOverride ?? accent }
 
+    /// The filled part of a slider on a dark theme, where every stop of the
+    /// gradient is too dark to show against the track; nil uses `foregroundAccent`.
+    public var sliderTintOverride: Color? = nil
+
+    /// The filled part of a slider: the accent on light themes, and the
+    /// gradient's blue start lightened on dark ones, which keeps it blue and
+    /// at least 3:1 against the dark backgrounds.
+    public var sliderTint: Color { sliderTintOverride ?? foregroundAccent }
+
     /// The app's one accent treatment: the Enter key's gradient (#137). Every
     /// accent fill uses it, from the Enter key to highlighted keys and selected
     /// chips. Thin elements that need a solid colour, such as strokes and
@@ -117,7 +126,9 @@ public struct Palette {
             historyTileBackground: isDarkLike ? Color.white.opacity(isBlueLike ? 0.15 : 0.13) : Color.black.opacity(0.11),
             functionKeyEar: isBlueLike ? Color.white.opacity(0.45) : (isDarkLike ? Color.white.opacity(0.30) : Color.black.opacity(0.22)),
             // Increase Contrast on a dark theme: a still lighter accent tint.
-            foregroundAccentOverride: isDarkLike && !isBlueLike ? Color(red: 0.7694, green: 0.7529, blue: 0.9553) : nil // #c4c0f4
+            foregroundAccentOverride: isDarkLike && !isBlueLike ? Color(red: 0.7694, green: 0.7529, blue: 0.9553) : nil, // #c4c0f4
+            // The gradient's start lightened 55%, for Increase Contrast.
+            sliderTintOverride: isDarkLike && !isBlueLike ? Color(red: 0.6588, green: 0.6941, blue: 0.8941) : nil // #a8b1e4
         )
     }
 
@@ -147,7 +158,9 @@ public struct Palette {
         historyTileBackground: Color.white.opacity(0.05),
         functionKeyEar: Color.white.opacity(0.20),
         // The accent mixed half with white, readable on the dark surfaces.
-        foregroundAccentOverride: Color(red: 0.6157, green: 0.5882, blue: 0.9255) // #9d96ec
+        foregroundAccentOverride: Color(red: 0.6157, green: 0.5882, blue: 0.9255), // #9d96ec
+        // The gradient's start (#3d51c3) lightened 40%.
+        sliderTintOverride: Color(red: 0.5451, green: 0.5922, blue: 0.8588) // #8b97db
     )
 
     public static let light = Palette(
