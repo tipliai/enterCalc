@@ -453,18 +453,24 @@ struct CalculatorWindowView: View {
                                 .transition(.opacity)
                         } else if showVATOverlay {
                             vatOverlay()
+                                .paneTextScale(paneTextScale)
+                                .paneHeightLimit(geo.size.height * 0.8)
                                 .frame(width: geo.size.width, alignment: .top)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                                 .allowsHitTesting(activeOverlay == .vat)
                                 .transition(.opacity)
                         } else if showTipOverlay {
                             tipOverlay()
+                                .paneTextScale(paneTextScale)
+                                .paneHeightLimit(geo.size.height * 0.8)
                                 .frame(width: geo.size.width, alignment: .top)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                                 .allowsHitTesting(activeOverlay == .tip)
                                 .transition(.opacity)
                         } else if showRoundingOverlay {
                             roundingOverlay()
+                                .paneTextScale(paneTextScale)
+                                .paneHeightLimit(geo.size.height * 0.8)
                                 .frame(width: geo.size.width, alignment: .top)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                                 .allowsHitTesting(activeOverlay == .rounding)
@@ -1509,6 +1515,15 @@ struct CalculatorWindowView: View {
     /// Decimals for amounts in the active currency: 2 for most, 0 for the yen.
     private var currencyFractionDigits: Int {
         CurrencyCatalog.fractionDigits(forSymbol: viewModel.activeCurrencySymbol ?? "")
+    }
+
+    /// The overlay panes' text scale (#152): the Text Size setting, or the
+    /// system's preferred body size when following it.
+    private var paneTextScale: CGFloat {
+        PaneTextScale.resolved(
+            TextSizePreference(storedValue: storedTextSize),
+            systemScale: macPreferredTextScale(for: .body, baseline: 13)
+        )
     }
 
     private func vatOverlay() -> some View {
@@ -3158,6 +3173,7 @@ private struct SettingsSheet: View {
 // Custom slider that selects result rounding precision (significant digits) or
 // turns rounding off at the far end.
 private struct MacRoundingPanel: View {
+    @Environment(\.paneTextScale) private var textScale
     let palette: Palette
     let overlayBackgroundColor: Color
     let isEnabled: Bool
@@ -3233,7 +3249,7 @@ private struct MacRoundingPanel: View {
                     ForEach(allStepIndices, id: \.self) { stepIndex in
                         if stepIndex == Self.offStepIndex {
                             Image(systemName: "power")
-                                .font(.system(size: NSFont.smallSystemFontSize))
+                                .paneFont(size: NSFont.smallSystemFontSize)
                                 .foregroundStyle(.secondary)
                                 .offset(x: offIconOffset(width: geometry.size.width), y: -3)
                         } else {
@@ -3245,7 +3261,7 @@ private struct MacRoundingPanel: View {
                     }
                 }
             }
-            .frame(height: 26)
+            .frame(height: PaneTextScale.grown(26, by: textScale))
         }
         // Content lines up with the keypad: 8pt in from the window's sides and
         // 10pt up from its bottom, the same as the VAT and Tip panes.
@@ -3275,13 +3291,15 @@ private struct MacRoundingPanel: View {
     }
 
     private var roundingOverlayHeader: some View {
-        let headerControlSize: CGFloat = 32
+        let headerControlSize = PaneTextScale.grown(32, by: textScale)
 
         return ZStack {
             Text(macLocalized("rounding.title", bundle: localizationBundle))
-                .font(EnterCalcFont.subheadline)
+                .paneAppFont(size: 15)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.horizontal, headerControlSize)
 
             HStack(spacing: 0) {
                 disableAndDismissButton
@@ -3289,13 +3307,16 @@ private struct MacRoundingPanel: View {
                 dismissButton
             }
         }
-        .frame(height: headerControlSize)
+        .frame(minHeight: headerControlSize)
     }
+
+    private var headerIconSize: CGFloat { PaneTextScale.grown(16, by: textScale) }
 
     private var dismissButton: some View {
         Button(action: onDismiss) {
             Image(systemName: "xmark")
-                .frame(width: 16, height: 16, alignment: .center)
+                .paneFont(size: 13)
+                .frame(width: headerIconSize, height: headerIconSize, alignment: .center)
                 .padding(8)
                 .background(isCloseHovering ? palette.headerHover : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
@@ -3313,7 +3334,8 @@ private struct MacRoundingPanel: View {
     private var disableAndDismissButton: some View {
         Button(action: onDisableAndDismiss) {
             Image(systemName: "trash")
-                .frame(width: 16, height: 16, alignment: .center)
+                .paneFont(size: 13)
+                .frame(width: headerIconSize, height: headerIconSize, alignment: .center)
                 .padding(8)
                 .background(isTrashHovering ? palette.headerHover : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))

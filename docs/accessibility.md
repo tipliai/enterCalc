@@ -48,6 +48,7 @@ This page is a quick guide to accessibility features available in EnterCalc.
 - **Settings ▸ User Interface** has a Text Size control that follows the system text size by default (**Use System Text Size**).
 - Turn it off to choose one of five sizes for EnterCalc only: Extra Small, Small, Default, Large, and Extra Large.
 - The chosen size applies to Settings, history, and the panels the same way the system's larger text does, and makes the calculator's numbers larger or smaller. Key sizes stay the same at every setting.
+- The VAT, Tip and rounding panes scale their text too, on iPhone, iPad and Mac. A pane grows taller to fit larger text, and if it would cover too much of the screen it scrolls instead of cutting anything off. The VAT and TIP buttons in the display keep their size.
 
 ## Platform Notes
 
