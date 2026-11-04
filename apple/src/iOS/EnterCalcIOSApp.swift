@@ -901,9 +901,6 @@ struct EnterCalcIOSView: View {
             // background alone, which would look worse than the hard cut.
             .animation(reduceMotionEnabled ? nil : .easeInOut(duration: Self.themeTransitionDuration), value: activeTheme)
             .preferredColorScheme(activeTheme.preferredColorScheme)
-            // One accent for every system control and link: the middle of the
-            // Enter key's gradient (#137), instead of the system blue.
-            .tint(palette.foregroundAccent)
             .focusedSceneValue(\.calculatorActions, actionContext)
             .transaction { transaction in
                 if reduceMotionEnabled {
@@ -1027,10 +1024,8 @@ struct EnterCalcIOSView: View {
                     counterRotatesForUpsideDownPortrait: counterRotatesForUpsideDownPortrait
                 )
                 // A sheet takes its text size from the window, not the root
-                // view's environment, so the Text Size setting and the accent
-                // are applied here too.
+                // view's environment, so the Text Size setting is applied here too.
                 .appTextSize()
-                .tint(palette.foregroundAccent)
             }
             .onIOSDeviceOrientationChange {
                 isResizingKeypadHeight = false
@@ -4049,6 +4044,7 @@ private struct IOSSettingsSheet: View {
                     in: 0...Double(TextSizePreference.sizes.count - 1),
                     step: 1
                 )
+                .tint(palette.foregroundAccent)
                 .accessibilityLabel(Text(localized("settings.textSize")))
                 .accessibilityValue(Text(localized(textSizePreference.localizationKey)))
                 Image(systemName: "textformat.size.larger")
@@ -4105,6 +4101,7 @@ private struct IOSSettingsSheet: View {
                         // above. This is supporting copy, not emphasis.
                         Text(creditAttributedString())
                             .font(.system(size: settingsAboutTextSize))
+                            .tint(palette.foregroundAccent)
                         // Version and the feedback link share a row: both are
                         // "about this app", and it keeps the section to two rows.
                         HStack(spacing: 12) {
@@ -4116,6 +4113,7 @@ private struct IOSSettingsSheet: View {
 
                             Link(localized("settings.feedback"), destination: SupportLinks.supportURL)
                                 .font(.system(size: settingsAboutTextSize))
+                                .tint(palette.foregroundAccent)
                         }
                     }
                 }
@@ -4235,6 +4233,9 @@ private struct IOSRoundingPanel: View {
                     ),
                     in: 0...1
                 )
+                // Only sliders and links take the accent (#137); every other
+                // control keeps its system colours.
+                .tint(palette.foregroundAccent)
 
                 GeometryReader { geometry in
                     ZStack(alignment: .topLeading) {

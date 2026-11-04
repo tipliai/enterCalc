@@ -251,12 +251,7 @@ struct CalculatorWindowView: View {
     var body: some View {
         GeometryReader { geo in
             HStack(spacing: 6) {
-                // One accent for every system control and link: the middle of
-                // the Enter key's gradient (#137), instead of the system accent
-                // colour. Set here rather than at the end of the chain below,
-                // which is already as long as the compiler can type-check.
                 calculatorPane
-                    .tint(palette.foregroundAccent)
 
                 if showHistory && !usesCompactHistoryOverlay {
                     HistoryPanel(
@@ -267,7 +262,6 @@ struct CalculatorWindowView: View {
                         palette: palette,
                         textScale: effectiveHistoryTextScale
                     )
-                    .tint(palette.foregroundAccent)
                     .frame(width: historyPanelWidth)
                 }
             }
@@ -3014,6 +3008,9 @@ private struct SettingsSheet: View {
     @Binding var disablesButtonSound: Bool
     let availableLanguages: [LanguageOption]
     let onClose: () -> Void
+    /// The accent for the sheet's slider and links (#137); other controls keep
+    /// their system colours.
+    let accent: Color
     @Environment(\.macLocalizationBundle) private var localizationBundle
     // Global and live: the sheet resizes as the slider moves, which is the preview.
     @AppStorage(TextSizePreference.storageKey) private var storedTextSize = TextSizePreference.system.rawValue
@@ -3128,6 +3125,7 @@ private struct SettingsSheet: View {
                                     in: 0...Double(TextSizePreference.sizes.count - 1),
                                     step: 1
                                 )
+                                .tint(accent)
                                 .accessibilityLabel(Text(macLocalized("settings.textSize", bundle: localizationBundle)))
                                 .accessibilityValue(Text(macLocalized(textSizePreference.localizationKey, bundle: localizationBundle)))
                                 Image(systemName: "textformat.size.larger")
@@ -3161,6 +3159,7 @@ private struct SettingsSheet: View {
                                 destination: SupportLinks.supportURL
                             )
                             .font(.system(size: settingsBodySize))
+                            .tint(accent)
                         }
                     }
                 }
@@ -3249,6 +3248,9 @@ private struct MacRoundingPanel: View {
                 ),
                 in: 0...1
             )
+            // Only sliders and links take the accent (#137); every other
+            // control keeps its system colours.
+            .tint(palette.foregroundAccent)
 
             GeometryReader { geometry in
                 ZStack(alignment: .topLeading) {
@@ -3546,7 +3548,8 @@ private extension CalculatorWindowView {
                 }
             ),
             availableLanguages: availableLanguageOptions(),
-            onClose: { closeSettingsOverlay() }
+            onClose: { closeSettingsOverlay() },
+            accent: palette.foregroundAccent
         )
     }
 
