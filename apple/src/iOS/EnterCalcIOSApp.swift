@@ -3678,8 +3678,10 @@ private extension EnterCalcIOSView {
         }
     }
 
+    /// A hardware keyboard's Down Arrow follows the same Settings switch as
+    /// swiping down, so one switch turns off both ways in (#154).
     func openRoundingOverlayFromKeyboard() {
-        guard activeOverlay != .rounding else { return }
+        guard activeOverlay != .rounding, !activeScreen.settings.disablesSwipeDownToRound else { return }
         toggleOverlay(.rounding)
     }
 

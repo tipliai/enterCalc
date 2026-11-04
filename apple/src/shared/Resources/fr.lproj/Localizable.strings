@@ -36,6 +36,7 @@
 "history.copyOperation" = "Copier l'opération";
 "key.enter" = "Entrée";
 "settings.rounding.disableSwipeDown" = "Désactiver le balayage vers le bas pour arrondir";
+"settings.rounding.disablePressDown" = "Désactiver l'appui vers le bas pour arrondir";
 "rounding.toggle" = "Afficher/masquer le panneau d'arrondi";
 "display.grow" = "Agrandir l'affichage";
 "display.shrink" = "Réduire l'affichage";

@@ -36,6 +36,7 @@
 "history.copyOperation" = "式をコピー";
 "key.enter" = "入力";
 "settings.rounding.disableSwipeDown" = "下スワイプで丸める操作を無効にする";
+"settings.rounding.disablePressDown" = "下キーで丸める操作を無効にする";
 "rounding.toggle" = "丸めパネルを表示/非表示";
 "display.grow" = "表示を大きくする";
 "display.shrink" = "表示を小さくする";
