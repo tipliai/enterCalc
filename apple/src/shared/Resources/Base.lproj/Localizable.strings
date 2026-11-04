@@ -19,6 +19,7 @@
 "settings.currency.symbol" = "Currency symbol";
 "settings.numberFormat.scientific" = "Use scientific notation";
 "settings.rounding.disableSwipeDown" = "Disable swipe down to round";
+"settings.rounding.disablePressDown" = "Disable press down to round";
 "settings.buttonSound.disabled" = "Disable button sound";
 "settings.credits" = "About";
 "settings.feedback" = "Feedback";

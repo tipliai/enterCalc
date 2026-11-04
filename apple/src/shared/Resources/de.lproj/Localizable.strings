@@ -36,6 +36,7 @@
 "history.copyOperation" = "Operation kopieren";
 "key.enter" = "Eingabe";
 "settings.rounding.disableSwipeDown" = "Runterwischen zum Runden deaktivieren";
+"settings.rounding.disablePressDown" = "Runterdrücken zum Runden deaktivieren";
 "rounding.toggle" = "Rundungspanel ein-/ausblenden";
 "display.grow" = "Anzeige vergrößern";
 "display.shrink" = "Anzeige verkleinern";

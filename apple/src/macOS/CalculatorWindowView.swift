@@ -1765,8 +1765,11 @@ struct CalculatorWindowView: View {
         setRoundingOverlayVisible(false)
     }
 
+    /// Down Arrow opens the rounding pane unless Settings has turned that
+    /// shortcut off (#154). The menu command and the rounding function key
+    /// still open it, so rounding stays reachable.
     private func openRoundingOverlayFromKeyboard() {
-        guard !showRoundingOverlay else { return }
+        guard !showRoundingOverlay, !windowSettings.disablesSwipeDownToRound else { return }
         setRoundingOverlayVisible(true)
     }
 
@@ -3127,7 +3130,9 @@ private struct SettingsSheet: View {
                             .font(.system(size: settingsBodySize))
                         Toggle(macLocalized("settings.buttonSound.disabled", bundle: localizationBundle), isOn: $disablesButtonSound)
                             .font(.system(size: settingsBodySize))
-                        Toggle(macLocalized("settings.rounding.disableSwipeDown", bundle: localizationBundle), isOn: $disablesSwipeDownToRound)
+                        // The Mac opens rounding with Down Arrow, not a swipe (#154). The
+                        // stored setting is shared, so the key name keeps "SwipeDown".
+                        Toggle(macLocalized("settings.rounding.disablePressDown", bundle: localizationBundle), isOn: $disablesSwipeDownToRound)
                             .font(.system(size: settingsBodySize))
                     }
 

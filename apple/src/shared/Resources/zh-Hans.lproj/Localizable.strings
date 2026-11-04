@@ -36,6 +36,7 @@
 "history.copyOperation" = "复制算式";
 "key.enter" = "回车";
 "settings.rounding.disableSwipeDown" = "禁用下滑进行四舍五入";
+"settings.rounding.disablePressDown" = "禁用按下方向键进行四舍五入";
 "rounding.toggle" = "切换四舍五入面板";
 "display.grow" = "增大显示区域";
 "display.shrink" = "减小显示区域";

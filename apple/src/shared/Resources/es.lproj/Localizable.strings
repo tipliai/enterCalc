@@ -36,6 +36,7 @@
 "history.copyOperation" = "Copiar operación";
 "key.enter" = "Intro";
 "settings.rounding.disableSwipeDown" = "Desactivar deslizamiento hacia abajo para redondear";
+"settings.rounding.disablePressDown" = "Desactivar pulsar abajo para redondear";
 "rounding.toggle" = "Mostrar/ocultar panel de redondeo";
 "display.grow" = "Aumentar tamaño de pantalla";
 "display.shrink" = "Reducir tamaño de pantalla";

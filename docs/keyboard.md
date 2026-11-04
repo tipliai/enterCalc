@@ -22,7 +22,7 @@ Sources:
 | Insert | Enter direct edit; caret to trailing boundary | Already in direct edit; no extra action | Blocked while overlay is active | Blocked while overlay is active |
 | Left Arrow | Move display caret left (activates direct edit if possible) | Move display caret left | Decrease rounding precision step | Suppressed |
 | Right Arrow | Move display caret right (activates direct edit if possible) | Move display caret right | Increase rounding precision step | Suppressed |
-| Down Arrow | Open rounding overlay | Open rounding overlay | No-op (consumed) | Suppressed |
+| Down Arrow | Open rounding overlay (unless turned off in Settings) | Open rounding overlay (unless turned off in Settings) | No-op (consumed) | Suppressed |
 | Up Arrow | No mapped action | No mapped action | Close rounding overlay | Suppressed |
 | Shift + Up Arrow | Increase display size (20pt) | Increase display size | Increase display size | Increase display size |
 | Shift + Down Arrow | Decrease display size (20pt) | Decrease display size | Decrease display size | Decrease display size |
@@ -40,6 +40,10 @@ Sources:
 | ( and ) | Input parentheses | Input parentheses | Not handled here | Suppressed |
 | = | Evaluate | Evaluate path applies; direct edit Enter key exits edit | Not handled here | Suppressed |
 | Currency symbols ($, €, £, etc.) | Activate currency input mode with symbol | Same behavior at caret position | Not handled here | Suppressed |
+
+### Turning off Down Arrow to round
+
+Settings has a switch that turns off the Down Arrow shortcut for the rounding overlay: **Disable press down to round** on the Mac, and **Disable swipe down to round** on iPhone and iPad, where the same switch also turns off the swipe and an iPad keyboard's Down Arrow (#154). With it on, rounding is still reachable from its menu command and the rounding function key. Shift + Down Arrow still resizes the display.
 
 ### Currency Mode
 
