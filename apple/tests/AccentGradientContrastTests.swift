@@ -24,10 +24,15 @@ final class AccentGradientContrastTests: XCTestCase {
         return (ns.redComponent, ns.greenComponent, ns.blueComponent)
     }
 
-    /// The colour halfway along the gradient, where a key's label sits.
-    private func midpoint(of palette: Palette) -> Color {
+    /// The colour `t` of the way along a two-stop gradient.
+    private func gradientColor(of palette: Palette, at t: CGFloat) -> Color {
         let a = srgb(palette.accentGradientStart), b = srgb(palette.accentGradientEnd)
-        return Color(.sRGB, red: (a.0 + b.0) / 2, green: (a.1 + b.1) / 2, blue: (a.2 + b.2) / 2)
+        return Color(.sRGB, red: a.0 + (b.0 - a.0) * t, green: a.1 + (b.1 - a.1) * t, blue: a.2 + (b.2 - a.2) * t)
+    }
+
+    /// The colour halfway along the gradient.
+    private func midpoint(of palette: Palette) -> Color {
+        gradientColor(of: palette, at: 0.5)
     }
 
     private func contrast(_ a: Color, _ b: Color) -> Double {
@@ -46,12 +51,20 @@ final class AccentGradientContrastTests: XCTestCase {
         ]
     }
 
-    /// A label sits in the middle of its key, so it needs 4.5:1 against the
-    /// gradient there. The gradient's corners only meet the edges of large or
-    /// bold labels (the Enter key's), which need 3:1 (WCAG 1.4.3).
+    /// Normal-size labels (selected chips, highlighted keys) can stretch
+    /// across most of a key, so text needs 4.5:1 over the first three quarters
+    /// of the gradient. Only the far corner, which no label reaches, may drop
+    /// to 3:1, the large-text level (WCAG 1.4.3). Two-stop palettes only; the
+    /// Blue theme's white gradient is checked at its stops.
     func testAccentTextReadsOnTheGradient() {
         for (name, palette) in palettes {
-            XCTAssertGreaterThanOrEqual(contrast(palette.accentText, midpoint(of: palette)), 4.5, "\(name): accent text at the gradient's middle")
+            if palette.accentGradientMid == nil {
+                for t in stride(from: CGFloat(0), through: 0.75, by: 0.05) {
+                    XCTAssertGreaterThanOrEqual(contrast(palette.accentText, gradientColor(of: palette, at: t)), 4.5, "\(name): accent text at \(t) of the gradient")
+                }
+            } else if let mid = palette.accentGradientMid {
+                XCTAssertGreaterThanOrEqual(contrast(palette.accentText, mid), 4.5, "\(name): accent text at the gradient's middle stop")
+            }
             for (stop, color) in [("start", palette.accentGradientStart), ("end", palette.accentGradientEnd)] {
                 XCTAssertGreaterThanOrEqual(contrast(palette.accentText, color), 3, "\(name): accent text at the gradient \(stop)")
             }

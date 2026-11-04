@@ -43,8 +43,9 @@ public struct Palette {
     public var sliderTint: Color { sliderTintOverride ?? foregroundAccent }
 
     /// The app's one accent treatment: the Enter key's gradient (#137), from
-    /// #3d51c3 at the top left to the OS blue at the bottom right (#007aff on
-    /// light themes, #0a84ff on dark). Every accent fill uses it, from the
+    /// #3d51c3 at the top left to the OS blue (#007aff) at the bottom right,
+    /// on light and dark themes alike, so white text keeps 4.5:1 across the
+    /// part of the gradient where labels sit. Every accent fill uses it, from the
     /// Enter key to highlighted keys and selected chips. Two stops on light
     /// and dark themes, so the blend has no band of a third colour through
     /// the middle.
@@ -66,7 +67,8 @@ public struct Palette {
 
     /// Returns a solid color for a right-column button at `index` out of `total`
     /// for the launch animation, following the Enter key's gradient: the OS
-    /// blue at the top (÷) down to #3d51c3 at the bottom, shared by all themes.
+    /// blue (#0a84ff) at the top (÷) down to #3d51c3 at the bottom, shared by
+    /// all themes.
     public func operatorColumnColor(at index: Int) -> Color {
         let total = Palette.operatorColumnTitles.count
         let t = total > 1 ? CGFloat(index) / CGFloat(total - 1) : 0
@@ -139,12 +141,12 @@ public struct Palette {
         panel: Color(red: 0.1686, green: 0.1686, blue: 0.1686), // #2b2b2b
         textPrimary: darkTextPrimary,
         textSecondary: darkTextPrimary.opacity(0.65),
-        accent: Color(red: 0.1412, green: 0.4157, blue: 0.8824), // #246ae1, the gradient's midpoint
+        accent: Color(red: 0.1176, green: 0.4000, blue: 0.8824), // #1e66e1, the gradient's midpoint
         // Pure white: the light grey of the dark theme's text only reaches
         // 4.1:1 in the middle of the gradient, white 5.0:1.
         accentText: Color.white,
         accentGradientStart: Color(red: 0.2392, green: 0.3176, blue: 0.7647), // #3d51c3
-        accentGradientEnd: Color(red: 0.0392, green: 0.5176, blue: 1.0),      // #0a84ff, the OS blue in dark mode
+        accentGradientEnd: Color(red: 0.0, green: 0.4784, blue: 1.0),        // #007aff, as on light themes, so white text keeps 4.5:1
         buttonNumber: Color(red: 0.2039, green: 0.2039, blue: 0.2039), // #343434
         buttonOperation: Color(red: 0.1686, green: 0.1686, blue: 0.1686), // #2b2b2b
         buttonFunction: Color(red: 0.1686, green: 0.1686, blue: 0.1686), // #2b2b2b
