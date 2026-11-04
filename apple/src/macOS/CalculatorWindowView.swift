@@ -2396,7 +2396,7 @@ private struct CompactActionButton: View {
             Color.clear
         } else {
             keyShape
-                .fill(isHighlighted ? palette.accent : palette.buttonOperation)
+                .fill(isHighlighted ? AnyShapeStyle(palette.accentGradient) : AnyShapeStyle(palette.buttonOperation))
         }
     }
 }
@@ -2605,23 +2605,11 @@ private struct CompactActionButton: View {
             AnyShapeStyle(backgroundColor)
         }
 
-        private var accentButtonGradient: LinearGradient {
-            LinearGradient(
-                stops: [
-                    .init(color: palette.accentGradientStart, location: 0.0),
-                    .init(color: palette.accentGradientMid, location: 0.42),
-                    .init(color: palette.accentGradientEnd, location: 1.0)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
-
         @ViewBuilder
         private var buttonBackground: some View {
             if kind == .accent {
                 keyShape
-                    .fill(accentButtonGradient)
+                    .fill(palette.accentGradient)
             } else if let revealOrder = Self.operatorRevealOrder[title],
                let gradColor = palette.operatorColumnColor(for: title) {
                 let overlayOpacity = min(1.0, max(0.0, operatorRevealProgress - Double(revealOrder))) * operatorAnimFadeOpacity
@@ -2634,7 +2622,7 @@ private struct CompactActionButton: View {
                 }
             } else {
                 keyShape
-                    .fill(isHighlighted ? AnyShapeStyle(palette.accent) : backgroundStyle)
+                    .fill(isHighlighted ? AnyShapeStyle(palette.accentGradient) : backgroundStyle)
             }
         }
 

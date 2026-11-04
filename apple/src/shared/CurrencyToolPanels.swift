@@ -268,7 +268,7 @@ private struct RateChooser: View {
                 .padding(.vertical, 7)
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(isSelected ? palette.accent : palette.buttonFunction)
+                        .fill(isSelected ? AnyShapeStyle(palette.accentGradient) : AnyShapeStyle(palette.buttonFunction))
                 )
                 .contentShape(Rectangle())
         }
@@ -557,7 +557,7 @@ public struct CurrencyVATPanel: View {
         .buttonStyle(.plain)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isSelected ? palette.accent : palette.buttonFunction)
+                .fill(isSelected ? AnyShapeStyle(palette.accentGradient) : AnyShapeStyle(palette.buttonFunction))
         )
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }

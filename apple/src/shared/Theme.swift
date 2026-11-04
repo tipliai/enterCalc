@@ -25,6 +25,22 @@ public struct Palette {
     /// The folded-down corner on keys whose function can be changed (#131).
     public var functionKeyEar: Color = .clear
 
+    /// The app's one accent treatment: the Enter key's gradient (#137). Every
+    /// accent fill uses it, from the Enter key to highlighted keys and selected
+    /// chips. Thin elements that need a solid colour, such as strokes and
+    /// resize handles, use `accent`, which matches the gradient's middle.
+    public var accentGradient: LinearGradient {
+        LinearGradient(
+            stops: [
+                .init(color: accentGradientStart, location: 0.0),
+                .init(color: accentGradientMid, location: 0.42),
+                .init(color: accentGradientEnd, location: 1.0)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
     /// Titles of the right-column operator/equals buttons, ordered top→bottom.
     public static let operatorColumnTitles: [String] = ["÷", "×", "−", "+", "="]
 
@@ -72,7 +88,8 @@ public struct Palette {
             panel: highContrastPanel,
             textPrimary: highContrastPrimary,
             textSecondary: highContrastSecondary,
-            accent: isBlueLike ? Color.white : (isDarkLike ? accent : Color(red: 0.0, green: 0.305, blue: 0.62)),
+            // Light themes take the gradient's darkest stop for more contrast.
+            accent: isBlueLike ? Color.white : (isDarkLike ? accent : accentGradientEnd),
             accentText: accentText,
             accentGradientStart: accentGradientStart,
             accentGradientMid: accentGradientMid,
@@ -100,7 +117,7 @@ public struct Palette {
         panel: Color(red: 0.1686, green: 0.1686, blue: 0.1686), // #2b2b2b
         textPrimary: darkTextPrimary,
         textSecondary: darkTextPrimary.opacity(0.65),
-        accent: Color(red: 0.0, green: 0.3608, blue: 0.7216), // #005cb8 — matches light theme
+        accent: Color(red: 0.2313, green: 0.1764, blue: 0.8510), // #3b2dd9, the gradient's middle (#137)
         accentText: darkTextPrimary,
         accentGradientStart: Color(red: 0.2392, green: 0.3176, blue: 0.7647), // #3d51c3
         accentGradientMid: Color(red: 0.2313, green: 0.1764, blue: 0.8510),   // #3b2dd9
@@ -124,7 +141,7 @@ public struct Palette {
         panel: Color(red: 0.9725, green: 0.9725, blue: 0.9725), // #f8f8f8
         textPrimary: lightTextPrimary,
         textSecondary: lightTextPrimary.opacity(0.65),
-        accent: Color(red: 0.0, green: 0.3608, blue: 0.7216), // #005cb8
+        accent: Color(red: 0.2313, green: 0.1764, blue: 0.8510), // #3b2dd9, the gradient's middle (#137)
         accentText: Color.white,
         accentGradientStart: Color(red: 0.2392, green: 0.3176, blue: 0.7647), // #3d51c3
         accentGradientMid: Color(red: 0.2313, green: 0.1764, blue: 0.8510),   // #3b2dd9
