@@ -901,6 +901,9 @@ struct EnterCalcIOSView: View {
             // background alone, which would look worse than the hard cut.
             .animation(reduceMotionEnabled ? nil : .easeInOut(duration: Self.themeTransitionDuration), value: activeTheme)
             .preferredColorScheme(activeTheme.preferredColorScheme)
+            // One accent for every system control and link: the middle of the
+            // Enter key's gradient (#137), instead of the system blue.
+            .tint(palette.foregroundAccent)
             .focusedSceneValue(\.calculatorActions, actionContext)
             .transaction { transaction in
                 if reduceMotionEnabled {
@@ -1024,8 +1027,10 @@ struct EnterCalcIOSView: View {
                     counterRotatesForUpsideDownPortrait: counterRotatesForUpsideDownPortrait
                 )
                 // A sheet takes its text size from the window, not the root
-                // view's environment, so the Text Size setting is applied here too.
+                // view's environment, so the Text Size setting and the accent
+                // are applied here too.
                 .appTextSize()
+                .tint(palette.foregroundAccent)
             }
             .onIOSDeviceOrientationChange {
                 isResizingKeypadHeight = false
@@ -2021,7 +2026,7 @@ private extension EnterCalcIOSView {
         let usesLandscapeNavigationRail = metrics.usesLandscapeNavigationRail
         let activePaginationColor = activeTheme == .blue
             ? Color.white
-            : Color(red: 0, green: 0.3529, blue: 1.0)
+            : palette.foregroundAccent
         let inactivePaginationColor = colorScheme == .dark
             ? palette.textSecondary.opacity(0.28)
             : palette.textPrimary.opacity(0.18)
@@ -4653,7 +4658,7 @@ private struct IOSHistoryPanel: View {
     }
 
     private func historyResizeHandle(onResizeChanged: @escaping (DragGesture.Value) -> Void, rowHeight: CGFloat) -> some View {
-        let accentColor = palette.accent
+        let accentColor = palette.foregroundAccent
         let handleColor = isResizing ? accentColor : palette.textSecondary.opacity(colorScheme == .dark ? 0.65 : 0.4)
         let lineColor = handleColor
         let dragGesture = DragGesture(minimumDistance: 0, coordinateSpace: .global)

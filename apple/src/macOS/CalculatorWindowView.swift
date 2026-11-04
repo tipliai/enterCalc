@@ -251,7 +251,12 @@ struct CalculatorWindowView: View {
     var body: some View {
         GeometryReader { geo in
             HStack(spacing: 6) {
+                // One accent for every system control and link: the middle of
+                // the Enter key's gradient (#137), instead of the system accent
+                // colour. Set here rather than at the end of the chain below,
+                // which is already as long as the compiler can type-check.
                 calculatorPane
+                    .tint(palette.foregroundAccent)
 
                 if showHistory && !usesCompactHistoryOverlay {
                     HistoryPanel(
@@ -262,6 +267,7 @@ struct CalculatorWindowView: View {
                         palette: palette,
                         textScale: effectiveHistoryTextScale
                     )
+                    .tint(palette.foregroundAccent)
                     .frame(width: historyPanelWidth)
                 }
             }
@@ -1379,7 +1385,7 @@ struct CalculatorWindowView: View {
     }
 
     private func historyOverlayResizeHandle(defaultHeight: CGFloat, windowHeight: CGFloat) -> some View {
-        let accentColor = palette.accent
+        let accentColor = palette.foregroundAccent
         let handleColor = isResizingHistoryOverlay ? accentColor : palette.textSecondary.opacity(colorScheme == .dark ? 0.7 : 0.42)
         let lineColor = handleColor
         let dragGesture = DragGesture(minimumDistance: 0, coordinateSpace: .global)
