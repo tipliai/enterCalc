@@ -876,7 +876,7 @@ struct CalculatorWindowView: View {
                     .font(.system(size: modeLabelFontSize * 0.6, weight: .semibold))
             }
             .foregroundStyle(primaryForeground.opacity(opacity))
-            .animation(ModeControlsTransition.animation, value: current)
+            .modeControlsAnimation(value: current)
             .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
@@ -908,15 +908,12 @@ struct CalculatorWindowView: View {
 
             Spacer(minLength: 4)
 
-            if showsCurrencyTools {
-                HStack(spacing: 6) {
-                    currencyToolButton(titleKey: "currency.vat.short", pane: .vat, opacity: opacity)
-                    currencyToolButton(titleKey: "currency.tip.short", pane: .tip, opacity: opacity)
-                }
-                .modeControlTransition()
+            HStack(spacing: 6) {
+                currencyToolButton(titleKey: "currency.vat.short", pane: .vat, opacity: opacity)
+                currencyToolButton(titleKey: "currency.tip.short", pane: .tip, opacity: opacity)
             }
+            .modeControl(visible: showsCurrencyTools)
         }
-            .animation(ModeControlsTransition.animation, value: showsCurrencyTools)
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: max(16, modeLabelFontSize * 1.32), alignment: .leading)
             .clipped()

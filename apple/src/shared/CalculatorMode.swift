@@ -58,9 +58,29 @@ public enum ModeControlsTransition {
 }
 
 public extension View {
-    /// Fades this mode control in and out as its mode is entered and left.
-    func modeControlTransition() -> some View {
-        transition(.opacity)
+    /// Fades a mode's controls in and out as the mode is entered and left.
+    ///
+    /// The controls stay mounted and only their opacity changes, so they stop
+    /// taking clicks, keyboard focus and VoiceOver focus the moment the mode
+    /// is left, rather than lingering as a removed view while it fades out.
+    func modeControl(visible: Bool) -> some View {
+        opacity(visible ? 1 : 0)
+            .disabled(!visible)
+            .allowsHitTesting(visible)
+            .accessibilityHidden(!visible)
+            .modeControlsAnimation(value: visible)
+    }
+
+    /// Animates changes to `value` with the mode-controls fade.
+    ///
+    /// Under Reduce Motion the iOS app disables animations for its whole
+    /// window, which would turn this fade back into a pop. A dissolve has no
+    /// movement, so this re-enables it, scoped to changes of `value` alone.
+    func modeControlsAnimation<Value: Equatable>(value: Value) -> some View {
+        transaction(value: value) { transaction in
+            transaction.disablesAnimations = false
+            transaction.animation = ModeControlsTransition.animation
+        }
     }
 }
 

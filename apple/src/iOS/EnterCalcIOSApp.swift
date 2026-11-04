@@ -3062,7 +3062,7 @@ private extension EnterCalcIOSView {
                     .font(.system(size: fontSize * 0.55, weight: .semibold))
             }
             .foregroundStyle(palette.textPrimary.opacity(opacity))
-            .animation(ModeControlsTransition.animation, value: current)
+            .modeControlsAnimation(value: current)
             .frame(minHeight: metrics.memoryHeight)
             // Meets the 44pt target without growing the row.
             .contentShape(Rectangle().inset(by: -max(0, (44 - metrics.memoryHeight) / 2)))
@@ -3089,15 +3089,12 @@ private extension EnterCalcIOSView {
 
             Spacer(minLength: 4)
 
-            if showsCurrencyTools {
-                HStack(spacing: 8) {
-                    currencyToolButton(metrics: metrics, titleKey: "currency.vat.short", pane: .vat, opacity: opacity)
-                    currencyToolButton(metrics: metrics, titleKey: "currency.tip.short", pane: .tip, opacity: opacity)
-                }
-                .modeControlTransition()
+            HStack(spacing: 8) {
+                currencyToolButton(metrics: metrics, titleKey: "currency.vat.short", pane: .vat, opacity: opacity)
+                currencyToolButton(metrics: metrics, titleKey: "currency.tip.short", pane: .tip, opacity: opacity)
             }
+            .modeControl(visible: showsCurrencyTools)
         }
-            .animation(ModeControlsTransition.animation, value: showsCurrencyTools)
             .frame(maxWidth: .infinity, minHeight: metrics.memoryHeight, maxHeight: metrics.memoryHeight, alignment: .leading)
             .padding(.horizontal, metrics.displayHorizontalPadding)
             .clipped()
