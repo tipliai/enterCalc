@@ -1467,7 +1467,6 @@ private extension EnterCalcIOSView {
         }
     }
 
-    @ViewBuilder
     /// The overlay panes' text scale (#152): the Text Size setting, or the
     /// system's text size when following it.
     var paneTextScale: CGFloat {

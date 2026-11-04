@@ -238,27 +238,47 @@ private struct RateChooser: View {
     }
 
     /// The presets and the rate stepper share one row; the stepper's value is
-    /// the rate in use, so it needs no label of its own.
+    /// the rate in use, so it needs no label of its own. When larger text
+    /// leaves the row too narrow for both (#152), the stepper moves onto a
+    /// row of its own below the presets.
     private var choosingView: some View {
-        HStack(spacing: 6) {
-            ForEach(Array(rates.enumerated()), id: \.offset) { slot, rate in
-                presetButton(slot: slot, rate: rate)
+        ViewThatFits(in: .horizontal) {
+            // ViewThatFits measures each layout at its natural width, so this
+            // one is used only when every label fits at full size.
+            HStack(spacing: 6) {
+                presetButtons
+
+                if showsStepper {
+                    stepper
+                        .fixedSize(horizontal: true, vertical: false)
+                }
             }
 
-            if showsStepper {
-                StepperControl(
-                    value: "\(format(selected))%",
-                    decreaseLabel: decreaseLabel,
-                    increaseLabel: increaseLabel,
-                    palette: palette,
-                    onDecrease: { onSelect(RateEntry.stepped(selected, up: false)) },
-                    onIncrease: { onSelect(RateEntry.stepped(selected, up: true)) },
-                    valueActionLabel: labels.typeRate,
-                    onValueTap: beginTypingRate
-                )
-                .layoutPriority(1)
+            VStack(spacing: 6) {
+                HStack(spacing: 6) { presetButtons }
+                if showsStepper { stepper }
             }
         }
+    }
+
+    @ViewBuilder
+    private var presetButtons: some View {
+        ForEach(Array(rates.enumerated()), id: \.offset) { slot, rate in
+            presetButton(slot: slot, rate: rate)
+        }
+    }
+
+    private var stepper: some View {
+        StepperControl(
+            value: "\(format(selected))%",
+            decreaseLabel: decreaseLabel,
+            increaseLabel: increaseLabel,
+            palette: palette,
+            onDecrease: { onSelect(RateEntry.stepped(selected, up: false)) },
+            onIncrease: { onSelect(RateEntry.stepped(selected, up: true)) },
+            valueActionLabel: labels.typeRate,
+            onValueTap: beginTypingRate
+        )
     }
 
     /// A real `Button`, so it can be focused and pressed from a keyboard (Tab and
