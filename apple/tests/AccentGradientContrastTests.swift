@@ -42,6 +42,27 @@ final class AccentGradientContrastTests: XCTestCase {
         }
     }
 
+    /// Links and system controls use the foreground accent, which must read
+    /// as text (4.5:1) on every background they sit on, in light and dark,
+    /// with and without Increase Contrast.
+    func testForegroundAccentMeetsAAOnEveryBackground() {
+        let themes: [(String, Palette)] = [
+            ("light", .light),
+            ("dark", .dark),
+            ("light, increased contrast", Palette.light.adjustedForIncreasedContrast(isDarkLike: false)),
+            ("dark, increased contrast", Palette.dark.adjustedForIncreasedContrast(isDarkLike: true)),
+        ]
+        for (name, palette) in themes {
+            for (background, color) in [("surface", palette.surface), ("panel", palette.panel), ("function key", palette.buttonFunction), ("history", palette.historyBackground)] {
+                XCTAssertGreaterThanOrEqual(contrast(palette.foregroundAccent, color), 4.5, "\(name): foreground accent on \(background)")
+            }
+        }
+    }
+
+    func testForegroundAccentIsTheGradientMiddleInLight() {
+        XCTAssertEqual(relativeLuminance(Palette.light.foregroundAccent), relativeLuminance(Palette.light.accentGradientMid), accuracy: 0.0001)
+    }
+
     func testSolidAccentMatchesTheGradientInLightAndDark() {
         for palette in [Palette.light, Palette.dark] {
             XCTAssertEqual(relativeLuminance(palette.accent), relativeLuminance(palette.accentGradientMid), accuracy: 0.0001)

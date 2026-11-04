@@ -903,7 +903,7 @@ struct EnterCalcIOSView: View {
             .preferredColorScheme(activeTheme.preferredColorScheme)
             // One accent for every system control and link: the middle of the
             // Enter key's gradient (#137), instead of the system blue.
-            .tint(palette.accent)
+            .tint(palette.foregroundAccent)
             .focusedSceneValue(\.calculatorActions, actionContext)
             .transaction { transaction in
                 if reduceMotionEnabled {
@@ -1030,7 +1030,7 @@ struct EnterCalcIOSView: View {
                 // view's environment, so the Text Size setting and the accent
                 // are applied here too.
                 .appTextSize()
-                .tint(palette.accent)
+                .tint(palette.foregroundAccent)
             }
             .onIOSDeviceOrientationChange {
                 isResizingKeypadHeight = false
@@ -2026,7 +2026,7 @@ private extension EnterCalcIOSView {
         let usesLandscapeNavigationRail = metrics.usesLandscapeNavigationRail
         let activePaginationColor = activeTheme == .blue
             ? Color.white
-            : palette.accent
+            : palette.foregroundAccent
         let inactivePaginationColor = colorScheme == .dark
             ? palette.textSecondary.opacity(0.28)
             : palette.textPrimary.opacity(0.18)
@@ -4658,7 +4658,7 @@ private struct IOSHistoryPanel: View {
     }
 
     private func historyResizeHandle(onResizeChanged: @escaping (DragGesture.Value) -> Void, rowHeight: CGFloat) -> some View {
-        let accentColor = palette.accent
+        let accentColor = palette.foregroundAccent
         let handleColor = isResizing ? accentColor : palette.textSecondary.opacity(colorScheme == .dark ? 0.65 : 0.4)
         let lineColor = handleColor
         let dragGesture = DragGesture(minimumDistance: 0, coordinateSpace: .global)

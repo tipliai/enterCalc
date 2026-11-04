@@ -24,6 +24,15 @@ public struct Palette {
     public let historyTileBackground: Color
     /// The folded-down corner on keys whose function can be changed (#131).
     public var functionKeyEar: Color = .clear
+    /// A lighter accent for text, controls and thin lines on a dark theme,
+    /// where the accent itself is too dark to read; nil uses `accent`.
+    public var foregroundAccentOverride: Color? = nil
+
+    /// The accent for links, system controls and thin indicators (#137): the
+    /// gradient's middle where it reads well, and a lighter tint of it on dark
+    /// themes, so links keep at least 4.5:1 and indicators 3:1 against the
+    /// background. Fills keep the gradient.
+    public var foregroundAccent: Color { foregroundAccentOverride ?? accent }
 
     /// The app's one accent treatment: the Enter key's gradient (#137). Every
     /// accent fill uses it, from the Enter key to highlighted keys and selected
@@ -106,7 +115,9 @@ public struct Palette {
             headerHover: isDarkLike ? Color.white.opacity(isBlueLike ? 0.22 : 0.2) : Color.black.opacity(0.16),
             historyBackground: highContrastSurface,
             historyTileBackground: isDarkLike ? Color.white.opacity(isBlueLike ? 0.15 : 0.13) : Color.black.opacity(0.11),
-            functionKeyEar: isBlueLike ? Color.white.opacity(0.45) : (isDarkLike ? Color.white.opacity(0.30) : Color.black.opacity(0.22))
+            functionKeyEar: isBlueLike ? Color.white.opacity(0.45) : (isDarkLike ? Color.white.opacity(0.30) : Color.black.opacity(0.22)),
+            // Increase Contrast on a dark theme: a still lighter accent tint.
+            foregroundAccentOverride: isDarkLike && !isBlueLike ? Color(red: 0.7694, green: 0.7529, blue: 0.9553) : nil // #c4c0f4
         )
     }
 
@@ -134,7 +145,9 @@ public struct Palette {
         headerHover: Color.white.opacity(0.08),
         historyBackground: Color(red: 0.1137, green: 0.1137, blue: 0.1137), // match surface
         historyTileBackground: Color.white.opacity(0.05),
-        functionKeyEar: Color.white.opacity(0.20)
+        functionKeyEar: Color.white.opacity(0.20),
+        // The accent mixed half with white, readable on the dark surfaces.
+        foregroundAccentOverride: Color(red: 0.6157, green: 0.5882, blue: 0.9255) // #9d96ec
     )
 
     public static let light = Palette(

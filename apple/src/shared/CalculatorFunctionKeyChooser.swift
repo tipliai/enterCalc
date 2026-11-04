@@ -282,11 +282,11 @@ public struct CalculatorFunctionKeyChooser: View {
         .buttonStyle(.plain)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(isHighlighted ? palette.accent.opacity(0.28) : palette.buttonFunction)
+                .fill(isHighlighted ? palette.foregroundAccent.opacity(0.28) : palette.buttonFunction)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(isHighlighted ? palette.accent : (isCurrent ? palette.textSecondary : Color.clear), lineWidth: isHighlighted ? 2 : 1)
+                .stroke(isHighlighted ? palette.foregroundAccent : (isCurrent ? palette.textSecondary : Color.clear), lineWidth: isHighlighted ? 2 : 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityLabel(Text(label(function)))
