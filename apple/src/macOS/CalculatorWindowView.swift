@@ -251,7 +251,12 @@ struct CalculatorWindowView: View {
     var body: some View {
         GeometryReader { geo in
             HStack(spacing: 6) {
+                // One accent for every system control and link: the middle of
+                // the Enter key's gradient (#137), instead of the system accent
+                // colour. Set here rather than at the end of the chain below,
+                // which is already as long as the compiler can type-check.
                 calculatorPane
+                    .tint(palette.accent)
 
                 if showHistory && !usesCompactHistoryOverlay {
                     HistoryPanel(
@@ -262,6 +267,7 @@ struct CalculatorWindowView: View {
                         palette: palette,
                         textScale: effectiveHistoryTextScale
                     )
+                    .tint(palette.accent)
                     .frame(width: historyPanelWidth)
                 }
             }

@@ -45,12 +45,13 @@ public struct Palette {
     public static let operatorColumnTitles: [String] = ["÷", "×", "−", "+", "="]
 
     /// Returns a solid color for a right-column button at `index` out of `total`,
-    /// interpolated along a fixed blue gradient (#9cc5fc → #005aff) shared by all themes.
+    /// interpolated from a pale accent to the accent itself (#b1abf0 → #3b2dd9),
+    /// the middle of the Enter key's gradient (#137), shared by all themes.
     public func operatorColumnColor(at index: Int) -> Color {
         let total = Palette.operatorColumnTitles.count
         let t = total > 1 ? CGFloat(index) / CGFloat(total - 1) : 0
-        let sr: CGFloat = 0.6118, sg: CGFloat = 0.7725, sb: CGFloat = 0.9882 // #9cc5fc
-        let er: CGFloat = 0,      eg: CGFloat = 0.3529, eb: CGFloat = 1.0    // #005aff
+        let sr: CGFloat = 0.6925, sg: CGFloat = 0.6706, sb: CGFloat = 0.9404 // #b1abf0
+        let er: CGFloat = 0.2313, eg: CGFloat = 0.1764, eb: CGFloat = 0.8510 // #3b2dd9
         return Color(red: sr + t * (er - sr), green: sg + t * (eg - sg), blue: sb + t * (eb - sb))
     }
 
