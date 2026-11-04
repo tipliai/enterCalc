@@ -469,6 +469,7 @@ struct EnterCalcIOSView: View {
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotionEnabled
     @ScaledMetric(relativeTo: .largeTitle) private var displayDynamicTypeScale: CGFloat = 1.0
     @ScaledMetric(relativeTo: .body) private var modeLabelDynamicTypeScale: CGFloat = 1.0
+    @ScaledMetric(relativeTo: .body) private var paneDynamicTypeScale: CGFloat = 1.0
     @AppStorage(TextSizePreference.storageKey) private var storedTextSize = TextSizePreference.system.rawValue
     @State private var activeOverlay: IOSOverlayPane? = nil
     @State private var showSettingsSheet: Bool = false
@@ -1467,8 +1468,22 @@ private extension EnterCalcIOSView {
     }
 
     @ViewBuilder
+    /// The overlay panes' text scale (#152): the Text Size setting, or the
+    /// system's text size when following it.
+    var paneTextScale: CGFloat {
+        PaneTextScale.resolved(TextSizePreference(storedValue: storedTextSize), systemScale: paneDynamicTypeScale)
+    }
+
+    /// How tall a VAT, Tip or rounding pane may grow before it scrolls: it
+    /// keeps clear of the header and the top of the display.
+    func paneMaximumHeight(metrics: IOSLayoutMetrics, containerSize: CGSize) -> CGFloat {
+        let fraction: CGFloat = metrics.mode == .phoneLandscape ? 0.85 : 0.7
+        return containerSize.height * fraction
+    }
+
     func overlayPanels(metrics: IOSLayoutMetrics, containerSize: CGSize, safeAreaInsets: EdgeInsets) -> some View {
-        ZStack(alignment: .top) {
+        let paneMaxHeight = paneMaximumHeight(metrics: metrics, containerSize: containerSize)
+        return ZStack(alignment: .top) {
             if metrics.usesOverlayHistory, activeOverlay == .history {
                 historyOverlayPanel(metrics: metrics, containerHeight: containerSize.height, screen: activeScreen) {
                     IOSHistoryPanel(
@@ -1533,6 +1548,7 @@ private extension EnterCalcIOSView {
                         onDismiss: { dismissActiveOverlay() }
                     )
                     .padding(.bottom, roundingPanelBottomInset(mode: metrics.mode, isUpsideDown: counterRotatesForUpsideDownPortrait, safeAreaBottom: safeAreaInsets.bottom))
+                    .paneHeightLimit(paneMaxHeight)
                 }
             } else if activeOverlay == .tip {
                 roundingOverlayPanel(metrics: metrics) {
@@ -1562,6 +1578,7 @@ private extension EnterCalcIOSView {
                         onDismiss: { dismissActiveOverlay() }
                     )
                     .padding(.bottom, roundingPanelBottomInset(mode: metrics.mode, isUpsideDown: counterRotatesForUpsideDownPortrait, safeAreaBottom: safeAreaInsets.bottom))
+                    .paneHeightLimit(paneMaxHeight)
                 }
             } else if activeOverlay == .rounding {
                 roundingOverlayPanel(metrics: metrics) {
@@ -1589,9 +1606,11 @@ private extension EnterCalcIOSView {
                         },
                         onDismiss: { dismissActiveOverlay() }
                     )
+                    .paneHeightLimit(paneMaxHeight)
                 }
             }
         }
+        .paneTextScale(paneTextScale)
     }
 
     // Width constraint for rounding panel in landscape mode
@@ -4138,6 +4157,16 @@ private struct IOSRoundingPanel: View {
     let onDisableAndDismiss: () -> Void
     let onDismiss: () -> Void
     @State private var sliderValue: Double
+    @Environment(\.paneTextScale) private var textScale
+
+    /// The header buttons grow with the pane text (#152), never below 44pt.
+    private var headerHitTarget: CGFloat {
+        PaneTextScale.grown(max(metrics.headerButtonSize, 44), by: textScale)
+    }
+
+    private var headerIconSize: CGFloat {
+        PaneTextScale.grown(metrics.headerButtonSize, by: textScale)
+    }
 
     private static let exponentialK: Double = -0.15234446585900155
     private static let exponentialDomainMax: Double = 16
@@ -4208,7 +4237,7 @@ private struct IOSRoundingPanel: View {
                         ForEach(allStepIndices, id: \.self) { stepIndex in
                             if stepIndex == Self.offStepIndex {
                                 Image(systemName: "power")
-                                    .font(EnterCalcFont.appFont(size: metrics.panelSecondaryFontSize))
+                                    .paneAppFont(size: metrics.panelSecondaryFontSize)
                                     .foregroundStyle(palette.textSecondary)
                                     .offset(x: offIconOffset(width: geometry.size.width), y: -3)
                             } else {
@@ -4220,7 +4249,7 @@ private struct IOSRoundingPanel: View {
                         }
                     }
                 }
-                .frame(height: 26)
+                .frame(height: PaneTextScale.grown(26, by: textScale))
             }
         }
         .padding(.horizontal, metrics.panelHorizontalPadding)
@@ -4245,13 +4274,15 @@ private struct IOSRoundingPanel: View {
     }
 
     private var roundingOverlayHeader: some View {
-        let hitTargetSize = max(metrics.headerButtonSize, 44)
+        let hitTargetSize = headerHitTarget
 
         return ZStack {
             Text(localized("rounding.title"))
-                .font(EnterCalcFont.appFont(size: metrics.panelSecondaryFontSize + 1))
+                .paneAppFont(size: metrics.panelSecondaryFontSize + 1)
                 .foregroundStyle(palette.textSecondary)
+                .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.horizontal, hitTargetSize)
 
             HStack(spacing: 0) {
                 disableAndDismissButton
@@ -4259,16 +4290,16 @@ private struct IOSRoundingPanel: View {
                 dismissButton
             }
         }
-        .frame(height: hitTargetSize)
+        .frame(minHeight: hitTargetSize)
     }
 
     private var dismissButton: some View {
-        let hitTargetSize = max(metrics.headerButtonSize, 44)
+        let hitTargetSize = headerHitTarget
 
         return Button(action: onDismiss) {
             Image(systemName: "xmark")
-                .font(EnterCalcFont.appFont(size: metrics.panelPrimaryFontSize * 1.15))
-                .frame(width: metrics.headerButtonSize, height: metrics.headerButtonSize)
+                .paneAppFont(size: metrics.panelPrimaryFontSize * 1.15)
+                .frame(width: headerIconSize, height: headerIconSize)
                 .foregroundColor(palette.textSecondary)
         }
         .frame(width: hitTargetSize, height: hitTargetSize, alignment: .center)
@@ -4278,12 +4309,12 @@ private struct IOSRoundingPanel: View {
     }
 
     private var disableAndDismissButton: some View {
-        let hitTargetSize = max(metrics.headerButtonSize, 44)
+        let hitTargetSize = headerHitTarget
 
         return Button(action: onDisableAndDismiss) {
             Image(systemName: "trash")
-                .font(EnterCalcFont.appFont(size: metrics.panelPrimaryFontSize * 1.15))
-                .frame(width: metrics.headerButtonSize, height: metrics.headerButtonSize)
+                .paneAppFont(size: metrics.panelPrimaryFontSize * 1.15)
+                .frame(width: headerIconSize, height: headerIconSize)
                 .foregroundColor(palette.textSecondary)
         }
         .frame(width: hitTargetSize, height: hitTargetSize, alignment: .center)

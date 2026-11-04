@@ -22,6 +22,7 @@ private struct CurrencyToolChrome<Content: View>: View {
     @State private var isCloseHovering = false
     @State private var isTrashHovering = false
     #endif
+    @Environment(\.paneTextScale) private var textScale
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -47,12 +48,15 @@ private struct CurrencyToolChrome<Content: View>: View {
         ZStack {
             Text(title)
                 #if os(macOS)
-                .font(EnterCalcFont.subheadline)
+                .paneAppFont(size: 15)
                 #else
-                .font(EnterCalcFont.appFont(size: 13))
+                .paneAppFont(size: 13)
                 #endif
                 .foregroundStyle(palette.textSecondary)
+                .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, alignment: .center)
+                // Leaves room for the trash and close buttons on either side.
+                .padding(.horizontal, headerButtonTarget)
 
             HStack(spacing: 0) {
                 headerButton(symbol: "trash", label: removeLabel, isHovering: trashHoverBinding, action: onRemove)
@@ -60,10 +64,16 @@ private struct CurrencyToolChrome<Content: View>: View {
                 headerButton(symbol: "xmark", label: closeLabel, isHovering: closeHoverBinding, action: onDismiss)
             }
         }
+        .frame(minHeight: headerButtonTarget)
+    }
+
+    /// The header's buttons: 32pt on the Mac and 44pt on iOS at the standard
+    /// size, growing with the text but never below that (#152).
+    private var headerButtonTarget: CGFloat {
         #if os(macOS)
-        .frame(height: 32)
+        PaneTextScale.grown(32, by: textScale)
         #else
-        .frame(height: 44)
+        PaneTextScale.grown(44, by: textScale)
         #endif
     }
 
@@ -78,9 +88,11 @@ private struct CurrencyToolChrome<Content: View>: View {
     @ViewBuilder
     private func headerButton(symbol: String, label: String, isHovering: Binding<Bool>, action: @escaping () -> Void) -> some View {
         #if os(macOS)
+        let iconSize = PaneTextScale.grown(16, by: textScale)
         Button(action: action) {
             Image(systemName: symbol)
-                .frame(width: 16, height: 16, alignment: .center)
+                .paneFont(size: 13)
+                .frame(width: iconSize, height: iconSize, alignment: .center)
                 .padding(8)
                 .background(isHovering.wrappedValue ? palette.headerHover : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
@@ -92,13 +104,14 @@ private struct CurrencyToolChrome<Content: View>: View {
         .accessibilityLabel(Text(label))
         .onHover { isHovering.wrappedValue = $0 }
         #else
+        let iconSize = PaneTextScale.grown(28, by: textScale)
         Button(action: action) {
             Image(systemName: symbol)
-                .font(EnterCalcFont.appFont(size: 18))
-                .frame(width: 28, height: 28)
+                .paneAppFont(size: 18)
+                .frame(width: iconSize, height: iconSize)
                 .foregroundColor(palette.textSecondary)
         }
-        .frame(width: 44, height: 44, alignment: .center)
+        .frame(width: headerButtonTarget, height: headerButtonTarget, alignment: .center)
         .contentShape(Rectangle())
         .buttonStyle(.plain)
         .accessibilityLabel(Text(label))
@@ -262,7 +275,9 @@ private struct RateChooser: View {
             choose(slot: slot, rate: rate)
         } label: {
             Text("\(format(rate))%")
-                .font(.system(size: 13, weight: .medium))
+                .paneFont(size: 13, weight: .medium)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
                 .foregroundStyle(isSelected ? palette.accentText : palette.textPrimary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 7)
@@ -329,6 +344,7 @@ private struct StepperControl: View {
     /// When set, the value itself is a button (tapping the rate types one).
     var valueActionLabel: String? = nil
     var onValueTap: (() -> Void)? = nil
+    @Environment(\.paneTextScale) private var textScale
 
     var body: some View {
         HStack(spacing: 0) {
@@ -347,9 +363,9 @@ private struct StepperControl: View {
     @ViewBuilder
     private var valueView: some View {
         let text = Text(value)
-            .font(.system(size: 14, weight: .medium))
+            .paneFont(size: 14, weight: .medium)
             .foregroundStyle(palette.textPrimary)
-            .frame(minWidth: 56)
+            .frame(minWidth: PaneTextScale.grown(56, by: textScale))
             .lineLimit(1)
             .minimumScaleFactor(0.7)
 
@@ -371,9 +387,9 @@ private struct StepperControl: View {
     private func button(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 12, weight: .semibold))
+                .paneFont(size: 12, weight: .semibold)
                 .foregroundStyle(palette.textPrimary)
-                .frame(width: 34, height: 30)
+                .frame(width: PaneTextScale.grown(34, by: textScale), height: PaneTextScale.grown(30, by: textScale))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -391,13 +407,13 @@ private struct ResultRow: View {
     var body: some View {
         HStack {
             Text(label)
-                .font(.system(size: 13))
+                .paneFont(size: 13)
                 .foregroundStyle(palette.textSecondary)
 
             Spacer(minLength: 8)
 
             Text(value)
-                .font(.system(size: isEmphasised ? 17 : 14, weight: isEmphasised ? .semibold : .regular))
+                .paneFont(size: isEmphasised ? 17 : 14, weight: isEmphasised ? .semibold : .regular)
                 .foregroundStyle(palette.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
@@ -543,14 +559,19 @@ public struct CurrencyVATPanel: View {
             directionButton(title: localized("currency.vat.add"), isSelected: !isRemoving) { onDirectionChange(false) }
             directionButton(title: localized("currency.vat.remove"), isSelected: isRemoving) { onDirectionChange(true) }
         }
+        // Both buttons take the taller one's height when a label wraps.
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private func directionButton(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 13, weight: .medium))
+                .paneFont(size: 13, weight: .medium)
                 .foregroundStyle(isSelected ? palette.accentText : palette.textPrimary)
-                .frame(maxWidth: .infinity)
+                // Long translations wrap rather than truncate at large sizes.
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.vertical, 8)
                 .contentShape(Rectangle())
         }
@@ -719,6 +740,10 @@ private struct TipRateSlider: View {
     let palette: Palette
     let formatRate: (Decimal) -> String
     let onChange: (Decimal) -> Void
+    @Environment(\.paneTextScale) private var textScale
+
+    private var markerRowHeight: CGFloat { PaneTextScale.grown(14, by: textScale) }
+    private var offMarkerWidth: CGFloat { PaneTextScale.grown(14, by: textScale) }
 
     private var notchCount: Int { Int((Self.range.upperBound - Self.range.lowerBound) / Self.step) }
 
@@ -748,14 +773,14 @@ private struct TipRateSlider: View {
                         if index == 0 {
                             Image(systemName: "power")
                                 #if os(macOS)
-                                .font(.system(size: NSFont.smallSystemFontSize))
+                                .paneFont(size: NSFont.smallSystemFontSize)
                                 .foregroundStyle(.secondary)
                                 #else
-                                .font(EnterCalcFont.appFont(size: 12))
+                                .paneAppFont(size: 12)
                                 .foregroundStyle(palette.textSecondary)
                                 #endif
-                                .frame(width: 14)
-                                .offset(x: offset(for: index, width: geometry.size.width, markerWidth: 14), y: -3)
+                                .frame(width: offMarkerWidth)
+                                .offset(x: offset(for: index, width: geometry.size.width, markerWidth: offMarkerWidth), y: -3)
                         } else {
                             Capsule(style: .continuous)
                                 #if os(macOS)
@@ -769,7 +794,7 @@ private struct TipRateSlider: View {
                     }
                 }
             }
-            .frame(height: 14)
+            .frame(height: markerRowHeight)
             .accessibilityHidden(true)
         }
     }
