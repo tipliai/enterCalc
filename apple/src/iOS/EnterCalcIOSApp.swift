@@ -2019,9 +2019,10 @@ private extension EnterCalcIOSView {
     @ViewBuilder
     func paginationIndicator(metrics: IOSLayoutMetrics) -> some View {
         let usesLandscapeNavigationRail = metrics.usesLandscapeNavigationRail
+        // A graphic, like a slider, so the same OS blue in light and dark (#137).
         let activePaginationColor = activeTheme == .blue
             ? Color.white
-            : palette.foregroundAccent
+            : palette.sliderTint
         let inactivePaginationColor = colorScheme == .dark
             ? palette.textSecondary.opacity(0.28)
             : palette.textPrimary.opacity(0.18)
@@ -6105,8 +6106,12 @@ private struct IOSKeypadButton: View {
     }
 
     private var buttonFont: Font {
+        // The Enter / = label is bold on iOS (#137); the Mac keeps it thin.
         if isEnterWordButton {
-            return EnterCalcFont.thinAppFont(size: enterKeyTextFontSize)
+            return EnterCalcFont.appFont(size: enterKeyTextFontSize)
+        }
+        if button.kind == .equals {
+            return EnterCalcFont.appFont(size: symbolBaseSize)
         }
         return EnterCalcFont.thinAppFont(size: symbolBaseSize)
     }

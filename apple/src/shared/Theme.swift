@@ -9,7 +9,6 @@ public struct Palette {
     public let accent: Color
     public let accentText: Color
     public let accentGradientStart: Color
-    public let accentGradientMid: Color
     public let accentGradientEnd: Color
     public let buttonNumber: Color
     public let buttonOperation: Color
@@ -24,34 +23,31 @@ public struct Palette {
     public let historyTileBackground: Color
     /// The folded-down corner on keys whose function can be changed (#131).
     public var functionKeyEar: Color = .clear
-    /// A lighter accent for text, controls and thin lines on a dark theme,
-    /// where the accent itself is too dark to read; nil uses `accent`.
+    /// The link colour, where it differs from `accent`; nil uses `accent`.
     public var foregroundAccentOverride: Color? = nil
 
-    /// The accent for links, system controls and thin indicators (#137): the
-    /// gradient's middle where it reads well, and a lighter tint of it on dark
-    /// themes, so links keep at least 4.5:1 and indicators 3:1 against the
-    /// background. Fills keep the gradient.
+    /// Links and thin accent lines (#137): the OS blue a shade darker on light
+    /// themes (#0066cc) and a shade lighter on dark ones (#47a3ff), so link
+    /// text keeps at least 4.5:1 against the background. No one colour can do
+    /// that on both. Fills keep the gradient.
     public var foregroundAccent: Color { foregroundAccentOverride ?? accent }
 
-    /// The filled part of a slider on a dark theme, where every stop of the
-    /// gradient is too dark to show against the track; nil uses `foregroundAccent`.
+    /// The slider and page-dot colour, where it differs from `foregroundAccent`.
     public var sliderTintOverride: Color? = nil
 
-    /// The filled part of a slider: the accent on light themes, and the
-    /// gradient's blue start lightened on dark ones, which keeps it blue and
-    /// at least 3:1 against the dark backgrounds.
+    /// Sliders and the active page dot: the OS blue (#0a84ff) on light and
+    /// dark themes alike. As graphics they need 3:1, which it meets on both.
     public var sliderTint: Color { sliderTintOverride ?? foregroundAccent }
 
-    /// The app's one accent treatment: the Enter key's gradient (#137). Every
-    /// accent fill uses it, from the Enter key to highlighted keys and selected
-    /// chips. Thin elements that need a solid colour, such as strokes and
-    /// resize handles, use `accent`, which matches the gradient's middle.
+    /// The app's one accent treatment: the Enter key's gradient (#137), from
+    /// #3d51c3 at the top left to the OS blue at the bottom right (#007aff on
+    /// light themes, #0a84ff on dark). Every accent fill uses it, from the
+    /// Enter key to highlighted keys and selected chips. Two stops only, so
+    /// the blend has no band of a third colour through the middle.
     public var accentGradient: LinearGradient {
         LinearGradient(
             stops: [
                 .init(color: accentGradientStart, location: 0.0),
-                .init(color: accentGradientMid, location: 0.42),
                 .init(color: accentGradientEnd, location: 1.0)
             ],
             startPoint: .topLeading,
@@ -62,14 +58,14 @@ public struct Palette {
     /// Titles of the right-column operator/equals buttons, ordered top→bottom.
     public static let operatorColumnTitles: [String] = ["÷", "×", "−", "+", "="]
 
-    /// Returns a solid color for a right-column button at `index` out of `total`,
-    /// interpolated from a pale accent to the accent itself (#b1abf0 → #3b2dd9),
-    /// the middle of the Enter key's gradient (#137), shared by all themes.
+    /// Returns a solid color for a right-column button at `index` out of `total`
+    /// for the launch animation, following the Enter key's gradient: the OS
+    /// blue at the top (÷) down to #3d51c3 at the bottom, shared by all themes.
     public func operatorColumnColor(at index: Int) -> Color {
         let total = Palette.operatorColumnTitles.count
         let t = total > 1 ? CGFloat(index) / CGFloat(total - 1) : 0
-        let sr: CGFloat = 0.6925, sg: CGFloat = 0.6706, sb: CGFloat = 0.9404 // #b1abf0
-        let er: CGFloat = 0.2313, eg: CGFloat = 0.1764, eb: CGFloat = 0.8510 // #3b2dd9
+        let sr: CGFloat = 0.0392, sg: CGFloat = 0.5176, sb: CGFloat = 1.0    // #0a84ff (OS blue)
+        let er: CGFloat = 0.2392, eg: CGFloat = 0.3176, eb: CGFloat = 0.7647 // #3d51c3
         return Color(red: sr + t * (er - sr), green: sg + t * (eg - sg), blue: sb + t * (eb - sb))
     }
 
@@ -107,11 +103,9 @@ public struct Palette {
             panel: highContrastPanel,
             textPrimary: highContrastPrimary,
             textSecondary: highContrastSecondary,
-            // Light themes take the gradient's darkest stop for more contrast.
-            accent: isBlueLike ? Color.white : (isDarkLike ? accent : accentGradientEnd),
+            accent: isBlueLike ? Color.white : accent,
             accentText: accentText,
             accentGradientStart: accentGradientStart,
-            accentGradientMid: accentGradientMid,
             accentGradientEnd: accentGradientEnd,
             buttonNumber: highContrastButtonNumber,
             buttonOperation: highContrastButtonSurface,
@@ -125,10 +119,8 @@ public struct Palette {
             historyBackground: highContrastSurface,
             historyTileBackground: isDarkLike ? Color.white.opacity(isBlueLike ? 0.15 : 0.13) : Color.black.opacity(0.11),
             functionKeyEar: isBlueLike ? Color.white.opacity(0.45) : (isDarkLike ? Color.white.opacity(0.30) : Color.black.opacity(0.22)),
-            // Increase Contrast on a dark theme: a still lighter accent tint.
-            foregroundAccentOverride: isDarkLike && !isBlueLike ? Color(red: 0.7694, green: 0.7529, blue: 0.9553) : nil, // #c4c0f4
-            // The gradient's start lightened 55%, for Increase Contrast.
-            sliderTintOverride: isDarkLike && !isBlueLike ? Color(red: 0.6588, green: 0.6941, blue: 0.8941) : nil // #a8b1e4
+            foregroundAccentOverride: isBlueLike ? nil : foregroundAccentOverride,
+            sliderTintOverride: isBlueLike ? nil : sliderTintOverride
         )
     }
 
@@ -140,11 +132,12 @@ public struct Palette {
         panel: Color(red: 0.1686, green: 0.1686, blue: 0.1686), // #2b2b2b
         textPrimary: darkTextPrimary,
         textSecondary: darkTextPrimary.opacity(0.65),
-        accent: Color(red: 0.2313, green: 0.1764, blue: 0.8510), // #3b2dd9, the gradient's middle (#137)
-        accentText: darkTextPrimary,
+        accent: Color(red: 0.1412, green: 0.4157, blue: 0.8824), // #246ae1, the gradient's midpoint
+        // Pure white: the light grey of the dark theme's text only reaches
+        // 4.1:1 in the middle of the gradient, white 5.0:1.
+        accentText: Color.white,
         accentGradientStart: Color(red: 0.2392, green: 0.3176, blue: 0.7647), // #3d51c3
-        accentGradientMid: Color(red: 0.2313, green: 0.1764, blue: 0.8510),   // #3b2dd9
-        accentGradientEnd: Color(red: 0.1411, green: 0.1020, blue: 0.6823),   // #241aad
+        accentGradientEnd: Color(red: 0.0392, green: 0.5176, blue: 1.0),      // #0a84ff, the OS blue in dark mode
         buttonNumber: Color(red: 0.2039, green: 0.2039, blue: 0.2039), // #343434
         buttonOperation: Color(red: 0.1686, green: 0.1686, blue: 0.1686), // #2b2b2b
         buttonFunction: Color(red: 0.1686, green: 0.1686, blue: 0.1686), // #2b2b2b
@@ -157,10 +150,8 @@ public struct Palette {
         historyBackground: Color(red: 0.1137, green: 0.1137, blue: 0.1137), // match surface
         historyTileBackground: Color.white.opacity(0.05),
         functionKeyEar: Color.white.opacity(0.20),
-        // The accent mixed half with white, readable on the dark surfaces.
-        foregroundAccentOverride: Color(red: 0.6157, green: 0.5882, blue: 0.9255), // #9d96ec
-        // The gradient's start (#3d51c3) lightened 40%.
-        sliderTintOverride: Color(red: 0.5451, green: 0.5922, blue: 0.8588) // #8b97db
+        foregroundAccentOverride: Color(red: 0.2784, green: 0.6392, blue: 1.0), // #47a3ff
+        sliderTintOverride: Color(red: 0.0392, green: 0.5176, blue: 1.0)        // #0a84ff
     )
 
     public static let light = Palette(
@@ -168,11 +159,10 @@ public struct Palette {
         panel: Color(red: 0.9725, green: 0.9725, blue: 0.9725), // #f8f8f8
         textPrimary: lightTextPrimary,
         textSecondary: lightTextPrimary.opacity(0.65),
-        accent: Color(red: 0.2313, green: 0.1764, blue: 0.8510), // #3b2dd9, the gradient's middle (#137)
+        accent: Color(red: 0.1176, green: 0.4000, blue: 0.8824), // #1e66e1, the gradient's midpoint
         accentText: Color.white,
         accentGradientStart: Color(red: 0.2392, green: 0.3176, blue: 0.7647), // #3d51c3
-        accentGradientMid: Color(red: 0.2313, green: 0.1764, blue: 0.8510),   // #3b2dd9
-        accentGradientEnd: Color(red: 0.1411, green: 0.1020, blue: 0.6823),   // #241aad
+        accentGradientEnd: Color(red: 0.0, green: 0.4784, blue: 1.0),         // #007aff, the OS blue in light mode
         buttonNumber: Color.white, // #ffffff
         buttonOperation: Color(red: 0.9725, green: 0.9725, blue: 0.9725), // #f8f8f8
         buttonFunction: Color(red: 0.9725, green: 0.9725, blue: 0.9725), // #f8f8f8
@@ -184,7 +174,9 @@ public struct Palette {
         headerHover: Color.black.opacity(0.08),
         historyBackground: Color(red: 0.9451, green: 0.9451, blue: 0.9451), // match surface
         historyTileBackground: Color.black.opacity(0.05),
-        functionKeyEar: Color.black.opacity(0.13)
+        functionKeyEar: Color.black.opacity(0.13),
+        foregroundAccentOverride: Color(red: 0.0, green: 0.4, blue: 0.8),       // #0066cc
+        sliderTintOverride: Color(red: 0.0392, green: 0.5176, blue: 1.0)        // #0a84ff
     )
 
     public static let blue = Palette(
@@ -195,7 +187,6 @@ public struct Palette {
         accent: Color(red: 0.965, green: 0.969, blue: 0.982),
         accentText: Color(red: 0.113, green: 0.113, blue: 0.113),
         accentGradientStart: Color(red: 1.0, green: 1.0, blue: 1.0),
-        accentGradientMid: Color(red: 0.958, green: 0.964, blue: 0.982),
         accentGradientEnd: Color(red: 0.860, green: 0.890, blue: 0.945),
         buttonNumber: Color(red: 0.258, green: 0.337, blue: 0.920),
         buttonOperation: Color(red: 0.258, green: 0.337, blue: 0.920),
