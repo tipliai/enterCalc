@@ -66,6 +66,12 @@ These are menu commands under **View → Increase / Decrease Display Size**, not
 
 The step is not animated — it lands immediately, matching how dragging behaves.
 
+### Choosing a mode (macOS and iPad)
+
+**Command + 1** selects Basic and **Command + 2** selects Currency, for the focused page (#142). They are menu items under **View → Mode**, checked for the current mode, so they are discoverable and reachable by VoiceOver. The same list opens from the mode name in the display. Further modes get the next numbers.
+
+Changing mode keeps the value on the display and can be undone, the same as the currency key.
+
 ### Switching pages (iPad)
 
 **Shift + Left/Right Arrow** moves between calculator pages, as menu commands so they are discoverable and reachable by VoiceOver.

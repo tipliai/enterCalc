@@ -115,3 +115,7 @@
 "settings.textSize.standard" = "默认";
 "settings.textSize.large" = "大";
 "settings.textSize.extraLarge" = "特大";
+
+/* Mode picker (#142) */
+"calculator.mode.menu" = "模式";
+"calculator.mode.picker.hint" = "选择计算器模式";

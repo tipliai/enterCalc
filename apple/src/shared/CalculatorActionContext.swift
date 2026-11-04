@@ -20,6 +20,9 @@ public struct CalculatorActionContext {
     public let shrinkDisplayArea: (() -> Void)?
     public let goToNextScreen: (() -> Void)?
     public let goToPreviousScreen: (() -> Void)?
+    /// The focused page's mode and a way to change it, for the Mode menu (#142).
+    public let currentMode: CalculatorMode?
+    public let selectMode: ((CalculatorMode) -> Void)?
 
     public init(
         copy: @escaping () -> Void,
@@ -37,7 +40,9 @@ public struct CalculatorActionContext {
         growDisplayArea: (() -> Void)? = nil,
         shrinkDisplayArea: (() -> Void)? = nil,
         goToNextScreen: (() -> Void)? = nil,
-        goToPreviousScreen: (() -> Void)? = nil
+        goToPreviousScreen: (() -> Void)? = nil,
+        currentMode: CalculatorMode? = nil,
+        selectMode: ((CalculatorMode) -> Void)? = nil
     ) {
         self.copy = copy
         self.copyOperation = copyOperation
@@ -55,6 +60,8 @@ public struct CalculatorActionContext {
         self.shrinkDisplayArea = shrinkDisplayArea
         self.goToNextScreen = goToNextScreen
         self.goToPreviousScreen = goToPreviousScreen
+        self.currentMode = currentMode
+        self.selectMode = selectMode
     }
 }
 

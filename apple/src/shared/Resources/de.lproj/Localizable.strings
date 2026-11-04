@@ -115,3 +115,7 @@
 "settings.textSize.standard" = "Standard";
 "settings.textSize.large" = "Groß";
 "settings.textSize.extraLarge" = "Sehr groß";
+
+/* Mode picker (#142) */
+"calculator.mode.menu" = "Modus";
+"calculator.mode.picker.hint" = "Rechnermodus wählen";
