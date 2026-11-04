@@ -5526,7 +5526,7 @@ private struct IOSCalcButton {
         case .function:
             return AnyShapeStyle(palette.buttonFunction)
         case .equals:
-            return AnyShapeStyle(palette.accent)
+            return AnyShapeStyle(palette.accentGradient)
         }
     }
 
@@ -5649,7 +5649,7 @@ private struct IOSCompactActionButton: View {
         )
         .background(
             keyShape
-                .fill(isHighlighted ? palette.accent : palette.buttonFunction)
+                .fill(isHighlighted ? AnyShapeStyle(palette.accentGradient) : AnyShapeStyle(palette.buttonFunction))
         )
         .accessibilityAddTraits(isHighlighted ? [.isSelected] : [])
         .clipShape(keyShape)
@@ -5730,18 +5730,6 @@ private struct IOSKeypadButton: View {
         let scale = buttonHeight / baseHeight
         return min(metrics.buttonCornerRadius, max(8, metrics.buttonCornerRadius * scale))
     }
-    private var equalsButtonGradient: LinearGradient {
-        LinearGradient(
-            stops: [
-                .init(color: palette.accentGradientStart, location: 0.0),
-                .init(color: palette.accentGradientMid, location: 0.42),
-                .init(color: palette.accentGradientEnd, location: 1.0)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
     var body: some View {
         GeometryReader { geometry in
             buttonSurface
@@ -5958,7 +5946,7 @@ private struct IOSKeypadButton: View {
     private var buttonBackground: some View {
         if isEqualsButton {
             keyShape
-                .fill(equalsButtonGradient)
+                .fill(palette.accentGradient)
         } else if let revealOrder = Self.operatorRevealOrder[button.title],
            let gradColor = palette.operatorColumnColor(for: button.title) {
             let overlayOpacity = min(1.0, max(0.0, operatorRevealProgress - Double(revealOrder))) * operatorAnimFadeOpacity
@@ -5971,7 +5959,7 @@ private struct IOSKeypadButton: View {
             }
         } else if isHighlighted {
             keyShape
-                .fill(palette.accent)
+                .fill(palette.accentGradient)
         } else {
             keyShape
                 .fill(button.backgroundStyle(palette: palette))
