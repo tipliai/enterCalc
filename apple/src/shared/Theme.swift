@@ -23,6 +23,9 @@ public struct Palette {
     public let historyTileBackground: Color
     /// The folded-down corner on keys whose function can be changed (#131).
     public var functionKeyEar: Color = .clear
+    /// An extra middle stop for the gradient at 0.42; only the Blue theme
+    /// keeps one, so its white fills look as they always have.
+    public var accentGradientMid: Color? = nil
     /// The link colour, where it differs from `accent`; nil uses `accent`.
     public var foregroundAccentOverride: Color? = nil
 
@@ -42,14 +45,17 @@ public struct Palette {
     /// The app's one accent treatment: the Enter key's gradient (#137), from
     /// #3d51c3 at the top left to the OS blue at the bottom right (#007aff on
     /// light themes, #0a84ff on dark). Every accent fill uses it, from the
-    /// Enter key to highlighted keys and selected chips. Two stops only, so
-    /// the blend has no band of a third colour through the middle.
+    /// Enter key to highlighted keys and selected chips. Two stops on light
+    /// and dark themes, so the blend has no band of a third colour through
+    /// the middle.
     public var accentGradient: LinearGradient {
-        LinearGradient(
-            stops: [
-                .init(color: accentGradientStart, location: 0.0),
-                .init(color: accentGradientEnd, location: 1.0)
-            ],
+        var stops: [Gradient.Stop] = [.init(color: accentGradientStart, location: 0.0)]
+        if let accentGradientMid {
+            stops.append(.init(color: accentGradientMid, location: 0.42))
+        }
+        stops.append(.init(color: accentGradientEnd, location: 1.0))
+        return LinearGradient(
+            stops: stops,
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
@@ -119,6 +125,7 @@ public struct Palette {
             historyBackground: highContrastSurface,
             historyTileBackground: isDarkLike ? Color.white.opacity(isBlueLike ? 0.15 : 0.13) : Color.black.opacity(0.11),
             functionKeyEar: isBlueLike ? Color.white.opacity(0.45) : (isDarkLike ? Color.white.opacity(0.30) : Color.black.opacity(0.22)),
+            accentGradientMid: accentGradientMid,
             foregroundAccentOverride: isBlueLike ? nil : foregroundAccentOverride,
             sliderTintOverride: isBlueLike ? nil : sliderTintOverride
         )
@@ -199,6 +206,7 @@ public struct Palette {
         headerHover: Color.white.opacity(0.12),
         historyBackground: Color(red: 0.246, green: 0.318, blue: 0.870),
         historyTileBackground: Color.white.opacity(0.08),
-        functionKeyEar: Color.white.opacity(0.34)
+        functionKeyEar: Color.white.opacity(0.34),
+        accentGradientMid: Color(red: 0.958, green: 0.964, blue: 0.982)
     )
 }
