@@ -1,6 +1,7 @@
 // src/macOS/CalculatorWindowView.swift
 import SwiftUI
 import AppKit
+import StoreKit
 import EnterCalcCore
 
 // Scales a baseline point size by the user's Dynamic Type preference for the
@@ -68,6 +69,7 @@ struct CalculatorWindowView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotionEnabled
     @Environment(\.openWindow) private var openWindow
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.requestReview) private var requestReview
     @ScaledMetric(relativeTo: .largeTitle) private var displayDynamicTypeScale: CGFloat = 1.0
     @AppStorage(TextSizePreference.storageKey) private var storedTextSize = TextSizePreference.system.rawValue
     @State private var showHistory: Bool = false
@@ -85,6 +87,8 @@ struct CalculatorWindowView: View {
     @State private var didClearHistoryOverlay: Bool = false
     @State private var displayHover: Bool = false
     @State private var windowReference: NSWindow? = nil
+    /// This window's page, for counting its calculations towards the review gate.
+    @State private var reviewPageID = UUID()
     @State private var showCopyToast: Bool = false
     @State private var copyToastDismissWorkItem: DispatchWorkItem?
     @State private var operatorRevealProgress: Double = 0.0
@@ -249,6 +253,15 @@ struct CalculatorWindowView: View {
     }
 
     var body: some View {
+        // Kept outside the window's long modifier chain, which is already at
+        // the edge of what the compiler can type-check in time.
+        windowContent
+            .onChange(of: viewModel.completedCalculationCount) { _, count in
+                requestReviewIfEarned(completedCount: count)
+            }
+    }
+
+    private var windowContent: some View {
         GeometryReader { geo in
             HStack(spacing: 6) {
                 calculatorPane
@@ -1618,6 +1631,45 @@ struct CalculatorWindowView: View {
     private func seedSessionRates() {
         if sessionVATRate == nil { sessionVATRate = vatRate }
         if sessionTipRate == nil { sessionTipRate = tipRate }
+    }
+
+    /// Asks for a review right after a completed calculation, once the usage
+    /// gate is met. Unlike iOS there is no idle wait: the Mac prompt is a sheet
+    /// on the window rather than a card over the keys. Only in a Mac App Store
+    /// copy, only while this window is in front of an active app, and never over
+    /// Settings, a pane or a sheet, or right after an error. Deferred a turn so
+    /// a pane opening as part of the same press (VAT or Tip over an unfinished
+    /// sum) is already open by the time this checks.
+    private func requestReviewIfEarned(completedCount: Int) {
+        let tracker = ReviewPromptTracker.shared
+        guard tracker.recordCompletedCalculations(completedCount, forPage: reviewPageID),
+              MacAppStoreInstall.shared.isAppStoreInstall,
+              tracker.shouldRequestReview(lastResultWasError: viewModel.isErrorState) else {
+            return
+        }
+
+        let viewModel = viewModel
+        let snapshot = viewModel.reviewPromptIdleSnapshot
+        ReviewPromptIdleWait.shared.start(
+            after: 0,
+            isStillIdle: {
+                guard viewModel.reviewPromptIdleSnapshot == snapshot,
+                      NSApp.isActive,
+                      let window = windowReference,
+                      window.isKeyWindow,
+                      window.attachedSheet == nil else {
+                    return false
+                }
+                return activeOverlay == nil
+            },
+            ask: {
+                guard tracker.shouldRequestReview(lastResultWasError: viewModel.isErrorState) else {
+                    return
+                }
+                tracker.recordPromptShown()
+                requestReview()
+            }
+        )
     }
 
     /// Opening VAT or Tip over an unfinished sum (`10 + 5`) presses Enter for
