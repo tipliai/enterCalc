@@ -1,6 +1,7 @@
 // apple/src/macOS/EnterCalcMacApp.swift
 import SwiftUI
 import AppKit
+import StoreKit
 import EnterCalcCore
 
 extension Notification.Name {
@@ -156,5 +157,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         let policy = NSApp.activationPolicy()
         DebugLog.emit("AppDelegate", "activationPolicy:\(policy.rawValue) isActive:\(NSApp.isActive)")
+        MacAppStoreInstall.shared.resolve()
+    }
+}
+
+// Whether this copy came from the Mac App Store, which is the only place the
+// system review prompt does anything. The notarized DMG build is the same
+// binary, so this is decided at run time: `AppTransaction` only verifies for an
+// App Store install. Until it has answered, the answer is no, so a DMG user is
+// never asked.
+@MainActor
+final class MacAppStoreInstall {
+    static let shared = MacAppStoreInstall()
+
+    private(set) var isAppStoreInstall = false
+    private var isResolving = false
+
+    func resolve() {
+#if DEBUG
+        // StoreKit shows the prompt every time in a Debug build, which is how
+        // it is checked, and a Debug build never has an App Store receipt.
+        isAppStoreInstall = true
+#else
+        guard !isResolving else { return }
+        isResolving = true
+        Task {
+            let verified: Bool
+            if case .verified = try? await AppTransaction.shared {
+                verified = true
+            } else {
+                verified = false
+            }
+            self.isAppStoreInstall = verified
+        }
+#endif
     }
 }

@@ -66,79 +66,6 @@ private enum IOSActionHaptics {
 #endif
 import EnterCalcCore
 
-// Tracks the usage the review prompt is gated on, and remembers which release
-// already asked.
-//
-// Days are stored as a rolling set of day stamps rather than a counter so that
-// repeated use on one day counts once, which is the whole point of the gate.
-@MainActor
-final class ReviewPromptTracker {
-    static let shared = ReviewPromptTracker()
-
-    private static let daysUsedKey = "review.daysUsed"
-    private static let lastPromptedVersionKey = "review.lastPromptedVersion"
-    private static let completedCalculationsKey = "review.completedCalculations"
-
-    private let defaults: UserDefaults
-    private var tally: CompletedCalculationTally
-
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        tally = CompletedCalculationTally(total: defaults.integer(forKey: Self.completedCalculationsKey))
-    }
-
-    /// Adds what a page has completed since it was last seen to the stored
-    /// total, so calculations count across pages and relaunches.
-    func recordCompletedCalculations(_ count: Int, forPage page: UUID) {
-        let before = tally.total
-        tally.record(count: count, forPage: page)
-        if tally.total != before {
-            defaults.set(tally.total, forKey: Self.completedCalculationsKey)
-        }
-    }
-
-    /// Records that the app was used today. Cheap and idempotent within a day.
-    func recordUsageToday(now: Date = Date(), calendar: Calendar = .current) {
-        let today = Self.dayStamp(for: now, calendar: calendar)
-        var days = defaults.stringArray(forKey: Self.daysUsedKey) ?? []
-        guard !days.contains(today) else { return }
-
-        days.append(today)
-        // Only the count matters, so keep this from growing without bound.
-        let trimmed: [String] = Array(days.suffix(30))
-        defaults.set(trimmed, forKey: Self.daysUsedKey)
-    }
-
-    var distinctDaysUsed: Int {
-        defaults.stringArray(forKey: Self.daysUsedKey)?.count ?? 0
-    }
-
-    func shouldRequestReview() -> Bool {
-        ReviewPromptPolicy.shouldRequestReview(
-            completedCalculations: tally.total,
-            distinctDaysUsed: distinctDaysUsed,
-            lastPromptedVersion: defaults.string(forKey: Self.lastPromptedVersionKey),
-            currentVersion: Self.currentVersion
-        )
-    }
-
-    /// Called once the prompt has been asked for, so this release does not ask
-    /// again. Recorded even though the system may choose not to show anything —
-    /// we have spent our one ask for this version either way.
-    func recordPromptShown() {
-        defaults.set(Self.currentVersion, forKey: Self.lastPromptedVersionKey)
-    }
-
-    private static func dayStamp(for date: Date, calendar: Calendar) -> String {
-        let parts = calendar.dateComponents([.year, .month, .day], from: date)
-        return "\(parts.year ?? 0)-\(parts.month ?? 0)-\(parts.day ?? 0)"
-    }
-
-    private static var currentVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
-    }
-}
-
 // Caches whether haptics are switched off, so the key-press path does not touch
 // UserDefaults on every tap. The stored value is only changed from Settings, and
 // UserDefaults posts a notification when it does.
@@ -910,7 +837,7 @@ struct EnterCalcIOSView: View {
             }
             .onAppear {
                 syncSystemSettingsMetadata()
-                ReviewPromptTracker.shared.recordUsageToday()
+                ReviewPromptTracker.shared.recordUse()
                 normalizePreferredLanguageIfNeeded()
                 syncHomeScreenFromStoredSettings()
                 applyActiveScreenConfiguration()
@@ -936,6 +863,7 @@ struct EnterCalcIOSView: View {
                 }
 
                 syncSystemSettingsMetadata()
+                ReviewPromptTracker.shared.recordUse()
                 // The haptics preference lives in the Settings bundle, so it is
                 // changed by the Settings app rather than in this process and no
                 // change notification arrives. Re-read it on the way back in.
@@ -3296,21 +3224,49 @@ private extension EnterCalcIOSView {
         CalculatorButtonSound.playEnterClick()
     }
 
-    // Asks for a review only after a completed calculation, so the prompt lands
-    // on a finished task rather than interrupting one. The work is deferred so
-    // it stays off the press-to-display path, and the gate is a couple of
-    // integer comparisons before that.
+    // Asks for a review only after a completed calculation, and only once the
+    // calculator has then sat untouched for `idleSecondsBeforeAsking`, so the
+    // prompt lands in the pause after a run of sums rather than interrupting
+    // one. Never over Settings or a pane, never in the background, and never
+    // right after an error. The gate is a few comparisons on the key-press
+    // path; everything else happens when the wait ends.
     func requestReviewIfEarned(for screen: CalculatorScreenSession) {
         let tracker = ReviewPromptTracker.shared
-        tracker.recordCompletedCalculations(screen.viewModel.completedCalculationCount, forPage: screen.id)
-        guard tracker.shouldRequestReview() else {
+        let finishedCalculation = tracker.recordCompletedCalculations(
+            screen.viewModel.completedCalculationCount,
+            forPage: screen.id
+        )
+        guard finishedCalculation,
+              tracker.shouldRequestReview(lastResultWasError: screen.viewModel.isErrorState) else {
             return
         }
 
-        ReviewPromptTracker.shared.recordPromptShown()
-        DispatchQueue.main.async {
-            requestReview()
-        }
+        let viewModel = screen.viewModel
+        let snapshot = viewModel.reviewPromptIdleSnapshot
+        ReviewPromptIdleWait.shared.start(
+            isStillIdle: {
+                viewModel.reviewPromptIdleSnapshot == snapshot
+                    && activeScreen.id == screen.id
+                    && activeOverlay == nil
+                    && !showSettingsSheet
+                    && isApplicationActive
+            },
+            ask: {
+                guard tracker.shouldRequestReview(lastResultWasError: viewModel.isErrorState) else {
+                    return
+                }
+                tracker.recordPromptShown()
+                requestReview()
+            }
+        )
+    }
+
+    private var isApplicationActive: Bool {
+#if canImport(UIKit)
+        UIApplication.shared.applicationState == .active
+#else
+        true
+#endif
     }
 
     func prepareActionFeedbackGenerators() {
@@ -3637,13 +3593,18 @@ private extension EnterCalcIOSView {
 
     /// Opening VAT or Tip over an unfinished sum (`10 + 5`) presses Enter for
     /// the person first, exactly as the Enter key would: the result, its
-    /// history entry, the Enter sound and haptic, and the review gate.
+    /// history entry, and the Enter sound and haptic. The calculation still
+    /// counts towards the review gate, but a pane is about to open, so this is
+    /// never the moment to ask.
     func pressEnterForPendingCalculation() {
         let screen = activeScreen
         guard screen.viewModel.hasPendingCalculation else { return }
         screen.viewModel.evaluate()
         triggerKeyPressFeedback(for: .equals)
-        requestReviewIfEarned(for: screen)
+        ReviewPromptTracker.shared.recordCompletedCalculations(
+            screen.viewModel.completedCalculationCount,
+            forPage: screen.id
+        )
     }
 
     func animateIfAllowed(_ animation: Animation, _ updates: @escaping () -> Void) {
