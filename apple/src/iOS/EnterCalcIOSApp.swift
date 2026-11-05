@@ -3261,6 +3261,7 @@ private extension EnterCalcIOSView {
                     && activeScreen.id == screen.id
                     && activeOverlay == nil
                     && !showSettingsSheet
+                    && functionChooser == nil
                     && isApplicationActive
             },
             ask: {
@@ -3273,10 +3274,10 @@ private extension EnterCalcIOSView {
         )
     }
 
-    /// Changes whenever Settings or a pane opens or closes, or the page
-    /// changes, any of which ends a pending review wait.
+    /// Changes whenever Settings, a pane or the function-key chooser opens or
+    /// closes, or the page changes, any of which ends a pending review wait.
     private var reviewPromptInterruptionKey: String {
-        "\(activeScreen.id)|\(activeOverlay == nil)|\(showSettingsSheet)"
+        "\(activeScreen.id)|\(activeOverlay == nil)|\(showSettingsSheet)|\(functionChooser == nil)"
     }
 
     private var isApplicationActive: Bool {
