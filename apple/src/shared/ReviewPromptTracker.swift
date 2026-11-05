@@ -22,12 +22,15 @@ public final class ReviewPromptTracker {
     static let currentVersionDaysKey = "review.currentVersionDays"
     static let currentVersionDaysVersionKey = "review.currentVersionDaysVersion"
     static let usesKey = "review.uses"
-    static let lastUseDateKey = "review.lastUseDate"
+    static let lastLeftDateKey = "review.lastLeftDate"
 
     private let defaults: UserDefaults
     private let currentVersion: String
     private let forcesPrompt: Bool
     private var tally: CompletedCalculationTally
+    /// Whether the current visit has already been counted. Kept in memory, so
+    /// a cold launch always starts a new visit.
+    private var isInUse = false
 
     public convenience init() {
         self.init(
@@ -75,16 +78,21 @@ public final class ReviewPromptTracker {
         return true
     }
 
-    /// Records that the app was opened or brought back to the front: one more
-    /// use unless the last one was under `minutesBetweenUses` ago, and today as
-    /// a day used. Cheap, and safe to call on every activation.
+    /// Records that the app was opened or brought back to the front, and today
+    /// as a day used. It is one more use when this is a cold launch, or when
+    /// the app was left at least `minutesBetweenUses` ago; time spent in the
+    /// app never counts as time away. Safe to call on every activation.
     public func recordUse(now: Date = Date(), calendar: Calendar = .current) {
-        let lastUse = defaults.object(forKey: Self.lastUseDateKey) as? Date
-        let gap = ReviewPromptPolicy.minutesBetweenUses * 60
-        if lastUse.map({ now.timeIntervalSince($0) >= gap || now < $0 }) ?? true {
-            defaults.set(defaults.integer(forKey: Self.usesKey) + 1, forKey: Self.usesKey)
+        if !isInUse {
+            isInUse = true
+            let lastLeft = defaults.object(forKey: Self.lastLeftDateKey) as? Date
+            let gap = ReviewPromptPolicy.minutesBetweenUses * 60
+            // A launch with no recorded departure (first run, or the app was
+            // ended while in front) counts; so does a clock moved back.
+            if lastLeft.map({ now.timeIntervalSince($0) >= gap || now < $0 }) ?? true {
+                defaults.set(defaults.integer(forKey: Self.usesKey) + 1, forKey: Self.usesKey)
+            }
         }
-        defaults.set(now, forKey: Self.lastUseDateKey)
 
         let today = Self.dayStamp(for: now, calendar: calendar)
 
@@ -104,6 +112,13 @@ public final class ReviewPromptTracker {
             defaults.set(Array(versionDays.suffix(30)), forKey: Self.currentVersionDaysKey)
             defaults.set(currentVersion, forKey: Self.currentVersionDaysVersionKey)
         }
+    }
+
+    /// Records that the app went to the background (iOS) or stopped being the
+    /// active app (macOS). The next use is measured from here.
+    public func recordLeaving(now: Date = Date()) {
+        isInUse = false
+        defaults.set(now, forKey: Self.lastLeftDateKey)
     }
 
     public var uses: Int {

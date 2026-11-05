@@ -306,7 +306,6 @@ struct CalculatorWindowView: View {
                     updateHistoryVisibility(for: currentWidth)
                 }
                 startOperatorIntroAnimation()
-                ReviewPromptTracker.shared.recordUse()
             }
             .onChange(of: windowReference?.windowNumber) {
                 guard windowReference != nil else {
@@ -319,11 +318,6 @@ struct CalculatorWindowView: View {
                 dismissCurrencyToolsIfNeeded()
             }
             .onChange(of: scenePhase) { _, newPhase in
-                if newPhase == .active {
-                    // A Mac app can stay open for days, so coming back to it
-                    // counts as a day used, not only launching it.
-                    ReviewPromptTracker.shared.recordUse()
-                }
                 guard newPhase == .active, isDefaultLocalizationSelection(windowSettings.languageCode) else {
                     return
                 }

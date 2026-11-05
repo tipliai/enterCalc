@@ -856,8 +856,17 @@ struct EnterCalcIOSView: View {
             .onValueChange(of: activeScreen.viewModel.activeCurrencySymbol) { _ in
                 dismissCurrencyToolsIfNeeded()
             }
+            // Opening Settings or a pane, or switching page, ends a pending
+            // review wait for good, even if the person comes straight back.
+            .onValueChange(of: reviewPromptInterruptionKey) { _ in
+                ReviewPromptIdleWait.shared.cancel()
+            }
             .onValueChange(of: scenePhase) { newPhase in
                 guard newPhase == .active else {
+                    ReviewPromptIdleWait.shared.cancel()
+                    if newPhase == .background {
+                        ReviewPromptTracker.shared.recordLeaving()
+                    }
                     stopDisplayShimmerParallaxMotion()
                     return
                 }
@@ -3238,6 +3247,9 @@ private extension EnterCalcIOSView {
         )
         guard finishedCalculation,
               tracker.shouldRequestReview(lastResultWasError: screen.viewModel.isErrorState) else {
+            // Any other key press means the person is still busy, so a wait
+            // from an earlier calculation ends without asking.
+            ReviewPromptIdleWait.shared.cancel()
             return
         }
 
@@ -3259,6 +3271,12 @@ private extension EnterCalcIOSView {
                 requestReview()
             }
         )
+    }
+
+    /// Changes whenever Settings or a pane opens or closes, or the page
+    /// changes, any of which ends a pending review wait.
+    private var reviewPromptInterruptionKey: String {
+        "\(activeScreen.id)|\(activeOverlay == nil)|\(showSettingsSheet)"
     }
 
     private var isApplicationActive: Bool {

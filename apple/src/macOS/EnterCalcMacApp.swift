@@ -159,6 +159,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DebugLog.emit("AppDelegate", "activationPolicy:\(policy.rawValue) isActive:\(NSApp.isActive)")
         MacAppStoreInstall.shared.resolve()
     }
+
+    // A Mac app is often left open for days, so a use is the app becoming
+    // active rather than a launch, measured from when it last stopped being
+    // active. That also counts days the app is returned to without relaunching.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        ReviewPromptTracker.shared.recordUse()
+    }
+
+    func applicationDidResignActive(_ notification: Notification) {
+        ReviewPromptTracker.shared.recordLeaving()
+    }
 }
 
 // Whether this copy came from the Mac App Store, which is the only place the

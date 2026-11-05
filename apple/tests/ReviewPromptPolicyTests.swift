@@ -140,13 +140,17 @@ final class ReviewPromptTrackerTests: XCTestCase {
     }
 
     /// Opens the app on each of these days, and on the first of them enough
-    /// times, hours apart, to meet the uses threshold.
+    /// times, an hour apart with the app left in between, to meet the uses
+    /// threshold.
     private func use(_ tracker: ReviewPromptTracker, onDays days: ClosedRange<Int>) {
         for open in 0..<ReviewPromptPolicy.minimumUses {
-            tracker.recordUse(now: date(day: days.lowerBound).addingTimeInterval(TimeInterval(open) * 3600), calendar: calendar)
+            let opened = date(day: days.lowerBound).addingTimeInterval(TimeInterval(open) * 3600)
+            tracker.recordUse(now: opened, calendar: calendar)
+            tracker.recordLeaving(now: opened.addingTimeInterval(60))
         }
         for day in days.dropFirst() {
             tracker.recordUse(now: date(day: day), calendar: calendar)
+            tracker.recordLeaving(now: date(day: day).addingTimeInterval(60))
         }
     }
 
@@ -157,20 +161,45 @@ final class ReviewPromptTrackerTests: XCTestCase {
         XCTAssertTrue(tracker.shouldRequestReview(lastResultWasError: false, now: date(day: 2)))
     }
 
-    // Coming back within half an hour is the same use; later it is a new one.
-    func testReturningSoonIsTheSameUse() {
+    // Coming back within half an hour of leaving is the same use; later it is
+    // a new one. Time spent in the app does not count as time away.
+    func testUsesAreMeasuredFromLeavingNotFromOpening() {
+        let tracker = ReviewPromptTracker(defaults: defaults, currentVersion: "1.2.0")
+        let start = date(day: 0)
+        tracker.recordUse(now: start, calendar: calendar)
+        XCTAssertEqual(tracker.uses, 1)
+
+        // An hour in the app, a minute away, then back: still the same use.
+        tracker.recordLeaving(now: start.addingTimeInterval(60 * 60))
+        tracker.recordUse(now: start.addingTimeInterval(61 * 60), calendar: calendar)
+        XCTAssertEqual(tracker.uses, 1)
+
+        // Away for 40 minutes: a new use.
+        tracker.recordLeaving(now: start.addingTimeInterval(70 * 60))
+        tracker.recordUse(now: start.addingTimeInterval(110 * 60), calendar: calendar)
+        XCTAssertEqual(tracker.uses, 2)
+    }
+
+    // Activation is reported more than once (appearing and becoming active);
+    // without leaving in between it is one use.
+    func testRepeatedActivationWithoutLeavingIsOneUse() {
         let tracker = ReviewPromptTracker(defaults: defaults, currentVersion: "1.2.0")
         tracker.recordUse(now: date(day: 0), calendar: calendar)
-        tracker.recordUse(now: date(day: 0).addingTimeInterval(10 * 60), calendar: calendar)
-        tracker.recordUse(now: date(day: 0).addingTimeInterval(25 * 60), calendar: calendar)
+        tracker.recordUse(now: date(day: 0).addingTimeInterval(2 * 60 * 60), calendar: calendar)
         XCTAssertEqual(tracker.uses, 1)
-        tracker.recordUse(now: date(day: 0).addingTimeInterval(60 * 60), calendar: calendar)
-        XCTAssertEqual(tracker.uses, 2)
+    }
+
+    // A cold launch with nothing stored is the first use.
+    func testTheFirstLaunchIsAUse() {
+        let tracker = ReviewPromptTracker(defaults: defaults, currentVersion: "1.2.0")
+        tracker.recordUse(now: date(day: 0), calendar: calendar)
+        XCTAssertEqual(tracker.uses, 1)
     }
 
     func testUsingTheAppTwiceInADayCountsOnce() {
         let tracker = ReviewPromptTracker(defaults: defaults, currentVersion: "1.2.0")
         tracker.recordUse(now: date(day: 0), calendar: calendar)
+        tracker.recordLeaving(now: date(day: 0).addingTimeInterval(60))
         tracker.recordUse(now: date(day: 0).addingTimeInterval(3600), calendar: calendar)
         XCTAssertEqual(tracker.distinctDaysUsed, 1)
         XCTAssertEqual(tracker.distinctDaysOnCurrentVersion, 1)
@@ -193,6 +222,7 @@ final class ReviewPromptTrackerTests: XCTestCase {
 
         let updated = ReviewPromptTracker(defaults: defaults, currentVersion: "1.2.0")
         updated.recordUse(now: date(day: 5), calendar: calendar)
+        updated.recordLeaving(now: date(day: 5).addingTimeInterval(60))
         XCTAssertEqual(updated.distinctDaysUsed, 6)
         XCTAssertEqual(updated.distinctDaysOnCurrentVersion, 1)
         XCTAssertFalse(updated.shouldRequestReview(lastResultWasError: false, now: date(day: 5)))
@@ -359,7 +389,7 @@ final class CompletedCalculationTallyTests: XCTestCase {
     func testCarriesTheStoredTotalAcrossLaunches() {
         var tally = CompletedCalculationTally(total: 22)
         tally.record(count: 3, forPage: UUID())
-        XCTAssertEqual(tally.total, ReviewPromptPolicy.minimumCompletedCalculations)
+        XCTAssertEqual(tally.total, 25)
     }
 
     func testAPageCountGoingBackDoesNotSubtract() {
