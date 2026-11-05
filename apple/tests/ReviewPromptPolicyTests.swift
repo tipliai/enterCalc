@@ -314,6 +314,28 @@ final class ReviewPromptIdleWaitTests: XCTestCase {
         XCTAssertNotEqual(viewModel.reviewPromptIdleSnapshot, finished)
     }
 
+    // One key press can send several change notifications; the ones after
+    // the calculation finished must not end the wait it started.
+    func testAnUnchangedCalculatorKeepsTheWait() {
+        let viewModel = CalculatorViewModel()
+        viewModel.inputDigit("2")
+        viewModel.setOperator(.add)
+        viewModel.inputDigit("3")
+        viewModel.evaluate()
+        let wait = ReviewPromptIdleWait()
+        var asked = false
+        wait.start(after: 0.05, from: viewModel.reviewPromptIdleSnapshot, isStillIdle: { true }, ask: { asked = true })
+
+        wait.cancel(ifChangedFrom: viewModel.reviewPromptIdleSnapshot)
+        XCTAssertTrue(wait.isWaiting)
+
+        viewModel.inputDigit("7")
+        wait.cancel(ifChangedFrom: viewModel.reviewPromptIdleSnapshot)
+        XCTAssertFalse(wait.isWaiting)
+        runMainLoop(for: 0.2)
+        XCTAssertFalse(asked)
+    }
+
     func testWaitsTwentySecondsByDefault() {
         XCTAssertEqual(ReviewPromptPolicy.idleSecondsBeforeAsking, 20)
     }

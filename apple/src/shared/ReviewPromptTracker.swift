@@ -178,6 +178,8 @@ public final class ReviewPromptIdleWait {
     public static let shared = ReviewPromptIdleWait()
 
     private var pending: DispatchWorkItem?
+    /// What the calculator showed when the running wait started.
+    private var startedFrom: ReviewPromptIdleSnapshot?
 
     public init() {}
 
@@ -186,13 +188,16 @@ public final class ReviewPromptIdleWait {
     /// platform also re-checks there that no sheet or pane has opened.
     public func start(
         after delay: TimeInterval = ReviewPromptPolicy.idleSecondsBeforeAsking,
+        from snapshot: ReviewPromptIdleSnapshot? = nil,
         isStillIdle: @escaping @MainActor () -> Bool,
         ask: @escaping @MainActor () -> Void
     ) {
         pending?.cancel()
+        startedFrom = snapshot
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
                 self?.pending = nil
+                self?.startedFrom = nil
                 guard isStillIdle() else { return }
                 ask()
             }
@@ -204,6 +209,15 @@ public final class ReviewPromptIdleWait {
     public func cancel() {
         pending?.cancel()
         pending = nil
+        startedFrom = nil
+    }
+
+    /// Ends the wait if the calculator no longer shows what it did when the
+    /// wait started. Change notifications can repeat for one key press, and
+    /// those must not end a wait that the same press started.
+    public func cancel(ifChangedFrom snapshot: ReviewPromptIdleSnapshot) {
+        guard pending != nil, startedFrom != snapshot else { return }
+        cancel()
     }
 
     public var isWaiting: Bool {

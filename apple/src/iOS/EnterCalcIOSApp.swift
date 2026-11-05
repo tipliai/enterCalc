@@ -861,6 +861,21 @@ struct EnterCalcIOSView: View {
             .onValueChange(of: reviewPromptInterruptionKey) { _ in
                 ReviewPromptIdleWait.shared.cancel()
             }
+            // Every change to the calculator, whatever made it (keypad,
+            // hardware keyboard, menu commands, function keys, undo), goes
+            // through the review gate: a finished calculation starts the wait,
+            // anything else ends it.
+            //
+            // This view does not redraw for calculator changes (the display
+            // and keys observe the page themselves), so it listens for the
+            // change notification and looks one turn later, once the change
+            // has been made.
+            .onReceive(activeScreen.viewModel.objectWillChange) { _ in
+                let screen = activeScreen
+                DispatchQueue.main.async {
+                    requestReviewIfEarned(for: screen)
+                }
+            }
             .onValueChange(of: scenePhase) { newPhase in
                 guard newPhase == .active else {
                     ReviewPromptIdleWait.shared.cancel()
@@ -3233,7 +3248,8 @@ private extension EnterCalcIOSView {
         CalculatorButtonSound.playEnterClick()
     }
 
-    // Asks for a review only after a completed calculation, and only once the
+    // Called on every change to the active page's calculator. Asks for a
+    // review only after a completed calculation, and only once the
     // calculator has then sat untouched for `idleSecondsBeforeAsking`, so the
     // prompt lands in the pause after a run of sums rather than interrupting
     // one. Never over Settings or a pane, never in the background, and never
@@ -3246,16 +3262,20 @@ private extension EnterCalcIOSView {
             forPage: screen.id
         )
         guard finishedCalculation,
+              activeOverlay == nil,
+              !showSettingsSheet,
+              functionChooser == nil,
               tracker.shouldRequestReview(lastResultWasError: screen.viewModel.isErrorState) else {
-            // Any other key press means the person is still busy, so a wait
+            // Any other change means the person is still busy, so a wait
             // from an earlier calculation ends without asking.
-            ReviewPromptIdleWait.shared.cancel()
+            ReviewPromptIdleWait.shared.cancel(ifChangedFrom: screen.viewModel.reviewPromptIdleSnapshot)
             return
         }
 
         let viewModel = screen.viewModel
         let snapshot = viewModel.reviewPromptIdleSnapshot
         ReviewPromptIdleWait.shared.start(
+            from: snapshot,
             isStillIdle: {
                 viewModel.reviewPromptIdleSnapshot == snapshot
                     && activeScreen.id == screen.id
@@ -3396,8 +3416,8 @@ private extension EnterCalcIOSView {
                                     pressFeedback: triggerKeyPressFeedback,
                                     action: {
                                         // Only the calculation is timed, so the
-                                        // scroll reset and review gate below do
-                                        // not count towards `keypad result`.
+                                        // scroll reset below does not count
+                                        // towards `keypad result`.
                                         InputLatencySignpost.measuring(InputLatencySignpost.resultInterval) {
                                             if let function = button.function {
                                                 performFunction(function, on: screen)
@@ -3408,7 +3428,6 @@ private extension EnterCalcIOSView {
                                         if isLandscapeMode {
                                             resetLandscapeDisplayScroll(for: screen)
                                         }
-                                        requestReviewIfEarned(for: screen)
                                     },
                                     reduceMotionEnabled: reduceMotionEnabled,
                                     isConfigurable: button.slot != nil,
@@ -3613,17 +3632,13 @@ private extension EnterCalcIOSView {
     /// Opening VAT or Tip over an unfinished sum (`10 + 5`) presses Enter for
     /// the person first, exactly as the Enter key would: the result, its
     /// history entry, and the Enter sound and haptic. The calculation still
-    /// counts towards the review gate, but a pane is about to open, so this is
-    /// never the moment to ask.
+    /// counts towards the review gate, but the pane opens in the same update,
+    /// so `requestReviewIfEarned` never starts a wait for it.
     func pressEnterForPendingCalculation() {
         let screen = activeScreen
         guard screen.viewModel.hasPendingCalculation else { return }
         screen.viewModel.evaluate()
         triggerKeyPressFeedback(for: .equals)
-        ReviewPromptTracker.shared.recordCompletedCalculations(
-            screen.viewModel.completedCalculationCount,
-            forPage: screen.id
-        )
     }
 
     func animateIfAllowed(_ animation: Animation, _ updates: @escaping () -> Void) {
