@@ -180,6 +180,9 @@ public final class ReviewPromptIdleWait {
     private var pending: DispatchWorkItem?
     /// What the calculator showed when the running wait started.
     private var startedFrom: ReviewPromptIdleSnapshot?
+    /// When the running wait started, and when a key was last pressed.
+    private var startedAt: Date?
+    private var lastInputAt: Date?
 
     public init() {}
 
@@ -194,11 +197,17 @@ public final class ReviewPromptIdleWait {
     ) {
         pending?.cancel()
         startedFrom = snapshot
+        startedAt = Date()
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
-                self?.pending = nil
-                self?.startedFrom = nil
-                guard isStillIdle() else { return }
+                guard let self else { return }
+                let pressedSinceStart = self.lastInputAt.map { start in
+                    self.startedAt.map { start > $0 } ?? false
+                } ?? false
+                self.pending = nil
+                self.startedFrom = nil
+                self.startedAt = nil
+                guard !pressedSinceStart, isStillIdle() else { return }
                 ask()
             }
         }
@@ -210,6 +219,16 @@ public final class ReviewPromptIdleWait {
         pending?.cancel()
         pending = nil
         startedFrom = nil
+        startedAt = nil
+    }
+
+    /// Records a key press. A press after the wait started means the person
+    /// is still busy, even one that changes nothing on screen (Enter again
+    /// after a result), so the wait then ends without asking. Call it before
+    /// the key's action, so the press that finishes a calculation comes
+    /// before the wait it starts.
+    public func noteInput(at date: Date = Date()) {
+        lastInputAt = date
     }
 
     /// Ends the wait if the calculator no longer shows what it did when the

@@ -336,6 +336,30 @@ final class ReviewPromptIdleWaitTests: XCTestCase {
         XCTAssertFalse(asked)
     }
 
+    // Enter again after a result changes nothing on screen, but it is still a
+    // press during the wait, so the wait ends without asking.
+    func testAKeyPressAfterTheWaitStartsEndsIt() {
+        let wait = ReviewPromptIdleWait()
+        var asked = false
+        wait.noteInput()
+        wait.start(after: 0.05, isStillIdle: { true }, ask: { asked = true })
+        RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+        wait.noteInput()
+        runMainLoop(for: 0.2)
+        XCTAssertFalse(asked)
+    }
+
+    // The press that finished the calculation comes before the wait starts,
+    // so it doesn't end the wait.
+    func testThePressThatStartsTheWaitDoesNotEndIt() {
+        let wait = ReviewPromptIdleWait()
+        var asked = false
+        wait.noteInput()
+        wait.start(after: 0.05, isStillIdle: { true }, ask: { asked = true })
+        runMainLoop(for: 0.2)
+        XCTAssertTrue(asked)
+    }
+
     func testWaitsTwentySecondsByDefault() {
         XCTAssertEqual(ReviewPromptPolicy.idleSecondsBeforeAsking, 20)
     }

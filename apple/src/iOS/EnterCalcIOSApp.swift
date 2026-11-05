@@ -636,6 +636,7 @@ struct EnterCalcIOSView: View {
     }
 
     func performFunction(_ function: CalculatorFunctionKey, on screen: CalculatorScreenSession) {
+        ReviewPromptIdleWait.shared.noteInput()
         switch function {
         case .undo: screen.viewModel.undo()
         case .redo: screen.viewModel.redo()
@@ -1073,6 +1074,7 @@ private extension EnterCalcIOSView {
     }
 
     func handleHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
+        ReviewPromptIdleWait.shared.noteInput()
         resetLandscapeDisplayScroll(for: activeScreen)
 
         // VAT and Tip apply live to the display, so any key on the calculator
@@ -3415,6 +3417,7 @@ private extension EnterCalcIOSView {
                                     buttonHeight: buttonHeight,
                                     pressFeedback: triggerKeyPressFeedback,
                                     action: {
+                                        ReviewPromptIdleWait.shared.noteInput()
                                         // Only the calculation is timed, so the
                                         // scroll reset below does not count
                                         // towards `keypad result`.
