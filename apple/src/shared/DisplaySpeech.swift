@@ -429,7 +429,7 @@ extension CalculatorViewModel {
             display: display,
             operation: expressionDisplay,
             isError: isErrorState,
-            completedCalculations: completedCalculationCount,
+            completedCalculations: evaluationCount,
             decimalSeparator: numberFormatStyle.decimalSeparator,
             isRoundedResult: isDisplayRoundedResult,
             allClearCount: allClearCount

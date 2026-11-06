@@ -283,6 +283,10 @@ struct CalculatorWindowView: View {
                         textScale: effectiveHistoryTextScale
                     )
                     .frame(width: historyPanelWidth)
+                    // Behind the Edit Action chooser, out of reach like the
+                    // rest of the window (#145).
+                    .disabled(functionChooser != nil)
+                    .accessibilityHidden(functionChooser != nil)
                 }
             }
             .padding(8)
@@ -2579,6 +2583,7 @@ struct CalculatorWindowView: View {
     }
 
     func performFunction(_ function: CalculatorFunctionKey) {
+        let speechBefore = viewModel.displaySpeechState
         switch function {
         case .undo: viewModel.undo()
         case .redo: viewModel.redo()
@@ -2597,7 +2602,11 @@ struct CalculatorWindowView: View {
         // a sound, so say what it shows now (#145). The display's own
         // announcement for this change is skipped so the two don't overlap.
         if function != .rounding, NSWorkspace.shared.isVoiceOverEnabled {
-            actionAnnouncedAt = Date()
+            // Only a change the display will report is skipped there; a
+            // no-op (± on zero) leaves no marker to swallow a later one.
+            if viewModel.displaySpeechState != speechBefore {
+                actionAnnouncedAt = Date()
+            }
             announceForVoiceOver(DisplaySpeech.actionAnnouncement(
                 functionKeyLabel(function),
                 state: viewModel.displaySpeechState,

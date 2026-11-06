@@ -358,6 +358,15 @@ final class DisplaySpeechTests: XCTestCase {
         XCTAssertTrue(viewModel.isDisplayRoundedResult)
         XCTAssertTrue(DisplaySpeech.spokenDisplay(viewModel.displaySpeechState, localize: localize).hasSuffix("3 3 3 repeating"))
 
+        // Typing the very digits of a rounded result is still exact.
+        for clearing in [false, true] {
+            viewModel.clearAll()
+            for key in ["2", "8", "÷", "3", "="] { press(key, on: viewModel) }
+            if clearing { viewModel.clearAll() }
+            for digit in "9.333333333333333" { press(String(digit), on: viewModel) }
+            XCTAssertFalse(viewModel.isDisplayRoundedResult)
+        }
+
         viewModel.clearAll()
         for digit in "1.222222222222222" {
             if digit == "." { viewModel.inputDecimal() } else { viewModel.inputDigit(String(digit)) }
@@ -370,6 +379,37 @@ final class DisplaySpeechTests: XCTestCase {
         viewModel.inputDigit("4")
         viewModel.evaluate()
         XCTAssertFalse(viewModel.isDisplayRoundedResult, "1.5 is exact")
+    }
+
+    private func press(_ key: String, on viewModel: CalculatorViewModel) {
+        switch key {
+        case ".": viewModel.inputDecimal()
+        case "÷": viewModel.setOperator(.divide)
+        case "+": viewModel.setOperator(.add)
+        case "=": viewModel.evaluate()
+        default: viewModel.inputDigit(key)
+        }
+    }
+
+    // The on-screen AC goes through clearEntry, and is announced too.
+    func testTheOnScreenACIsAnnounced() {
+        let viewModel = CalculatorViewModel()
+        for key in ["5", "+", "7", "="] { press(key, on: viewModel) }
+        let before = viewModel.displaySpeechState
+        viewModel.clearEntry()
+        XCTAssertEqual(DisplaySpeech.announcement(from: before, to: viewModel.displaySpeechState, localize: localize), .cleared)
+    }
+
+    // Enter on a lone number announces it, though nothing goes to history.
+    func testEnterOnALoneNumberIsAnnounced() {
+        let viewModel = CalculatorViewModel()
+        for key in ["4", "2"] { press(key, on: viewModel) }
+        let before = viewModel.displaySpeechState
+        viewModel.evaluate()
+        XCTAssertEqual(
+            DisplaySpeech.announcement(from: before, to: viewModel.displaySpeechState, localize: localize),
+            .result("42")
+        )
     }
 
     func testTheViewModelStateFollowsTheDisplay() {

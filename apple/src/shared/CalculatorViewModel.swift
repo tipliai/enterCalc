@@ -446,6 +446,8 @@ public final class CalculatorViewModel: ObservableObject {
     // flag (after evaluation or an operator) and direct display cursor editing.
     public func inputDigit(_ digit: String) {
         guard digit.count == 1, "0123456789".contains(digit) else { return }
+        // A typed number is exact, even if it matches a rounded result.
+        lastRoundedFormat = nil
         let snapshot = beginUndoableChange()
         let isEditingDisplay = activeDisplayEditCursorIndex != nil
         if isErrorState { resetStateForNewEntry() }
@@ -519,6 +521,7 @@ public final class CalculatorViewModel: ObservableObject {
     // Inserts the locale decimal separator, guarding against a second separator
     // in the same operand.
     public func inputDecimal() {
+        lastRoundedFormat = nil
         let snapshot = beginUndoableChange()
         let isEditingDisplay = activeDisplayEditCursorIndex != nil
         if isErrorState { resetStateForNewEntry() }
@@ -611,6 +614,8 @@ public final class CalculatorViewModel: ObservableObject {
         finishDirectDisplayEditingIfNeeded()
 
         if shouldUseAllClearBehavior {
+            // The on-screen AC: announced as "Cleared" like clearAll (#145).
+            allClearCount += 1
             resetAllStateForClearAll()
             updateDisplay()
             completeUndoableChange(from: snapshot)
@@ -655,6 +660,7 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     private func resetAllStateForClearAll() {
+        lastRoundedFormat = nil
         currentInput = "0"
         accumulator = nil
         pendingOperator = nil
@@ -687,6 +693,7 @@ public final class CalculatorViewModel: ObservableObject {
     // Deletes the last input. Behavior is contextual: it removes whole tokens in
     // expression mode, recovers from an error, or trims a digit otherwise.
     public func backspace() {
+        lastRoundedFormat = nil
         if currentErrorKey == "error.invalidInput" {
             undo()
             return
@@ -893,8 +900,14 @@ public final class CalculatorViewModel: ObservableObject {
         !isErrorState && (pendingOperator != nil || (isExpressionMode && !expressionTokens.isEmpty))
     }
 
+    /// Every Enter that evaluated, including a lone number with nothing
+    /// pending (42 Enter), so VoiceOver announces each result (#145).
+    /// `completedCalculationCount` only counts calculations kept in history.
+    public private(set) var evaluationCount = 0
+
     public func evaluate() {
         guard !isErrorState else { return }
+        evaluationCount += 1
         let snapshot = beginUndoableChange()
         finishDirectDisplayEditingIfNeeded()
         isPendingEntryClearedByClearButton = false
@@ -1237,6 +1250,7 @@ public final class CalculatorViewModel: ObservableObject {
     }
 
     public func pasteFromPasteboard() {
+        lastRoundedFormat = nil
         let snapshot = beginUndoableChange()
         finishDirectDisplayEditingIfNeeded()
         let string: String?
