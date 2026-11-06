@@ -650,6 +650,16 @@ struct EnterCalcIOSView: View {
         case .parentheses: screen.viewModel.inputParentheses()
         case .percent: screen.viewModel.applyPercent()
         }
+
+        // Rounding opens a pane, which VoiceOver moves into; everything else
+        // changes the display silently, so say what it shows now (#145).
+        if function != .rounding {
+            announceForVoiceOver(DisplaySpeech.actionAnnouncement(
+                functionKeyLabel(function),
+                state: screen.viewModel.displaySpeechState,
+                localize: localized
+            ))
+        }
     }
 
     private func configurableKeypadButton(for slot: CalculatorFunctionSlot, screen: CalculatorScreenSession) -> IOSCalcButton {
@@ -700,9 +710,24 @@ struct EnterCalcIOSView: View {
         functionChooser?.highlighted = nil
     }
 
+    func moveFunctionChooserHighlight(by offset: Int) {
+        guard let session = functionChooser,
+              let next = session.highlight(movedBy: offset, assignments: functionKeyAssignments) else { return }
+        highlightFunctionChooserOption(next)
+        VoiceOver.announce(session.spokenOption(
+            next,
+            assignments: functionKeyAssignments,
+            label: { functionKeyLabel($0) },
+            localize: localized
+        ))
+    }
+
     func commitFunctionChooser(_ function: CalculatorFunctionKey) {
         guard let session = functionChooser else { return }
         updateActiveScreenSettings { $0.functionKeyAssignments.assign(function, to: session.slot) }
+        VoiceOver.announce(String(format: localized("a11y.selected"), functionKeyLabel(function)))
+        // The choice says it all; no "Edit Action closed" after it.
+        VoiceOver.suppressNextPaneClosure()
         triggerActionFeedback(emphasized: true)
         DebugLog.emit("functionKeys", "\(session.slot.rawValue) = \(function.rawValue); layout = \(describeFunctionKeyLayout())")
         dismissFunctionChooser()
@@ -739,6 +764,7 @@ struct EnterCalcIOSView: View {
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
                     .onTapGesture { dismissFunctionChooser() }
+                    .accessibilityHidden(true)
 
                 CalculatorFunctionKeyChooser(
                     session: session,
@@ -754,6 +780,12 @@ struct EnterCalcIOSView: View {
                         confirm: localized("functionKey.reset.confirm"),
                         cancel: localized("functionKey.reset.cancel")
                     ),
+                    isConfirmingReset: Binding(
+                        get: { functionChooser?.isConfirmingReset ?? false },
+                        set: { functionChooser?.isConfirmingReset = $0 }
+                    ),
+                    optionHint: localized("a11y.functionKey.hint"),
+                    closedAnnouncement: paneClosed("functionKey.chooser.title"),
                     label: { functionKeyLabel($0) },
                     onHighlight: { highlightFunctionChooserOption($0) },
                     onCommit: { commitFunctionChooser($0) },
@@ -791,6 +823,12 @@ struct EnterCalcIOSView: View {
                 layoutBody(metrics: metrics)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     .rotationEffect(.degrees(counterRotatesForUpsideDownPortrait ? 180 : 0))
+                    // Under a pane's dimmed background nothing can be pressed,
+                    // so it leaves the keyboard's Tab order and VoiceOver
+                    // (#145). Docked panes (iPad history) dim nothing and
+                    // leave the calculator alone.
+                    .disabled(isCalculatorCovered(metrics: metrics))
+                    .accessibilityHidden(isCalculatorCovered(metrics: metrics))
 
                 if showsOverlayScrim(metrics: metrics) {
                     overlayScrim(metrics: metrics)
@@ -814,7 +852,7 @@ struct EnterCalcIOSView: View {
                     // A rate being typed needs the keyboard focus for its text
                     // field (#124), so the calculator's key capture steps aside.
                     isEnabled: scenePhase == .active && !showSettingsSheet && !rateEditor.isEditing,
-                    onKeyPress: handleHardwareKey
+                    onKeyPress: handleHardwareKeyAndAnnounce
                 )
                 .frame(width: 1, height: 1)
                 .opacity(0.01)
@@ -904,6 +942,11 @@ struct EnterCalcIOSView: View {
                 defer { previousScreenCount = newCount }
                 guard newCount > previousScreenCount else { return }
                 startOperatorIntroAnimation()
+            }
+            // Swiping to, adding or closing a screen says which screen is now
+            // showing and its value (#145): "Screen 2, $1.55 shown".
+            .onValueChange(of: screenStore.activeIndex) { index in
+                announceActiveScreen(number: index + 1)
             }
             .onValueChange(of: preferredThemeRaw) { _ in
                 syncHomeScreenFromStoredSettings()
@@ -1073,14 +1116,93 @@ private extension EnterCalcIOSView {
         screen.isHomeScreen ? "plus.square.on.square" : "xmark.square"
     }
 
+    /// A hardware key, then any result, error or "Cleared" it caused, as the
+    /// keypad announces them (#145). Return after 5 + 7 says "Equals 12".
+    func handleHardwareKeyAndAnnounce(_ event: IOSHardwareKeyEvent) -> Bool {
+        let screen = activeScreen
+        let before = screen.viewModel.displaySpeechState
+        let handled = handleHardwareKey(event)
+        if handled {
+            announceDisplayChange(from: before, on: screen)
+        }
+        return handled
+    }
+
     func handleHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
+        // Tab moves keyboard focus between controls (Full Keyboard Access),
+        // in a pane or on the calculator, so it is never used here (#145).
+        if event.keyCode == .keyboardTab {
+            return false
+        }
+
+        // With a pane open, Space presses whichever of its controls has
+        // keyboard focus, so it must not reach the pane's own key handling.
+        if event.keyCode == .keyboardSpacebar,
+           activeOverlay != nil || functionChooser != nil {
+            return false
+        }
+
         ReviewPromptIdleWait.shared.noteInput()
+
+        // The function-key chooser is in front: Escape closes it, and no key
+        // reaches the calculator behind it.
+        if let session = functionChooser {
+            // The reset confirmation takes its own keys.
+            if session.isConfirmingReset { return false }
+            switch event.keyCode {
+            // Delete presses the trash, which asks before resetting (#145).
+            case .keyboardDeleteOrBackspace, .keyboardDeleteForward:
+                functionChooser?.isConfirmingReset = true
+                return true
+            case .keyboardEscape:
+                dismissFunctionChooser()
+                return true
+            // The arrows move the highlight through the options and Return
+            // gives the key the highlighted one (#145).
+            case .keyboardLeftArrow: moveFunctionChooserHighlight(by: -1); return true
+            case .keyboardRightArrow: moveFunctionChooserHighlight(by: 1); return true
+            case .keyboardUpArrow: moveFunctionChooserHighlight(by: -CalculatorFunctionKeyChooser.columns); return true
+            case .keyboardDownArrow: moveFunctionChooserHighlight(by: CalculatorFunctionKeyChooser.columns); return true
+            case .keyboardReturnOrEnter, .keypadEnter:
+                if let function = functionChooser?.highlighted {
+                    commitFunctionChooser(function)
+                }
+                return true
+            default:
+                return false
+            }
+        }
+
         resetLandscapeDisplayScroll(for: activeScreen)
 
-        // VAT and Tip apply live to the display, so any key on the calculator
-        // while one is open — typing, or a shortcut such as ⌘V, ⌘Z or
-        // ⌘Delete — closes it first: the result stays, and the key then does
-        // what it always does (#124). Escape just closes the pane.
+        let hasNoModifiers = event.modifierFlags.intersection([.command, .alternate, .control, .shift]).isEmpty
+
+        // In the Tip pane, ← and → move the rate slider a notch, like they
+        // move the rounding slider; the pane says the new amounts.
+        if activeOverlay == .tip,
+           event.keyCode == .keyboardLeftArrow || event.keyCode == .keyboardRightArrow,
+           hasNoModifiers {
+            if let next = TipRateStep.next(after: tipRate, up: event.keyCode == .keyboardRightArrow) {
+                tipRate = next
+                triggerActionFeedback()
+            }
+            return true
+        }
+
+        // Delete presses the pane's trash: VAT or Tip comes off the display
+        // and the pane closes (#145).
+        if activeOverlay == .vat || activeOverlay == .tip,
+           event.keyCode == .keyboardDeleteOrBackspace || event.keyCode == .keyboardDeleteForward,
+           hasNoModifiers {
+            activeScreen.viewModel.removeLiveToolResult(activeOverlay == .vat ? .vat : .tip)
+            dismissActiveOverlay()
+            return true
+        }
+
+        // VAT and Tip apply live to the display, so any other key on the
+        // calculator while one is open — typing, or a shortcut such as ⌘V, ⌘Z
+        // or ⌘Delete — closes it first: the result stays, and the key then
+        // does what it always does (#124). Escape just closes the pane.
         if activeOverlay == .vat || activeOverlay == .tip {
             closeToolPane()
             if event.keyCode == .keyboardEscape { return true }
@@ -1372,6 +1494,21 @@ private extension EnterCalcIOSView {
         navigateToScreen(at: screenStore.activeIndex - 1)
     }
 
+    func announceActiveScreen(number: Int) {
+        let screen = activeScreen
+        // After the page has moved, so VoiceOver's own page-change speech
+        // comes first; skipped if another swipe has moved on since.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            guard activeScreen === screen, screenStore.activeIndex + 1 == number else { return }
+            VoiceOver.announce(DisplaySpeech.instanceAnnouncement(
+                number: number,
+                isWindow: false,
+                state: screen.viewModel.displaySpeechState,
+                localize: localized
+            ))
+        }
+    }
+
     func navigateToScreen(at index: Int) {
         guard screenStore.screens.indices.contains(index) else { return }
         animateIfAllowed(.interactiveSpring(response: 0.28, dampingFraction: 0.88, blendDuration: 0.2)) {
@@ -1471,6 +1608,11 @@ private extension EnterCalcIOSView {
                         onCopyEntry: { entry in copyHistoryEntryResultToPasteboard(entry, from: activeScreen.viewModel) },
                         onCopyOperationEntry: { entry in copyHistoryEntryOperationToPasteboard(entry, from: activeScreen.viewModel) }
                     )
+                    .accessibilityPane(
+                        title: localized("a11y.pane.history"),
+                        closedAnnouncement: paneClosed("a11y.pane.history"),
+                        onClose: { dismissHistoryOverlay() }
+                    )
                 }
             } else if activeOverlay == .vat {
                 roundingOverlayPanel(metrics: metrics) {
@@ -1502,6 +1644,11 @@ private extension EnterCalcIOSView {
                     )
                     .padding(.bottom, roundingPanelBottomInset(mode: metrics.mode, isUpsideDown: counterRotatesForUpsideDownPortrait, safeAreaBottom: safeAreaInsets.bottom))
                     .paneHeightLimit(paneMaxHeight)
+                    .accessibilityPane(
+                        title: localized("currency.vat.title"),
+                        closedAnnouncement: paneClosed("currency.vat.title"),
+                        onClose: { dismissActiveOverlay() }
+                    )
                 }
             } else if activeOverlay == .tip {
                 roundingOverlayPanel(metrics: metrics) {
@@ -1532,6 +1679,11 @@ private extension EnterCalcIOSView {
                     )
                     .padding(.bottom, roundingPanelBottomInset(mode: metrics.mode, isUpsideDown: counterRotatesForUpsideDownPortrait, safeAreaBottom: safeAreaInsets.bottom))
                     .paneHeightLimit(paneMaxHeight)
+                    .accessibilityPane(
+                        title: localized("currency.tip.title"),
+                        closedAnnouncement: paneClosed("currency.tip.title"),
+                        onClose: { dismissActiveOverlay() }
+                    )
                 }
             } else if activeOverlay == .rounding {
                 roundingOverlayPanel(metrics: metrics) {
@@ -1541,6 +1693,7 @@ private extension EnterCalcIOSView {
                         isEnabled: activeScreen.viewModel.isResultRoundingEnabled,
                         precision: activeScreen.viewModel.resultRoundingPrecision,
                         maxPrecision: activeScreen.viewModel.maxResultRoundingPrecision,
+                        spokenValue: spokenDisplayValue(of: activeScreen.viewModel),
                         bottomSafeAreaInset: roundingPanelBottomInset(mode: metrics.mode, isUpsideDown: counterRotatesForUpsideDownPortrait, safeAreaBottom: safeAreaInsets.bottom),
                         isUpsideDownPortrait: counterRotatesForUpsideDownPortrait,
                         onSelectionChanged: { digits in
@@ -1560,6 +1713,11 @@ private extension EnterCalcIOSView {
                         onDismiss: { dismissActiveOverlay() }
                     )
                     .paneHeightLimit(paneMaxHeight)
+                    .accessibilityPane(
+                        title: localized("rounding.title"),
+                        closedAnnouncement: paneClosed("rounding.title"),
+                        onClose: { dismissActiveOverlay() }
+                    )
                 }
             }
         }
@@ -2902,6 +3060,20 @@ private extension EnterCalcIOSView {
                     }
 
                 }
+                // One VoiceOver element for the operation line and the result
+                // (#145). The mode picker and the VAT and TIP buttons sit in an
+                // overlay outside it and stay separate elements.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(localized(DisplaySpeech.labelKey)))
+                .accessibilityValue(Text(DisplaySpeech.value(for: screen.viewModel.displaySpeechState, localize: localized)))
+                .accessibilityHint(Text(localized(DisplaySpeech.hintKey)))
+                .accessibilityAddTraits(.updatesFrequently)
+                .accessibilityAction {
+                    copyDisplayToPasteboardWithFlash(from: screen.viewModel)
+                }
+                .accessibilityAction(named: Text(localized("history.copyOperation"))) {
+                    copyCurrentOperationToPasteboard(from: screen.viewModel)
+                }
             }
             .frame(maxWidth: .infinity, minHeight: expandedResultAreaHeight, maxHeight: expandedResultAreaHeight, alignment: .top)
             .mask { displayShape }
@@ -3016,15 +3188,13 @@ private extension EnterCalcIOSView {
         let current = CalculatorMode.current(for: activeScreen.viewModel)
         let fontSize = modeLabelFontSize(metrics: metrics)
         return Menu {
-            Picker(selection: Binding(get: { current }, set: { selectMode($0) })) {
-                ForEach(CalculatorMode.allCases) { mode in
+            // One checkmark item per mode. (An inline Picker's title is an
+            // extra menu item, so VoiceOver counted three options, #145.)
+            ForEach(CalculatorMode.allCases) { mode in
+                Toggle(isOn: Binding(get: { current == mode }, set: { _ in selectMode(mode) })) {
                     Label(localized(mode.localizationKey), systemImage: mode.systemImage)
-                        .tag(mode)
                 }
-            } label: {
-                Text(localized("calculator.mode.menu"))
             }
-            .pickerStyle(.inline)
         } label: {
             HStack(spacing: 4) {
                 Text(localized(current.localizationKey))
@@ -3053,6 +3223,19 @@ private extension EnterCalcIOSView {
         withAnimation(ModeControlsTransition.animation) {
             mode.select(on: screen.viewModel, currencySymbol: screen.settings.currencySymbol)
         }
+        // "Now in Currency mode" (#145).
+        VoiceOver.announce(String(format: localized("a11y.announce.mode"), localized(mode.localizationKey)))
+    }
+
+    /// Whether a pane or the function-key chooser is over the calculator with
+    /// its dimmed background, so nothing behind can be pressed.
+    func isCalculatorCovered(metrics: IOSLayoutMetrics) -> Bool {
+        functionChooser != nil || showsOverlayScrim(metrics: metrics)
+    }
+
+    /// "Round Result closed", for VoiceOver when a pane closes.
+    func paneClosed(_ titleKey: String) -> String {
+        String(format: localized("a11y.pane.closed"), localized(titleKey))
     }
 
     func memoryControls(metrics: IOSLayoutMetrics, opacity: Double) -> some View {
@@ -3099,6 +3282,7 @@ private extension EnterCalcIOSView {
         viewModel.copyToPasteboard()
         triggerActionFeedback(emphasized: true)
         showCopiedToast()
+        announceForVoiceOver(localized("copy.copied"))
 
         guard !reduceMotionEnabled else {
             flashCopy = false
@@ -3125,6 +3309,32 @@ private extension EnterCalcIOSView {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) {
             copyStreakActive = false
         }
+    }
+
+    /// Announces what a key press did to the display, for VoiceOver users whose
+    /// focus stays on the key: the result after Enter, an error, or "Cleared"
+    /// after AC (#145). Typing is not announced; the key already said it.
+    func announceDisplayChange(from before: DisplaySpeech.State, on screen: CalculatorScreenSession) {
+        guard UIAccessibility.isVoiceOverRunning,
+              let announcement = DisplaySpeech.announcement(
+                  from: before,
+                  to: screen.viewModel.displaySpeechState,
+                  localize: localized
+              ) else {
+            return
+        }
+        announceForVoiceOver(DisplaySpeech.text(for: announcement, localize: localized))
+    }
+
+    /// Queued behind whatever VoiceOver is saying (the key's own label), so it
+    /// is not cut off.
+    func announceForVoiceOver(_ text: String) {
+        guard UIAccessibility.isVoiceOverRunning else { return }
+        let message = NSAttributedString(
+            string: text,
+            attributes: [.accessibilitySpeechQueueAnnouncement: true]
+        )
+        UIAccessibility.post(notification: .announcement, argument: message)
     }
 
     func copyCurrentResultToPasteboard(from viewModel: CalculatorViewModel) {
@@ -3418,6 +3628,7 @@ private extension EnterCalcIOSView {
                                     pressFeedback: triggerKeyPressFeedback,
                                     action: {
                                         ReviewPromptIdleWait.shared.noteInput()
+                                        let speechBefore = screen.viewModel.displaySpeechState
                                         // Only the calculation is timed, so the
                                         // scroll reset below does not count
                                         // towards `keypad result`.
@@ -3430,6 +3641,11 @@ private extension EnterCalcIOSView {
                                         }
                                         if isLandscapeMode {
                                             resetLandscapeDisplayScroll(for: screen)
+                                        }
+                                        // Function keys announce themselves in
+                                        // `performFunction`.
+                                        if button.function == nil {
+                                            announceDisplayChange(from: speechBefore, on: screen)
                                         }
                                     },
                                     reduceMotionEnabled: reduceMotionEnabled,
@@ -3660,11 +3876,19 @@ private extension EnterCalcIOSView {
         guard activeOverlay == .history else { return false }
 
         switch event.keyCode {
-        case .keyboardEscape, .keyboardDeleteOrBackspace, .keyboardReturnOrEnter, .keypadEnter, .keyboardEnd:
+        case .keyboardEscape, .keyboardEnd:
             dismissActiveOverlay()
             return true
-        case .keyboardDeleteForward:
-            activeScreen.viewModel.clearHistory()
+        case .keyboardReturnOrEnter, .keypadEnter:
+            // Return is =; with nothing to evaluate here it does nothing.
+            return true
+        case .keyboardDeleteOrBackspace, .keyboardDeleteForward:
+            // Delete presses the trash: clears the history and closes, or
+            // just closes when there is none (#145).
+            if !activeScreen.viewModel.history.isEmpty {
+                triggerHistoryClearFeedback(for: activeScreen)
+                activeScreen.viewModel.clearHistory()
+            }
             dismissActiveOverlay()
             return true
         default:
@@ -3678,6 +3902,7 @@ private extension EnterCalcIOSView {
 
         switch event.keyCode {
         case .keyboardUpArrow, .keyboardReturnOrEnter, .keypadEnter:
+            // Return closes the pane, as in VAT and Tip.
             dismissActiveOverlay()
             return true
         case .keyboardEnd:
@@ -3686,7 +3911,12 @@ private extension EnterCalcIOSView {
         case .keyboardDownArrow:
             // Already in the rounding overlay; no additional down-arrow action.
             return true
-        case .keyboardEscape, .keyboardDeleteOrBackspace, .keyboardDeleteForward:
+        case .keyboardEscape:
+            // Escape closes, like the close button (#145).
+            dismissActiveOverlay()
+            return true
+        case .keyboardDeleteOrBackspace, .keyboardDeleteForward:
+            // Delete presses the trash: rounding off, and the pane closes.
             activeScreen.viewModel.removeResultRounding()
             dismissActiveOverlay()
             return true
@@ -3718,8 +3948,19 @@ private extension EnterCalcIOSView {
         } else {
             activeScreen.viewModel.setResultRoundingPrecision(nextStep)
         }
+        // The arrows change the slider without VoiceOver's focus being on it,
+        // so say the rounded result (#145).
+        VoiceOver.announce(spokenDisplayValue(of: activeScreen.viewModel))
 
         return true
+    }
+
+    /// What the display shows, as VoiceOver should say it.
+    func spokenDisplayValue(of viewModel: CalculatorViewModel) -> String {
+        let state = viewModel.displaySpeechState
+        return state.isError
+            ? state.display
+            : DisplaySpeech.spokenDisplay(state, localize: localized)
     }
 
     @ViewBuilder
@@ -3735,6 +3976,7 @@ private extension EnterCalcIOSView {
             .onTapGesture {
                 dismissActiveOverlay()
             }
+            .accessibilityHidden(true)
     }
 
     @ViewBuilder
@@ -4129,6 +4371,8 @@ private struct IOSSettingsSheet: View {
                             Image(systemName: "xmark")
                         }
                         .accessibilityLabel(Text(localized("settings.close")))
+                        // Escape on a hardware keyboard closes Settings (#145).
+                        .keyboardShortcut(.cancelAction)
                     }
                 }
             }
@@ -4150,6 +4394,8 @@ private struct IOSRoundingPanel: View {
     let isEnabled: Bool
     let precision: Int
     let maxPrecision: Int
+    /// The rounded result as VoiceOver should say it.
+    let spokenValue: String
     let bottomSafeAreaInset: CGFloat
     /// Whether the device is rotated upside-down; used to conditionally hide borders and adjust safe-area handling
     let isUpsideDownPortrait: Bool
@@ -4187,6 +4433,7 @@ private struct IOSRoundingPanel: View {
         isEnabled: Bool,
         precision: Int,
         maxPrecision: Int,
+        spokenValue: String,
         bottomSafeAreaInset: CGFloat = 0,
         isUpsideDownPortrait: Bool = false,
         onSelectionChanged: @escaping (Int?) -> Void,
@@ -4199,6 +4446,7 @@ private struct IOSRoundingPanel: View {
         self.isEnabled = isEnabled
         self.precision = precision
         self.maxPrecision = max(0, maxPrecision)
+        self.spokenValue = spokenValue
         self.bottomSafeAreaInset = bottomSafeAreaInset
         self.isUpsideDownPortrait = isUpsideDownPortrait
         self.onSelectionChanged = onSelectionChanged
@@ -4235,6 +4483,22 @@ private struct IOSRoundingPanel: View {
                 // Only sliders and links take the accent (#137); every other
                 // control keeps its system colours.
                 .tint(palette.sliderTint)
+                // VoiceOver hears the rounded result, not the slider's position,
+                // and steps one decimal place at a time (#145).
+                .accessibilityLabel(Text(localized("rounding.title")))
+                .accessibilityValue(Text(spokenValue))
+                .accessibilityAdjustableAction { direction in
+                    let current = stepIndex(for: sliderValue)
+                    let next: Int
+                    switch direction {
+                    case .increment: next = min(current + 1, maximumStepIndex)
+                    case .decrement: next = max(current - 1, Self.offStepIndex)
+                    @unknown default: return
+                    }
+                    guard next != current else { return }
+                    sliderValue = Self.sliderPosition(for: next)
+                    onSelectionChanged(digits(for: next))
+                }
 
                 GeometryReader { geometry in
                     ZStack(alignment: .topLeading) {
@@ -4691,8 +4955,8 @@ private struct IOSHistoryPanel: View {
         .frame(width: handleWidth, height: rowHeight)
         .contentShape(Rectangle())
         .highPriorityGesture(dragGesture)
-        .accessibilityLabel(Text("Resize history"))
-        .accessibilityHint(Text("Drag up or down to resize the history overlay"))
+        .accessibilityLabel(Text(localized("a11y.resize.history")))
+        .accessibilityHint(Text(localized("a11y.resize.history.hint")))
 
         return handle
     }

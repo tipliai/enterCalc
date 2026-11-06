@@ -120,3 +120,43 @@
 /* Mode picker (#142) */
 "calculator.mode.menu" = "Modo";
 "calculator.mode.picker.hint" = "Elegir un modo de calculadora";
+
+/* VoiceOver: the calculator display and what it announces (#145). */
+"a11y.display.label" = "Resultado";
+"a11y.display.hint" = "Copia el resultado.";
+"a11y.display.completed" = "%1$@, de %2$@";
+"a11y.display.pending" = "%1$@, después de %2$@";
+"a11y.operator.plus" = "más";
+"a11y.operator.minus" = "menos";
+"a11y.operator.times" = "por";
+"a11y.operator.dividedBy" = "entre";
+"a11y.operator.equals" = "igual a";
+"a11y.operator.approximately" = "aproximadamente";
+"a11y.operator.percent" = "por ciento";
+"a11y.operator.squareRoot" = "raíz cuadrada de";
+"a11y.announce.result" = "Igual a %@";
+"a11y.announce.cleared" = "Borrado";
+"a11y.key.point" = "coma";
+"a11y.key.delete" = "Retroceso";
+"a11y.key.clear" = "Borrar entrada";
+"a11y.key.parentheses" = "paréntesis";
+"a11y.key.openParenthesis" = "abrir paréntesis";
+"a11y.key.closeParenthesis" = "cerrar paréntesis";
+"a11y.number.repeating" = "periódico";
+"a11y.currency.cent" = "1 céntimo";
+"a11y.currency.cents" = "%@ céntimos";
+"a11y.currency.penny" = "1 penique";
+"a11y.currency.pence" = "%@ peniques";
+"a11y.announce.action" = "%1$@, se muestra %2$@";
+"a11y.pane.history" = "Historial";
+"a11y.pane.closed" = "%@ cerrado";
+"a11y.announce.mode" = "Ahora en modo %@";
+"a11y.announce.screen" = "Pantalla %1$@, se muestra %2$@";
+"a11y.announce.window" = "Ventana %1$@, se muestra %2$@";
+"a11y.resize.keypad" = "Cambiar tamaño del teclado";
+"a11y.resize.keypad.hint" = "Arrastra hacia arriba o hacia abajo para cambiar el tamaño del teclado";
+"a11y.resize.history" = "Cambiar tamaño del historial";
+"a11y.resize.history.hint" = "Arrastra hacia arriba o hacia abajo para cambiar el tamaño del historial";
+"a11y.selected" = "%@ seleccionado";
+"a11y.functionKey.current" = "%@, actual";
+"a11y.functionKey.hint" = "Asigna esta acción a la tecla";

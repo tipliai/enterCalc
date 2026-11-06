@@ -17,6 +17,9 @@ public struct FunctionKeyChooserSession: Equatable {
     public var dragLocation: CGPoint?
     /// Option the finger is currently over.
     public var highlighted: CalculatorFunctionKey?
+    /// The trash's "reset every key?" confirmation is showing. Held here so
+    /// the Delete key can ask for it too (#145).
+    public var isConfirmingReset = false
 
     public init(
         slot: CalculatorFunctionSlot,
@@ -28,6 +31,38 @@ public struct FunctionKeyChooserSession: Equatable {
         self.anchor = anchor
         self.dragLocation = dragLocation
         self.highlighted = highlighted
+    }
+}
+
+extension FunctionKeyChooserSession {
+    /// The option the keyboard highlight moves to (#145): ← and → step one
+    /// option, ↑ and ↓ a row of `columns`. It starts from the highlighted
+    /// option, or the key's current action when nothing is highlighted yet.
+    /// Nil when the move would leave the grid.
+    public func highlight(
+        movedBy offset: Int,
+        assignments: CalculatorFunctionKeyAssignments
+    ) -> CalculatorFunctionKey? {
+        let options = CalculatorFunctionKey.chooserOrder
+        let start = highlighted ?? assignments[slot]
+        guard let index = options.firstIndex(of: start) else { return options.first }
+        let next = index + offset
+        guard options.indices.contains(next) else { return nil }
+        return options[next]
+    }
+
+    /// What VoiceOver says for an option: its name, and "current" for the
+    /// action the key has now. "Undo, current".
+    public func spokenOption(
+        _ function: CalculatorFunctionKey,
+        assignments: CalculatorFunctionKeyAssignments,
+        label: (CalculatorFunctionKey) -> String,
+        localize: (String) -> String
+    ) -> String {
+        let name = label(function)
+        return assignments[slot] == function
+            ? String(format: localize("a11y.functionKey.current"), name)
+            : name
     }
 }
 
@@ -92,6 +127,10 @@ public struct CalculatorFunctionKeyChooser: View {
     private let title: String
     private let closeLabel: String
     private let resetLabels: FunctionKeyResetLabels
+    /// Read with each option: what choosing it does.
+    private let optionHint: String
+    /// "Edit Action closed", said when the chooser goes away.
+    private let closedAnnouncement: String?
     private let label: (CalculatorFunctionKey) -> String
     private let onHighlight: (CalculatorFunctionKey?) -> Void
     private let onCommit: (CalculatorFunctionKey) -> Void
@@ -99,7 +138,7 @@ public struct CalculatorFunctionKeyChooser: View {
     private let onReset: () -> Void
 
     @State private var optionFrames: [CalculatorFunctionKey: CGRect] = [:]
-    @State private var isConfirmingReset = false
+    @Binding private var isConfirmingReset: Bool
     #if os(macOS)
     @State private var isCloseHovering = false
     @State private var isResetHovering = false
@@ -113,6 +152,9 @@ public struct CalculatorFunctionKeyChooser: View {
         title: String,
         closeLabel: String,
         resetLabels: FunctionKeyResetLabels,
+        isConfirmingReset: Binding<Bool>,
+        optionHint: String = "",
+        closedAnnouncement: String? = nil,
         label: @escaping (CalculatorFunctionKey) -> String,
         onHighlight: @escaping (CalculatorFunctionKey?) -> Void,
         onCommit: @escaping (CalculatorFunctionKey) -> Void,
@@ -126,6 +168,9 @@ public struct CalculatorFunctionKeyChooser: View {
         self.title = title
         self.closeLabel = closeLabel
         self.resetLabels = resetLabels
+        self._isConfirmingReset = isConfirmingReset
+        self.optionHint = optionHint
+        self.closedAnnouncement = closedAnnouncement
         self.label = label
         self.onHighlight = onHighlight
         self.onCommit = onCommit
@@ -152,6 +197,7 @@ public struct CalculatorFunctionKeyChooser: View {
             let origin = panelOrigin(in: geometry)
 
             panel
+                .accessibilityPane(title: title, closedAnnouncement: closedAnnouncement, onClose: onClose)
                 .frame(width: panelSize.width, height: panelSize.height)
                 .position(x: origin.x + panelSize.width / 2, y: origin.y + panelSize.height / 2)
         }
@@ -290,6 +336,8 @@ public struct CalculatorFunctionKeyChooser: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityLabel(Text(label(function)))
+        .accessibilityHint(Text(optionHint))
+        // The key's action now: VoiceOver says "selected" (#145).
         .accessibilityAddTraits(isCurrent ? [.isSelected] : [])
         .background(
             GeometryReader { proxy in
