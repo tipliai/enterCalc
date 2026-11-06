@@ -29,7 +29,9 @@ This page is a quick guide to accessibility features available in EnterCalc.
 - **Escape** closes whichever pane is open, leaving everything as it was.
 - **Delete** does what the open pane's trash button does: turns rounding off, takes VAT or Tip off the display, clears the history, or asks to restore the default keys.
 - **← and →** move the Round Result and Tip sliders. In the Edit Action chooser, the arrow keys move through the options and **Return** chooses the highlighted one.
-- **Tab** moves between controls when the system's keyboard navigation (Mac) or Full Keyboard Access (iPhone and iPad) is on, and **Space** presses the focused control. Tab navigation without those settings is planned ([#164](https://github.com/tipliai/enterCalc/issues/164)).
+- **Tab** moves between controls and **Space** presses the focused one. On the Mac this works whether or not the system's Keyboard navigation setting is on (#164); the focused control gets a focus ring. On iPhone and iPad, turn on **Full Keyboard Access** (Settings → Accessibility → Keyboards).
+- **Return** is never a button press: it is =, or closes the Rounding, VAT and Tip panes.
+- **Shift + Down Arrow** makes the display bigger and **Shift + Up Arrow** smaller.
 - All VoiceOver text is translated into the seven app languages. VoiceOver speaks with the system's voice.
 
 ### Reassigning a function key without a press-and-hold

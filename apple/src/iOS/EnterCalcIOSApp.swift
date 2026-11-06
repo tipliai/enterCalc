@@ -331,7 +331,8 @@ struct EnterCalcIOSApp: App {
                 } label: {
                     Label(localized("display.grow"), systemImage: "arrow.up.and.down")
                 }
-                .keyboardShortcut(.upArrow, modifiers: [.shift])
+                // Down grows the display, as if pulling its edge down (#164).
+                .keyboardShortcut(.downArrow, modifiers: [.shift])
                 .disabled(actionContext?.growDisplayArea == nil)
 
                 Button {
@@ -339,7 +340,7 @@ struct EnterCalcIOSApp: App {
                 } label: {
                     Label(localized("display.shrink"), systemImage: "arrow.up.and.down")
                 }
-                .keyboardShortcut(.downArrow, modifiers: [.shift])
+                .keyboardShortcut(.upArrow, modifiers: [.shift])
                 .disabled(actionContext?.shrinkDisplayArea == nil)
 
                 Divider()
@@ -1227,6 +1228,10 @@ private extension EnterCalcIOSView {
                 return true
             }
             switch chars.lowercased() {
+            case ",":
+                // ⌘, opens Settings, as on the Mac (#164).
+                showSettingsSheet = true
+                return true
             case "c":
                 // Handled here as well as in the menu, because this capture
                 // view sees hardware-keyboard events first — the same reason
@@ -1267,10 +1272,11 @@ private extension EnterCalcIOSView {
             case .keyboardRightArrow:
                 goToNextScreenFromKeyboard()
                 return true
-            case .keyboardUpArrow:
+            case .keyboardDownArrow:
+                // Down grows the display, as on the Mac (#164).
                 adjustDisplayHeightFromKeyboard(byPoints: Self.keyboardDisplayResizeStep)
                 return true
-            case .keyboardDownArrow:
+            case .keyboardUpArrow:
                 adjustDisplayHeightFromKeyboard(byPoints: -Self.keyboardDisplayResizeStep)
                 return true
             default:

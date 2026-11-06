@@ -117,6 +117,9 @@ struct CalculatorWindowView: View {
     /// This window's number among the open calculator windows, for VoiceOver
     /// (#145): "Window 2".
     @State private var windowOrdinal: Int?
+    /// Tab has moved keyboard focus onto a control, until typing or closing a
+    /// pane hands it back to the calculator (#164).
+    @State private var isTabNavigating = false
     @State private var windowAnnouncedAt: Date?
     /// Live hold-and-drag reassignment of a configurable key, if one is running.
     @State private var functionChooser: FunctionKeyChooserSession? = nil
@@ -603,9 +606,11 @@ struct CalculatorWindowView: View {
                 hovering ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
             }
             .onTapGesture { toggleSettingsOverlay() }
-            // Tab stays in the open pane (#145): controls outside it stay
-            // clickable but leave the keyboard's focus order.
-            .focusable(!isKeypadCovered)
+            // Tab reaches the gear and Space opens Settings (#164); its menu
+            // stays on the right-click. Out of the Tab order while a pane is
+            // open (#145).
+            .keyboardPressable(cornerRadius: 4) { toggleSettingsOverlay() }
+            .keyboardNavigable(!isKeypadCovered)
 
             Spacer()
 
@@ -619,7 +624,7 @@ struct CalculatorWindowView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                     .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(KeyboardPlainButtonStyle(cornerRadius: 4))
             .foregroundStyle(primaryForeground)
             .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
             .onHover { hovering in
@@ -629,7 +634,7 @@ struct CalculatorWindowView: View {
             .help(macLocalized("history.toggle", bundle: currentLocalizationBundle))
             // Tab stays in the open pane (#145): controls outside it stay
             // clickable but leave the keyboard's focus order.
-            .focusable(!isKeypadCovered)
+            .keyboardNavigable(!isKeypadCovered)
             .accessibilityLabel(Text(macLocalized("history.toggle", bundle: currentLocalizationBundle)))
 
             Button {
@@ -645,7 +650,7 @@ struct CalculatorWindowView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                     .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(KeyboardPlainButtonStyle(cornerRadius: 4))
             .foregroundStyle(primaryForeground)
             .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
             .onHover { hovering in
@@ -655,7 +660,7 @@ struct CalculatorWindowView: View {
             .help(macLocalized("window.new", bundle: currentLocalizationBundle))
             // Tab stays in the open pane (#145): controls outside it stay
             // clickable but leave the keyboard's focus order.
-            .focusable(!isKeypadCovered)
+            .keyboardNavigable(!isKeypadCovered)
             .accessibilityLabel(Text(macLocalized("window.new", bundle: currentLocalizationBundle)))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1015,8 +1020,14 @@ struct CalculatorWindowView: View {
         .accessibilityLabel(Text(macLocalized("calculator.mode.menu", bundle: currentLocalizationBundle)))
         .accessibilityValue(Text(macLocalized(current.localizationKey, bundle: currentLocalizationBundle)))
         .accessibilityHint(Text(macLocalized("calculator.mode.picker.hint", bundle: currentLocalizationBundle)))
-        // Out of the keyboard's focus order while a pane is open (#145).
-        .focusable(!isKeypadCovered)
+        // Space moves to the next mode (#164); a menu cannot be opened from
+        // the keyboard here. Out of the Tab order while a pane is open (#145).
+        .keyboardPressable(cornerRadius: 4) {
+            let modes = CalculatorMode.allCases
+            let index = modes.firstIndex(of: current) ?? 0
+            selectMode(modes[(index + 1) % modes.count])
+        }
+        .keyboardNavigable(!isKeypadCovered)
     }
 
     /// Says which window this is and what it shows when it comes to the
@@ -1529,7 +1540,7 @@ struct CalculatorWindowView: View {
                 .background(historyCloseHover ? palette.headerHover : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(KeyboardPlainButtonStyle(cornerRadius: 7, borderless: true))
         .foregroundStyle(palette.textSecondary)
         .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         .help(macLocalized("close", bundle: currentLocalizationBundle))
@@ -1565,7 +1576,7 @@ struct CalculatorWindowView: View {
                 .background(historyTrashHover ? palette.headerHover : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(KeyboardPlainButtonStyle(cornerRadius: 7, borderless: true))
         .foregroundStyle(palette.textSecondary)
         .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         .help(macLocalized("history.clear", bundle: currentLocalizationBundle))
@@ -1900,10 +1911,10 @@ struct CalculatorWindowView: View {
                         )
                 )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(KeyboardPlainButtonStyle(cornerRadius: 4))
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
         // Out of the keyboard's focus order while a pane is open (#145).
-        .focusable(!isKeypadCovered)
+        .keyboardNavigable(!isKeypadCovered)
     }
 
     private func roundingOverlay() -> some View {
@@ -2166,10 +2177,7 @@ struct CalculatorWindowView: View {
             closeActiveOverlay()
         }
         // Typing goes back to the calculator.
-        if let window = windowReference,
-           let catcher = window.contentView?.firstDescendant(ofType: KeyCatcherView.self) {
-            window.makeFirstResponder(catcher)
-        }
+        returnFocusToCalculator()
     }
 
     private func closeActiveOverlay() {
@@ -2205,6 +2213,20 @@ struct CalculatorWindowView: View {
         // Tab and Shift-Tab always go to the window, which moves keyboard
         // focus between controls, in a pane or on the calculator (#145).
         if event.keyCode == 48 {
+            isTabNavigating = true
+            // From the calculator's key catcher, which sits outside SwiftUI's
+            // controls, Tab is handed to the window's key-view loop, which
+            // leads into them (#164). Between controls SwiftUI moves it.
+            if let window = windowReference, window.firstResponder is KeyCatcherView {
+                window.autorecalculatesKeyViewLoop = true
+                if event.modifierFlags.contains(.shift) {
+                    window.selectPreviousKeyView(nil)
+                } else {
+                    window.selectNextKeyView(nil)
+                }
+                DebugLog.emit("FOCUS", "tab moved focus from the catcher to \(String(describing: window.firstResponder))")
+                return true
+            }
             return false
         }
 
@@ -2216,9 +2238,11 @@ struct CalculatorWindowView: View {
             return false
         }
 
-        // A history row with keyboard focus takes Space, which reuses its
-        // result. Return is always =, never a button.
-        if MacHistoryRowFocus.isFocused(in: windowReference), event.keyCode == 49 {
+        // A control Tab has moved to, or a history row, takes Space, which
+        // presses it (#164). Return is always =, never a button.
+        if MacHistoryRowFocus.isFocused(in: windowReference) || isControlFocused,
+           event.keyCode == 49,
+           event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty {
             return false
         }
 
@@ -2236,8 +2260,33 @@ struct CalculatorWindowView: View {
         let handled = handleKey(event)
         if handled {
             speakKeyPress(word)
+            // Typing, or a key that closed the pane (Escape, Delete), hands
+            // keyboard focus back to the calculator: the focus ring leaves the
+            // control Tab had moved to, and Return is = again (#164).
+            // A key used inside an open pane (the arrows) leaves focus there.
+            if isTabNavigating, activeOverlay == nil, functionChooser == nil {
+                returnFocusToCalculator()
+            }
         }
         return handled
+    }
+
+    /// Hands keyboard focus back to the calculator's key catcher.
+    private func returnFocusToCalculator() {
+        isTabNavigating = false
+        if let window = windowReference,
+           let catcher = window.contentView?.firstDescendant(ofType: KeyCatcherView.self) {
+            window.makeFirstResponder(catcher)
+        }
+    }
+
+    /// Keyboard focus is on one of the window's controls, put there by Tab,
+    /// rather than on the calculator's own key catcher.
+    private var isControlFocused: Bool {
+        guard isTabNavigating,
+              let window = windowReference,
+              let responder = window.firstResponder as? NSView else { return false }
+        return !(responder is KeyCatcherView)
     }
 
     private func spokenWord(for event: NSEvent) -> String? {
@@ -2345,6 +2394,10 @@ struct CalculatorWindowView: View {
                 return true
             }
             switch chars.lowercased() {
+            case ",":
+                // ⌘, opens Settings, as in every Mac app (#164).
+                toggleSettingsOverlay()
+                return true
             case "c":
                 // The monitor sees events before the menus do, so the Copy
                 // Operation menu item's ⇧⌘C would never reach it — the same
@@ -2766,7 +2819,7 @@ private struct CompactActionButton: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .contentShape(keyShape)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(KeyboardPlainButtonStyle())
                 .accessibilityLabel(Text(accessibilityLabel))
                 .accessibilityHint(isConfigurable ? Text(holdHint) : Text(""))
                 .accessibilityActions {
@@ -2878,7 +2931,7 @@ private struct CompactActionButton: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .contentShape(keyShape)
             }
-            .buttonStyle(PlainButtonStyle())
+            .buttonStyle(KeyboardPlainButtonStyle())
             .accessibilityLabel(Text(accessibilityLabelOverride ?? title))
             .accessibilityHint(slot == nil ? Text("") : Text(holdHint))
             .accessibilityActions {
@@ -3196,7 +3249,7 @@ private struct HistoryPanel: View {
                             .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                             .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(KeyboardPlainButtonStyle(cornerRadius: 7, borderless: true))
                     .foregroundStyle(primaryForeground)
                     .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                     .onHover { hovering in
@@ -3482,7 +3535,7 @@ private struct SettingsSheet: View {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: settingsBodySize))
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(KeyboardPlainButtonStyle(cornerRadius: 7, borderless: true))
                 .foregroundStyle(.secondary)
                 .accessibilityLabel(Text(macLocalized("settings.close", bundle: localizationBundle)))
             }
@@ -3501,6 +3554,9 @@ private struct SettingsSheet: View {
                         .pickerStyle(.menu)
                         .font(.system(size: settingsBodySize))
                         .id(selectedLanguage) // force refresh of localized labels on change
+                        // Tab reaches each control here and Space changes it
+                        // (#164): a menu steps to its next option.
+                        .keyboardPressable { selectedTheme = nextOption(after: selectedTheme, in: AppTheme.allCases) }
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
@@ -3511,6 +3567,7 @@ private struct SettingsSheet: View {
                         }
                         .pickerStyle(.menu)
                         .font(.system(size: settingsBodySize))
+                        .keyboardPressable { selectedLanguage = nextOption(after: selectedLanguage, in: availableLanguages.map(\.code)) }
 
                         Picker(macLocalized("settings.currency.symbol", bundle: localizationBundle), selection: $selectedCurrencySymbol) {
                             ForEach(CurrencyCatalog.all) { option in
@@ -3519,6 +3576,7 @@ private struct SettingsSheet: View {
                         }
                         .pickerStyle(.menu)
                         .font(.system(size: settingsBodySize))
+                        .keyboardPressable { selectedCurrencySymbol = nextOption(after: selectedCurrencySymbol, in: CurrencyCatalog.all.map(\.symbol)) }
 
                         Picker(macLocalized("settings.numberFormat.style", bundle: localizationBundle), selection: $selectedNumberFormat) {
                             ForEach(NumberFormatStyle.allCases, id: \.self) { style in
@@ -3527,6 +3585,7 @@ private struct SettingsSheet: View {
                         }
                         .pickerStyle(.menu)
                         .font(.system(size: settingsBodySize))
+                        .keyboardPressable { selectedNumberFormat = nextOption(after: selectedNumberFormat, in: NumberFormatStyle.allCases) }
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
@@ -3534,6 +3593,7 @@ private struct SettingsSheet: View {
                             .font(.system(size: settingsSectionSize))
                         Toggle(macLocalized("settings.textSize.useSystem", bundle: localizationBundle), isOn: usesSystemTextSize)
                             .font(.system(size: settingsBodySize))
+                            .keyboardPressable { usesSystemTextSize.wrappedValue.toggle() }
 
                         if !textSizePreference.followsSystem {
                             LabeledContent(
@@ -3554,6 +3614,12 @@ private struct SettingsSheet: View {
                                 .tint(sliderAccent)
                                 .accessibilityLabel(Text(macLocalized("settings.textSize", bundle: localizationBundle)))
                                 .accessibilityValue(Text(macLocalized(textSizePreference.localizationKey, bundle: localizationBundle)))
+                                .keyboardAdjustable(
+                                    decrement: { textSizeIndex.wrappedValue = max(0, textSizeIndex.wrappedValue - 1) },
+                                    increment: {
+                                        textSizeIndex.wrappedValue = min(Double(TextSizePreference.sizes.count - 1), textSizeIndex.wrappedValue + 1)
+                                    }
+                                )
                                 Image(systemName: "textformat.size.larger")
                                     .accessibilityHidden(true)
                             }
@@ -3561,12 +3627,15 @@ private struct SettingsSheet: View {
                         }
                         Toggle(macLocalized("settings.numberFormat.scientific", bundle: localizationBundle), isOn: $usesScientificNotation)
                             .font(.system(size: settingsBodySize))
+                            .keyboardPressable { usesScientificNotation.toggle() }
                         Toggle(macLocalized("settings.buttonSound.disabled", bundle: localizationBundle), isOn: $disablesButtonSound)
                             .font(.system(size: settingsBodySize))
+                            .keyboardPressable { disablesButtonSound.toggle() }
                         // The Mac opens rounding with Down Arrow, not a swipe (#154). The
                         // stored setting is shared, so the key name keeps "SwipeDown".
                         Toggle(macLocalized("settings.rounding.disablePressDown", bundle: localizationBundle), isOn: $disablesSwipeDownToRound)
                             .font(.system(size: settingsBodySize))
+                            .keyboardPressable { disablesSwipeDownToRound.toggle() }
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
@@ -3586,6 +3655,7 @@ private struct SettingsSheet: View {
                             )
                             .font(.system(size: settingsBodySize))
                             .tint(accent)
+                            .keyboardPressable(cornerRadius: 3) { NSWorkspace.shared.open(SupportLinks.supportURL) }
                         }
                     }
                 }
@@ -3775,7 +3845,7 @@ private struct MacRoundingPanel: View {
                 .background(isCloseHovering ? palette.headerHover : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(KeyboardPlainButtonStyle(cornerRadius: 7, borderless: true))
         .foregroundStyle(palette.textSecondary)
         .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         .help(macLocalized("close", bundle: localizationBundle))
@@ -3794,7 +3864,7 @@ private struct MacRoundingPanel: View {
                 .background(isTrashHovering ? palette.headerHover : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(KeyboardPlainButtonStyle(cornerRadius: 7, borderless: true))
         .foregroundStyle(palette.textSecondary)
         .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         .help(macLocalized("rounding.remove", bundle: localizationBundle))

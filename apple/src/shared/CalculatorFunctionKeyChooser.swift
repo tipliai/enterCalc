@@ -289,7 +289,7 @@ public struct CalculatorFunctionKeyChooser: View {
                 .background(isHovering.wrappedValue ? palette.headerHover : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(KeyboardPlainButtonStyle(cornerRadius: 7, borderless: true))
         .foregroundStyle(palette.textSecondary)
         .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         .help(label)
@@ -325,7 +325,7 @@ public struct CalculatorFunctionKeyChooser: View {
             .frame(width: Self.cellSize, height: Self.cellSize)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(KeyboardPlainButtonStyle(cornerRadius: 12))
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(isHighlighted ? palette.foregroundAccent.opacity(0.28) : palette.buttonFunction)

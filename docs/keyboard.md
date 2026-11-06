@@ -24,8 +24,8 @@ Sources:
 | Right Arrow | Move display caret right (activates direct edit if possible) | Move display caret right | Increase rounding precision step | Suppressed |
 | Down Arrow | Open rounding overlay (unless turned off in Settings) | Open rounding overlay (unless turned off in Settings) | No-op (consumed) | Suppressed |
 | Up Arrow | No mapped action | No mapped action | Close rounding overlay | Suppressed |
-| Shift + Up Arrow | Increase display size (20pt) | Increase display size | Increase display size | Increase display size |
-| Shift + Down Arrow | Decrease display size (20pt) | Decrease display size | Decrease display size | Decrease display size |
+| Shift + Down Arrow | Increase display size (20pt) | Increase display size | Increase display size | Increase display size |
+| Shift + Up Arrow | Decrease display size (20pt) | Decrease display size | Decrease display size | Decrease display size |
 | Shift + Left Arrow | iPad: go to the page on the **left** | Same | Same | Same |
 | Shift + Right Arrow | iPad: go to the page on the **right** | Same | Same | Same |
 | Escape | Clear all | Exit direct edit | Close overlay (rounding stays) | Close overlay |
@@ -65,7 +65,7 @@ Which symbol the key applies is chosen in Settings. It defaults to the device re
 
 ### Resizing the display (macOS)
 
-The split between the display and the keypad can be dragged, which leaves it unreachable without a pointer. **Shift + Up/Down Arrow** moves it in 20-point steps, within the same limits the drag handle respects, and stops at either end rather than wrapping.
+The split between the display and the keypad can be dragged, which leaves it unreachable without a pointer. **Shift + Down Arrow** makes the display bigger and **Shift + Up Arrow** smaller, as if pulling its lower edge (#164). Each press moves it 20 points, within the same limits the drag handle respects, and stops at either end rather than wrapping.
 
 These are menu commands under **View → Increase / Decrease Display Size**, not just key bindings, so they are discoverable and reachable by VoiceOver. The menu owns the shortcut: the app's key monitor deliberately ignores Shift + Up/Down so a single press applies a single step, and so Shift + Down does not open the rounding overlay the way a bare Down Arrow does.
 
@@ -107,3 +107,14 @@ Investigated for #83 and deliberately **not** implemented. macOS already cycles 
 - History overlay has highest keyboard suppression behavior for calculator input.
 - Rounding overlay handles its own close/remove/adjust keys before base key routing.
 - Insert only enters direct edit when no overlay is active.
+
+## Tab and Space (#164)
+
+Every control can be reached from the keyboard, on the Mac and on iPhone and iPad with a keyboard:
+
+- **Tab / Shift + Tab** move between controls. While a pane is open, they stay inside it. The focused control shows a focus ring.
+- **Space** presses the focused control: a key, a pane button, a history row, a Settings checkbox. On a pop-up menu (the mode, or a Settings choice) it steps to the next option.
+- **Return** is never a button press. It is =, closes the Rounding, VAT and Tip panes, chooses the highlighted action in the Edit Action chooser, and does nothing in History and Settings.
+- **⌘,** opens Settings.
+
+On the Mac this works whatever the system's Keyboard navigation setting. On iPhone and iPad, Tab and Space come from **Full Keyboard Access** (Settings → Accessibility → Keyboards), which each person turns on themselves; EnterCalc's keys are the same either way.
