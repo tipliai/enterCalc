@@ -793,6 +793,11 @@ struct EnterCalcIOSView: View {
                     onClose: { dismissFunctionChooser() },
                     onReset: { resetFunctionKeys() }
                 )
+                // The Duo's fold layouts keep the chooser on the calculator's
+                // side of the fold: the right half in book, the bottom half
+                // in top/bottom, which it fits in either way (#132).
+                .padding(.leading, metrics.foldPosture == .book ? metrics.foldCalculatorMinX : 0)
+                .padding(.top, metrics.foldPosture == .tabletop ? metrics.foldLayoutY + IOSLayoutMetrics.foldGap / 2 : 0)
             }
             // While the press that opened it is still down, the chooser must
             // not take that touch: appearing under the finger, it left the
@@ -833,6 +838,11 @@ struct EnterCalcIOSView: View {
                     // leave the calculator alone.
                     .disabled(isCalculatorCovered(metrics: metrics))
                     .accessibilityHidden(isCalculatorCovered(metrics: metrics))
+                    // Folding or unfolding the Duo need not turn the device,
+                    // so no orientation event follows it (#132).
+                    .onChange(of: metrics.foldPosture) { _, _ in
+                        syncPhoneUpsideDownPresentation()
+                    }
 
                 if showsOverlayScrim(metrics: metrics) {
                     overlayScrim(metrics: metrics)
@@ -1834,9 +1844,11 @@ private extension EnterCalcIOSView {
         // upside down included, so it is left to the system. Asking it for an
         // orientation there locks the screen, and the device's orientation
         // events can arrive late, so acting on one leaves it in the wrong
-        // posture. The one request made here releases any orientation the
-        // front display asked for before the Duo was opened. The folded front
-        // display is an iPhone screen and keeps the handling below.
+        // posture. The one request made here is a release, not a lock: an
+        // orientation the front display asked for stays with the scene, even
+        // across a relaunch, and without this the inner display stops turning
+        // (checked on the iPhone Duo simulator, #132). The folded front display
+        // is an iPhone screen and keeps the handling below.
         if let bounds = activeWindowScene?.windows.first?.bounds, min(bounds.width, bounds.height) >= 600 {
             if counterRotatesForUpsideDownPortrait {
                 counterRotatesForUpsideDownPortrait = false
@@ -2334,10 +2346,12 @@ private extension EnterCalcIOSView {
     @ViewBuilder
     func landscapeHistoryClearButton(
         metrics: IOSLayoutMetrics,
-        screen: CalculatorScreenSession
+        screen: CalculatorScreenSession,
+        buttonSize: CGFloat? = nil,
+        iconSize: CGFloat? = nil
     ) -> some View {
-        let buttonSize = metrics.mode == .padWide ? metrics.headerButtonSize * 0.5 + 7 : metrics.headerButtonSize + 4
-        let iconSize = metrics.headerIconFontSize + 2
+        let buttonSize = buttonSize ?? (metrics.mode == .padWide ? metrics.headerButtonSize * 0.5 + 7 : metrics.headerButtonSize + 4)
+        let iconSize = iconSize ?? metrics.headerIconFontSize + 2
 
         Button {
             triggerHistoryClearFeedback(for: screen)
@@ -2465,9 +2479,29 @@ private extension EnterCalcIOSView {
                         // left half, and the right half is the calculator just
                         // as on the folded front display.
                         HStack(spacing: IOSLayoutMetrics.foldGap) {
-                            landscapeHistoryPane(metrics: metrics, screen: screen)
-                                .frame(width: metrics.historyPanelWidth)
-                                .frame(maxHeight: .infinity)
+                            // History has no rail beside it here, so its trash
+                            // sits in a header row level with the calculator's,
+                            // styled like the gear and New Screen buttons.
+                            VStack(spacing: metrics.sectionSpacing) {
+                                HStack(alignment: .top, spacing: 0) {
+                                    if !screen.viewModel.history.isEmpty {
+                                        landscapeHistoryClearButton(
+                                            metrics: metrics,
+                                            screen: screen,
+                                            buttonSize: metrics.headerButtonSize,
+                                            iconSize: metrics.headerIconFontSize
+                                        )
+                                    }
+                                    Spacer(minLength: 0)
+                                }
+                                .frame(height: metrics.headerHeight, alignment: .top)
+
+                                landscapeHistoryPane(metrics: metrics, screen: screen)
+                                    .frame(maxHeight: .infinity)
+                            }
+                            .padding(.top, metrics.contentTopPadding)
+                            .frame(width: metrics.historyPanelWidth)
+                            .frame(maxHeight: .infinity)
 
                             calculatorSurface(metrics: metrics, screen: screen, paginationBottomInset: paginationBottomInset)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -4849,14 +4883,6 @@ private struct IOSHistoryPanel: View {
         VStack(alignment: .leading, spacing: metrics.panelSpacing) {
             if let onResizeChanged {
                 historyOverlayHeader(onResizeChanged: onResizeChanged)
-            } else if metrics.foldPosture == .book && !entries.isEmpty {
-                // Book: no rail beside the history, so its trash sits at the
-                // top of the history half, where the pane keeps it (#132).
-                HStack(spacing: 0) {
-                    floatingHistoryActionButton
-                    Spacer(minLength: 0)
-                }
-                .frame(height: max(metrics.headerButtonSize, 44))
             }
 
             if entries.isEmpty {
