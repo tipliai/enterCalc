@@ -417,6 +417,9 @@ struct EnterCalcIOSView: View {
     @State private var sessionTipRate: Decimal?
     @State private var vatRemovesTax: Bool = false
     @State private var counterRotatesForUpsideDownPortrait: Bool = false
+    /// The iPhone Duo's inner display asked the scene for an orientation,
+    /// which the front display has to give back (#169).
+    @State private var holdsInnerDisplayOrientation: Bool = false
     @State private var flashCopy: Bool = false
     @State private var showCopyToast: Bool = false
     @State private var copyToastDismissWorkItem: DispatchWorkItem?
@@ -1840,32 +1843,43 @@ private extension EnterCalcIOSView {
         let activeWindowScene = windowScenes.first(where: { $0.activationState == .foregroundActive }) ?? windowScenes.first
         let interfaceIsPortrait = activeWindowScene?.effectiveGeometry.interfaceOrientation.isPortrait ?? true
 
-        // The iPhone Duo's inner display (#132) rotates every way by itself,
-        // upside down included, so it is left to the system. Asking it for an
-        // orientation there locks the screen, and the device's orientation
-        // events can arrive late, so acting on one leaves it in the wrong
-        // posture. The one request made here is a release, not a lock: an
-        // orientation the front display asked for stays with the scene, even
-        // across a relaunch, and without this the inner display stops turning
-        // (checked on the iPhone Duo simulator, #132). The folded front display
-        // is an iPhone screen and keeps the handling below.
+        // The iPhone Duo's inner display (#132, #169). Its device orientation
+        // is read in the folded phone's frame, a quarter turn from the inner
+        // display: open in book position it reports portrait or upside down,
+        // and in top/bottom position it reports landscape. The interface
+        // orientation is asked for outright from each reading, because a
+        // request made for the front display stays with the scene otherwise,
+        // even across a relaunch, and the display stops turning. Upside-down
+        // portrait is refused by the view controller (an iPhone's), so that
+        // top/bottom position gets portrait and turns its content round, as
+        // the iPhone does. The folded front display is an iPhone screen and
+        // keeps the handling below.
         if let bounds = activeWindowScene?.windows.first?.bounds, min(bounds.width, bounds.height) >= 600 {
-            if counterRotatesForUpsideDownPortrait {
-                counterRotatesForUpsideDownPortrait = false
+            let orientations: UIInterfaceOrientationMask
+            switch UIDevice.current.orientation {
+            case .portraitUpsideDown: orientations = .landscapeRight
+            case .portrait: orientations = .landscapeLeft
+            case .landscapeLeft, .landscapeRight: orientations = .portrait
+            default: orientations = .all
             }
-            activeWindowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: .allButUpsideDown)) { _ in }
+            counterRotatesForUpsideDownPortrait = UIDevice.current.orientation == .landscapeRight
+            holdsInnerDisplayOrientation = true
+            activeWindowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: orientations)) { _ in }
             return
         }
 
         switch UIDevice.current.orientation {
         case .portraitUpsideDown where !atLaunch || interfaceIsPortrait:
             counterRotatesForUpsideDownPortrait = true
+            holdsInnerDisplayOrientation = false
             activeWindowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait)) { _ in }
         case .portrait, .landscapeLeft, .landscapeRight:
-            // Upside down asked for portrait, and that request holds. Ask for
+            // Upside down asked for portrait, and that request holds, as does
+            // one the Duo's inner display made before it was folded. Ask for
             // the orientation the device is in now, which turns the screen,
             // then give rotation back to the system once it has turned.
-            if counterRotatesForUpsideDownPortrait {
+            if counterRotatesForUpsideDownPortrait || holdsInnerDisplayOrientation {
+                holdsInnerDisplayOrientation = false
                 let current: UIInterfaceOrientationMask
                 switch UIDevice.current.orientation {
                 case .landscapeLeft: current = .landscapeRight
