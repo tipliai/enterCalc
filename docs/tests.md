@@ -35,6 +35,7 @@ Current verification status on macOS:
   - **Announcements:** results, errors and AC's "Cleared" are announced, and typing isn't. Action keys announce what they did and what is shown. Screens and windows are announced with their number and value.
   - **Keyboard steps:** the Tip slider's arrow keys step 2% notches and stop at the ends. The Edit Action chooser's arrows start from the key's current action and stop at the grid's edges.
   - **Languages:** every VoiceOver string exists in all seven languages.
+- `apple/tests/KeyboardNavigationTests.swift` — keyboard navigation (#164): Space on a pop-up menu reached with Tab steps to the next option and wraps round, so every mode and Settings choice can be reached from the keyboard.
 - `apple/tests/SupportLinksTests.swift` — pins the support page URL used by the Feedback link.
 - `apple/tests/CalculatorPagerGestureIntentTests.swift` — how deliberate a swipe has to be before it counts as page navigation (#83). Covers the case the issue reports — a finger sliding a few points while pressing a key must not page — alongside the opposite one, that an ordinary swipe still does. Also pins the relationship the feel depends on: paging engages *above* the 8pt at which a keypad key gives up on its own tap, so the two thresholds bound a deliberate dead band rather than overlapping, and the axis threshold stays reachable given the minimum drag distance.
 

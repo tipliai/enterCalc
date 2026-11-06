@@ -97,7 +97,7 @@ private struct CurrencyToolChrome<Content: View>: View {
                 .background(isHovering.wrappedValue ? palette.headerHover : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(KeyboardPlainButtonStyle(cornerRadius: 7, borderless: true))
         .foregroundStyle(palette.textSecondary)
         .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         .help(label)
@@ -113,7 +113,7 @@ private struct CurrencyToolChrome<Content: View>: View {
         }
         .frame(width: headerButtonTarget, height: headerButtonTarget, alignment: .center)
         .contentShape(Rectangle())
-        .buttonStyle(.plain)
+        .buttonStyle(KeyboardPlainButtonStyle())
         .accessibilityLabel(Text(label))
         #endif
     }
@@ -307,7 +307,7 @@ private struct RateChooser: View {
                 )
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(KeyboardPlainButtonStyle())
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.45).onEnded { _ in
                 heldSlot = slot
@@ -396,7 +396,7 @@ private struct StepperControl: View {
                     .padding(.vertical, 6)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(KeyboardPlainButtonStyle())
             .accessibilityLabel(Text(value))
             .accessibilityHint(Text(valueActionLabel ?? ""))
         } else {
@@ -412,7 +412,7 @@ private struct StepperControl: View {
                 .frame(width: PaneTextScale.grown(34, by: textScale), height: PaneTextScale.grown(30, by: textScale))
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(KeyboardPlainButtonStyle())
         .accessibilityLabel(Text(label))
     }
 }
@@ -619,7 +619,7 @@ public struct CurrencyVATPanel: View {
                 .padding(.vertical, 8)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(KeyboardPlainButtonStyle())
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(isSelected ? AnyShapeStyle(palette.accentGradient) : AnyShapeStyle(palette.buttonFunction))

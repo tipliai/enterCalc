@@ -131,14 +131,15 @@ struct EnterCalcMacApp: App {
                 } label: {
                     Label(localized("display.grow"), systemImage: "arrow.up.and.down")
                 }
-                .keyboardShortcut(.upArrow, modifiers: [.shift])
+                // Down grows the display, as if pulling its edge down (#164).
+                .keyboardShortcut(.downArrow, modifiers: [.shift])
 
                 Button {
                     NotificationCenter.default.post(name: .enterCalcShrinkDisplayArea, object: nil)
                 } label: {
                     Label(localized("display.shrink"), systemImage: "arrow.up.and.down")
                 }
-                .keyboardShortcut(.downArrow, modifiers: [.shift])
+                .keyboardShortcut(.upArrow, modifiers: [.shift])
 
                 Divider()
 

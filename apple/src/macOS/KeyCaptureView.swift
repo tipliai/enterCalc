@@ -28,7 +28,9 @@ final class KeyCatcherView: NSView {
     private var observers: [Any] = []
 
     override var acceptsFirstResponder: Bool { true }
-    override var canBecomeKeyView: Bool { true }
+    // Typing reaches it as first responder, but it is not a stop in the
+    // Tab order: it has nothing to show a focus ring on (#164).
+    override var canBecomeKeyView: Bool { false }
     override func hitTest(_ point: NSPoint) -> NSView? { nil } // never intercept mouse events
 
     override func viewDidMoveToWindow() {
