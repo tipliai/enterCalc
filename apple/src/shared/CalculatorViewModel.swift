@@ -642,7 +642,12 @@ public final class CalculatorViewModel: ObservableObject {
 
     // Full reset to the initial state (AC). Rounding and currency context are
     // cleared too, since they belong to the prior calculation.
+    /// How many times AC has cleared everything, so VoiceOver can say
+    /// "Cleared" whatever was on screen (#145).
+    @Published public private(set) var allClearCount = 0
+
     public func clearAll() {
+        allClearCount += 1
         let snapshot = beginUndoableChange()
         resetAllStateForClearAll()
         updateDisplay()
@@ -3132,10 +3137,32 @@ public final class CalculatorViewModel: ObservableObject {
     private func format(_ value: Decimal) -> String {
         if value == 0 { return "0" }
         let roundedDecimal = formatter.string(from: NSDecimalNumber(decimal: value)) ?? decimalNumberString(from: value)
+        let text: String
         if shouldUseScientificNotation(for: roundedDecimal) {
-            return scientificString(fromRoundedDecimal: roundedDecimal)
+            text = scientificString(fromRoundedDecimal: roundedDecimal)
+        } else {
+            text = groupedNumberString(roundedDecimal)
         }
-        return groupedNumberString(roundedDecimal)
+        noteFormatted(text, roundedFrom: Decimal(string: roundedDecimal, locale: Locale(identifier: "en_US_POSIX")) != value)
+        return text
+    }
+
+    /// The last number this model formatted that had to be rounded to fit the
+    /// display's 16 digits, as a result like 28 ÷ 3 does (#145).
+    private var lastRoundedFormat: String?
+
+    private func noteFormatted(_ text: String, roundedFrom wasRounded: Bool) {
+        if wasRounded {
+            lastRoundedFormat = text
+        }
+    }
+
+    /// The display shows a result rounded to fit, not an exact number. Only
+    /// then can a run of one digit be read as "repeating": a typed
+    /// 1.222222222222222 is exactly that (#145).
+    public var isDisplayRoundedResult: Bool {
+        guard !isErrorState, let lastRoundedFormat else { return false }
+        return currentInput == lastRoundedFormat
     }
 
     private func format(_ value: Double) -> String {
@@ -3143,10 +3170,14 @@ public final class CalculatorViewModel: ObservableObject {
         if value.isInfinite { return "∞" }
         if abs(value) < pow(10, Double(-Limits.maxInputDigits)) { return "0" }
         let roundedDecimal = formatter.string(from: NSNumber(value: value)) ?? "\(value)"
+        let text: String
         if shouldUseScientificNotation(for: roundedDecimal) {
-            return scientificString(fromRoundedDecimal: roundedDecimal)
+            text = scientificString(fromRoundedDecimal: roundedDecimal)
+        } else {
+            text = groupedNumberString(roundedDecimal)
         }
-        return groupedNumberString(roundedDecimal)
+        noteFormatted(text, roundedFrom: Double(roundedDecimal) != value)
+        return text
     }
 
     private func resetStateForNewEntry() {

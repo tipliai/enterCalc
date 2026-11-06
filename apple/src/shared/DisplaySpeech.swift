@@ -22,19 +22,28 @@ public enum DisplaySpeech {
         public var completedCalculations: Int
         /// The decimal separator the display uses ("." or ",").
         public var decimalSeparator: String
+        /// The display is a result rounded to fit its 16 digits, so a closing
+        /// run of one digit really does go on.
+        public var isRoundedResult: Bool
+        /// Bumped by AC, which is announced however little was on screen.
+        public var allClearCount: Int
 
         public init(
             display: String,
             operation: String,
             isError: Bool,
             completedCalculations: Int,
-            decimalSeparator: String = "."
+            decimalSeparator: String = ".",
+            isRoundedResult: Bool = false,
+            allClearCount: Int = 0
         ) {
             self.display = display
             self.operation = operation
             self.isError = isError
             self.completedCalculations = completedCalculations
             self.decimalSeparator = decimalSeparator
+            self.isRoundedResult = isRoundedResult
+            self.allClearCount = allClearCount
         }
     }
 
@@ -68,6 +77,7 @@ public enum DisplaySpeech {
     public static func spoken(
         _ text: String,
         decimalSeparator: String = ".",
+        isRoundedResult: Bool = false,
         localize: (String) -> String
     ) -> String {
         var pieces: [String] = []
@@ -92,7 +102,12 @@ public enum DisplaySpeech {
                 } else {
                     let keepsAmountReading = isAmount
                         && fractionDigitCount(of: current, decimalSeparator: decimalSeparator) <= maximumCentsDigits
-                    pieces.append(keepsAmountReading ? current : spokenNumber(current, decimalSeparator: decimalSeparator, localize: localize))
+                    pieces.append(keepsAmountReading ? current : spokenNumber(
+                        current,
+                        decimalSeparator: decimalSeparator,
+                        isRoundedResult: isRoundedResult,
+                        localize: localize
+                    ))
                 }
                 current = ""
             }
@@ -105,7 +120,7 @@ public enum DisplaySpeech {
             } else if character == "-", isMinusSign(at: index, in: characters) {
                 flush()
                 pieces.append(localize("a11y.operator.minus"))
-            } else if character.isWhitespace {
+            } else if character.isWhitespace, !isGroupingSpace(at: index, in: characters) {
                 flush()
             } else {
                 current.append(character)
@@ -172,7 +187,7 @@ public enum DisplaySpeech {
     /// - One in progress: "7, after 5 plus".
     /// - Nothing pending, or an error: just what the display shows.
     public static func value(for state: State, localize: (String) -> String) -> String {
-        let result = spoken(state.display, decimalSeparator: state.decimalSeparator, localize: localize)
+        let result = spokenDisplay(state, localize: localize)
         let operation = state.operation.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !state.isError, !operation.isEmpty else {
             return result
@@ -191,6 +206,16 @@ public enum DisplaySpeech {
         )
     }
 
+    /// The number on the display, as VoiceOver should say it.
+    public static func spokenDisplay(_ state: State, localize: (String) -> String) -> String {
+        spoken(
+            state.display,
+            decimalSeparator: state.decimalSeparator,
+            isRoundedResult: state.isRoundedResult,
+            localize: localize
+        )
+    }
+
     /// What to announce when the display goes from `old` to `new`, if anything.
     ///
     /// Only changes someone using VoiceOver could miss are announced: their
@@ -201,12 +226,12 @@ public enum DisplaySpeech {
         }
 
         if new.completedCalculations > old.completedCalculations, !new.isError {
-            return .result(spoken(new.display, decimalSeparator: new.decimalSeparator, localize: localize))
+            return .result(spokenDisplay(new, localize: localize))
         }
 
-        let wasShowingSomething = !old.operation.isEmpty || old.isError
-        let isEmptyNow = new.operation.isEmpty && !new.isError && isZero(new.display)
-        if wasShowingSomething, isEmptyNow {
+        // AC says "Cleared" however little was on screen; backspacing to
+        // zero is editing, not clearing.
+        if new.allClearCount > old.allClearCount {
             return .cleared
         }
 
@@ -229,9 +254,7 @@ public enum DisplaySpeech {
     /// what the display now shows, "Undo, 2 displayed", since the action's
     /// effect is otherwise silent.
     public static func actionAnnouncement(_ actionName: String, state: State, localize: (String) -> String) -> String {
-        let shown = state.isError
-            ? state.display
-            : spoken(state.display, decimalSeparator: state.decimalSeparator, localize: localize)
+        let shown = state.isError ? state.display : spokenDisplay(state, localize: localize)
         return format(localize("a11y.announce.action"), actionName, shown)
     }
 
@@ -244,9 +267,7 @@ public enum DisplaySpeech {
         state: State,
         localize: (String) -> String
     ) -> String {
-        let shown = state.isError
-            ? state.display
-            : spoken(state.display, decimalSeparator: state.decimalSeparator, localize: localize)
+        let shown = state.isError ? state.display : spokenDisplay(state, localize: localize)
         return format(localize(isWindow ? "a11y.announce.window" : "a11y.announce.screen"), String(number), shown)
     }
 
@@ -312,7 +333,12 @@ public enum DisplaySpeech {
     /// Anything that is not a decimal is returned unchanged. (`spoken` leaves
     /// amounts with a currency symbol alone, so "$9.50" stays dollars and
     /// cents.)
-    static func spokenNumber(_ token: String, decimalSeparator: String, localize: (String) -> String) -> String {
+    static func spokenNumber(
+        _ token: String,
+        decimalSeparator: String,
+        isRoundedResult: Bool = false,
+        localize: (String) -> String
+    ) -> String {
         guard let separator = decimalSeparator.first,
               let separatorIndex = token.lastIndex(of: separator) else {
             return token
@@ -328,7 +354,7 @@ public enum DisplaySpeech {
 
         var words = [String(whole), localize("a11y.key.point")]
         let fillsDisplayPrecision = significantDigitCount(whole: whole, fraction: fraction) >= displayPrecisionDigits
-        if fillsDisplayPrecision, let runStart = repeatingRunStart(in: fraction) {
+        if isRoundedResult, fillsDisplayPrecision, let runStart = repeatingRunStart(in: fraction) {
             words += fraction[..<runStart].map(String.init)
             words += Array(repeating: String(fraction[runStart]), count: repeatedDigitReadCount)
             words.append(localize("a11y.number.repeating"))
@@ -366,11 +392,21 @@ public enum DisplaySpeech {
             digits.removeLast()
         }
         let last = digits[digits.count - 1]
+        // A run of zeros is the end of the number, not a repetition, and
+        // dropping a rounded last digit there would lose it: 1.000000000000001.
+        guard last != "0" else { return nil }
         var start = digits.count - 1
         while start > 0, digits[start - 1] == last {
             start -= 1
         }
         return digits.count - start > repeatedDigitReadCount ? start : nil
+    }
+
+    // A space between two digits groups thousands ("1 000,50" in French), so
+    // it belongs to the number rather than ending it.
+    private static func isGroupingSpace(at index: Int, in characters: [Character]) -> Bool {
+        guard index > 0, index + 1 < characters.count else { return false }
+        return characters[index - 1].isNumber && characters[index + 1].isNumber
     }
 
     // A hyphen is a minus sign when it starts a number: at the start, or after
@@ -379,11 +415,6 @@ public enum DisplaySpeech {
         guard index > 0 else { return true }
         let previous = characters[index - 1]
         return previous.isWhitespace || previous == "("
-    }
-
-    private static func isZero(_ display: String) -> Bool {
-        let digits = display.filter { $0.isNumber }
-        return !digits.isEmpty && digits.allSatisfy { $0 == "0" }
     }
 
     private static func format(_ template: String, _ arguments: String...) -> String {
@@ -399,7 +430,9 @@ extension CalculatorViewModel {
             operation: expressionDisplay,
             isError: isErrorState,
             completedCalculations: completedCalculationCount,
-            decimalSeparator: numberFormatStyle.decimalSeparator
+            decimalSeparator: numberFormatStyle.decimalSeparator,
+            isRoundedResult: isDisplayRoundedResult,
+            allClearCount: allClearCount
         )
     }
 }

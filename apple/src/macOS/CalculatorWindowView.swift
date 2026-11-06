@@ -2041,7 +2041,7 @@ struct CalculatorWindowView: View {
         let state = viewModel.displaySpeechState
         return state.isError
             ? state.display
-            : DisplaySpeech.spoken(state.display, decimalSeparator: state.decimalSeparator, localize: speechLocalize)
+            : DisplaySpeech.spokenDisplay(state, localize: speechLocalize)
     }
 
     /// Shift + Up/Down are the display-resize menu shortcuts. The local key
@@ -2184,6 +2184,13 @@ struct CalculatorWindowView: View {
         // Rounding, Escape everywhere) carry on as before.
         let isPaneOpen = activeOverlay != nil || functionChooser != nil
         if isPaneOpen, event.keyCode == 49 {
+            return false
+        }
+
+        // A history row with keyboard focus takes Return and Space, which
+        // reuse its result; otherwise Return is = or closes History.
+        if MacHistoryRowFocus.isFocused,
+           event.keyCode == 36 || event.keyCode == 76 || event.keyCode == 49 {
             return false
         }
 
@@ -3228,6 +3235,7 @@ private struct HistoryPanel: View {
 // A single history row: the operation on top, the result below. Right-click
 // offers "Copy Operation".
 private struct HistoryEntryRow: View {
+    @FocusState private var isKeyboardFocused: Bool
     let entry: HistoryEntry
     let primaryForeground: Color
     let fadedForeground: Color
@@ -3268,6 +3276,13 @@ private struct HistoryEntryRow: View {
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { onSelect() }
         .focusable()
+        .focused($isKeyboardFocused)
+        .onChange(of: isKeyboardFocused) { _, focused in
+            MacHistoryRowFocus.isFocused = focused
+        }
+        .onDisappear {
+            if isKeyboardFocused { MacHistoryRowFocus.isFocused = false }
+        }
         .onKeyPress(.return) { onSelect(); return .handled }
         .onKeyPress(.space) { onSelect(); return .handled }
         .contextMenu {
@@ -4336,4 +4351,12 @@ enum MacWindowNumbers {
         guard let number else { return }
         taken.remove(number)
     }
+}
+
+
+/// Whether a history row has keyboard focus, so the window's key monitor lets
+/// Return and Space reach it instead of treating Return as = (#145).
+@MainActor
+enum MacHistoryRowFocus {
+    static var isFocused = false
 }

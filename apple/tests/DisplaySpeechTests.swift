@@ -98,12 +98,28 @@ final class DisplaySpeechTests: XCTestCase {
         )
     }
 
+    // AC is announced from the clear itself, so it is heard even when only a
+    // blank entry was on screen (42, C, then AC).
     func testAllClearIsAnnounced() {
-        let before = state("12", "5 + 7 =", count: 4)
-        let after = state("0", count: 4)
+        var before = state("12", "5 + 7 =", count: 4)
+        var after = state("0", count: 4)
+        after.allClearCount = 1
         let announcement = DisplaySpeech.announcement(from: before, to: after, localize: localize)
         XCTAssertEqual(announcement, .cleared)
         XCTAssertEqual(DisplaySpeech.text(for: announcement!, localize: localize), "Cleared")
+
+        before = state("0")
+        after = state("0")
+        after.allClearCount = 1
+        XCTAssertEqual(DisplaySpeech.announcement(from: before, to: after, localize: localize), .cleared)
+
+        let viewModel = CalculatorViewModel()
+        viewModel.inputDigit("4")
+        viewModel.inputDigit("2")
+        viewModel.clearEntry()
+        let blank = viewModel.displaySpeechState
+        viewModel.clearAll()
+        XCTAssertEqual(DisplaySpeech.announcement(from: blank, to: viewModel.displaySpeechState, localize: localize), .cleared)
     }
 
     // Typing is already spoken by the key that was pressed; repeating it as an
@@ -119,16 +135,26 @@ final class DisplaySpeechTests: XCTestCase {
     // trillion..."; each decimal digit is read on its own instead, and a run
     // of one digit is read three times and then "repeating".
     func testRepeatingDecimalsAreReadThreeTimesThenRepeating() {
-        XCTAssertEqual(DisplaySpeech.spoken("9.333333333333333", localize: localize), "9 point 3 3 3 repeating")
-        XCTAssertEqual(DisplaySpeech.spoken("0.6666666666666667", localize: localize), "0 point 6 6 6 repeating")
-        XCTAssertEqual(DisplaySpeech.spoken("1.833333333333333", localize: localize), "1 point 8 3 3 3 repeating")
-        XCTAssertEqual(DisplaySpeech.spoken("0.1666666666666667", localize: localize), "0 point 1 6 6 6 repeating")
+        XCTAssertEqual(DisplaySpeech.spoken("9.333333333333333", isRoundedResult: true, localize: localize), "9 point 3 3 3 repeating")
+        XCTAssertEqual(DisplaySpeech.spoken("0.6666666666666667", isRoundedResult: true, localize: localize), "0 point 6 6 6 repeating")
+        XCTAssertEqual(DisplaySpeech.spoken("1.833333333333333", isRoundedResult: true, localize: localize), "1 point 8 3 3 3 repeating")
+        XCTAssertEqual(DisplaySpeech.spoken("0.1666666666666667", isRoundedResult: true, localize: localize), "0 point 1 6 6 6 repeating")
     }
 
     // "Repeating" is only for a number cut off at the display's 16 digits.
     // Anything shorter is exact, so every digit is read; so is a full-length
     // one whose last digit is not the run's, rounded or not.
     func testOnlyACutOffRunIsRepeating() {
+        // A full-length number that was typed, not rounded, is exact.
+        XCTAssertEqual(
+            DisplaySpeech.spoken("1.222222222222222", localize: localize),
+            "1 point 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2"
+        )
+        // A run of zeros never hides the digit after it.
+        XCTAssertEqual(
+            DisplaySpeech.spoken("1.000000000000001", isRoundedResult: true, localize: localize),
+            "1 point 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1"
+        )
         XCTAssertEqual(DisplaySpeech.spoken("3.2222225", localize: localize), "3 point 2 2 2 2 2 2 5")
         XCTAssertEqual(DisplaySpeech.spoken("3.2222222", localize: localize), "3 point 2 2 2 2 2 2 2")
         XCTAssertEqual(DisplaySpeech.spoken("1.8333333333", localize: localize), "1 point 8 3 3 3 3 3 3 3 3 3")
@@ -161,7 +187,7 @@ final class DisplaySpeechTests: XCTestCase {
     // as "81 dollars, 2 million...".
     func testLongCurrencyDecimalsAreReadDigitByDigit() {
         XCTAssertEqual(DisplaySpeech.spoken("$81.2154789", localize: localize), "$81 point 2 1 5 4 7 8 9")
-        XCTAssertEqual(DisplaySpeech.spoken("$3.333333333333333", localize: localize), "$3 point 3 3 3 repeating")
+        XCTAssertEqual(DisplaySpeech.spoken("$3.333333333333333", isRoundedResult: true, localize: localize), "$3 point 3 3 3 repeating")
         XCTAssertEqual(DisplaySpeech.spoken("$3.3333333", localize: localize), "$3 point 3 3 3 3 3 3 3")
     }
 
@@ -254,10 +280,21 @@ final class DisplaySpeechTests: XCTestCase {
         )
     }
 
+    // A space between digits groups thousands, as French formatting does, and
+    // stays part of the amount: €1 000,50 is not "€1" and "50 cents".
+    func testGroupingSpacesStayInTheNumber() {
+        XCTAssertEqual(
+            DisplaySpeech.spoken("€1\u{202F}000,50", decimalSeparator: ",", localize: localize),
+            "€1\u{202F}000,50"
+        )
+        XCTAssertEqual(DisplaySpeech.spoken("1 000,5", decimalSeparator: ",", localize: localize), "1 000 point 5")
+        XCTAssertEqual(DisplaySpeech.spoken("5 + 7", localize: localize), "5 plus 7")
+    }
+
     // With a comma decimal separator, dots are grouping and the comma splits.
     func testACommaDecimalSeparatorIsHonoured() {
         XCTAssertEqual(
-            DisplaySpeech.spoken("1.234,333333333333", decimalSeparator: ",", localize: localize),
+            DisplaySpeech.spoken("1.234,333333333333", decimalSeparator: ",", isRoundedResult: true, localize: localize),
             "1.234 point 3 3 3 repeating"
         )
         XCTAssertEqual(DisplaySpeech.spoken("1.234,5", decimalSeparator: ",", localize: localize), "1.234 point 5")
@@ -265,7 +302,9 @@ final class DisplaySpeechTests: XCTestCase {
 
     func testTheAnnouncedResultUsesTheSameReading() {
         let before = DisplaySpeech.State(display: "3", operation: "28 ÷", isError: false, completedCalculations: 0)
-        let after = DisplaySpeech.State(display: "9.333333333333333", operation: "28 ÷ 3 =", isError: false, completedCalculations: 1)
+        let after = DisplaySpeech.State(
+            display: "9.333333333333333", operation: "28 ÷ 3 =", isError: false, completedCalculations: 1, isRoundedResult: true
+        )
         XCTAssertEqual(
             DisplaySpeech.announcement(from: before, to: after, localize: localize),
             .result("9 point 3 3 3 repeating")
@@ -305,6 +344,32 @@ final class DisplaySpeechTests: XCTestCase {
         XCTAssertNil(DisplaySpeech.spokenKey("AC", localize: localize))
         XCTAssertNil(DisplaySpeech.spokenKey("q", localize: localize))
         XCTAssertNil(DisplaySpeech.spokenKey("", localize: localize))
+    }
+
+    // The model says when a result was rounded to fit, and a typed number
+    // never counts as rounded.
+    func testTheModelKnowsWhenAResultWasRounded() {
+        let viewModel = CalculatorViewModel()
+        viewModel.inputDigit("2")
+        viewModel.inputDigit("8")
+        viewModel.setOperator(.divide)
+        viewModel.inputDigit("3")
+        viewModel.evaluate()
+        XCTAssertTrue(viewModel.isDisplayRoundedResult)
+        XCTAssertTrue(DisplaySpeech.spokenDisplay(viewModel.displaySpeechState, localize: localize).hasSuffix("3 3 3 repeating"))
+
+        viewModel.clearAll()
+        for digit in "1.222222222222222" {
+            if digit == "." { viewModel.inputDecimal() } else { viewModel.inputDigit(String(digit)) }
+        }
+        XCTAssertFalse(viewModel.isDisplayRoundedResult)
+
+        viewModel.clearAll()
+        viewModel.inputDigit("6")
+        viewModel.setOperator(.divide)
+        viewModel.inputDigit("4")
+        viewModel.evaluate()
+        XCTAssertFalse(viewModel.isDisplayRoundedResult, "1.5 is exact")
     }
 
     func testTheViewModelStateFollowsTheDisplay() {

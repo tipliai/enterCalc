@@ -71,15 +71,16 @@ struct AccessiblePane: ViewModifier {
             .accessibilityAddTraits(.isModal)
             .accessibilityAction(.escape) { onClose() }
             .accessibilityFocused($isFocused)
-            .onAppear {
-                // After the opening animation, so focus lands on the pane in
-                // its final place.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                    VoiceOver.announcePaneOpened(title)
-                    #if !canImport(UIKit)
-                    if VoiceOver.isRunning { isFocused = true }
-                    #endif
-                }
+            // After the opening animation, so focus lands on the pane in its
+            // final place. A task, so a pane closed before then is not
+            // announced as opening after its "closed".
+            .task {
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                guard !Task.isCancelled else { return }
+                VoiceOver.announcePaneOpened(title)
+                #if !canImport(UIKit)
+                if VoiceOver.isRunning { isFocused = true }
+                #endif
             }
             .onDisappear {
                 if let closedAnnouncement {

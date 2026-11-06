@@ -849,7 +849,7 @@ struct EnterCalcIOSView: View {
                     // A rate being typed needs the keyboard focus for its text
                     // field (#124), so the calculator's key capture steps aside.
                     isEnabled: scenePhase == .active && !showSettingsSheet && !rateEditor.isEditing,
-                    onKeyPress: handleHardwareKey
+                    onKeyPress: handleHardwareKeyAndAnnounce
                 )
                 .frame(width: 1, height: 1)
                 .opacity(0.01)
@@ -1113,10 +1113,29 @@ private extension EnterCalcIOSView {
         screen.isHomeScreen ? "plus.square.on.square" : "xmark.square"
     }
 
+    /// A hardware key, then any result, error or "Cleared" it caused, as the
+    /// keypad announces them (#145). Return after 5 + 7 says "Equals 12".
+    func handleHardwareKeyAndAnnounce(_ event: IOSHardwareKeyEvent) -> Bool {
+        let screen = activeScreen
+        let before = screen.viewModel.displaySpeechState
+        let handled = handleHardwareKey(event)
+        if handled {
+            announceDisplayChange(from: before, on: screen)
+        }
+        return handled
+    }
+
     func handleHardwareKey(_ event: IOSHardwareKeyEvent) -> Bool {
         // Tab moves keyboard focus between controls (Full Keyboard Access),
         // in a pane or on the calculator, so it is never used here (#145).
         if event.keyCode == .keyboardTab {
+            return false
+        }
+
+        // With a pane open, Space presses whichever of its controls has
+        // keyboard focus, so it must not reach the pane's own key handling.
+        if event.keyCode == .keyboardSpacebar,
+           activeOverlay != nil || functionChooser != nil {
             return false
         }
 
@@ -3932,7 +3951,7 @@ private extension EnterCalcIOSView {
         let state = viewModel.displaySpeechState
         return state.isError
             ? state.display
-            : DisplaySpeech.spoken(state.display, decimalSeparator: state.decimalSeparator, localize: localized)
+            : DisplaySpeech.spokenDisplay(state, localize: localized)
     }
 
     @ViewBuilder
