@@ -35,6 +35,22 @@ public enum VoiceOver {
         #endif
     }
 
+    @MainActor private static var closureSuppressedUntil: Date?
+
+    /// The next pane to close says nothing: what closed it has already been
+    /// announced ("Redo selected"), and "… closed" would cut it off (#145).
+    @MainActor
+    public static func suppressNextPaneClosure() {
+        closureSuppressedUntil = Date().addingTimeInterval(1)
+    }
+
+    @MainActor
+    static func takeClosureSuppression() -> Bool {
+        defer { closureSuppressedUntil = nil }
+        guard let until = closureSuppressedUntil else { return false }
+        return Date() < until
+    }
+
     /// Tells VoiceOver a pane has taken over: its name is spoken and, on iOS,
     /// focus moves into it.
     @MainActor
@@ -83,7 +99,7 @@ struct AccessiblePane: ViewModifier {
                 #endif
             }
             .onDisappear {
-                if let closedAnnouncement {
+                if let closedAnnouncement, !VoiceOver.takeClosureSuppression() {
                     VoiceOver.announce(closedAnnouncement)
                 }
             }

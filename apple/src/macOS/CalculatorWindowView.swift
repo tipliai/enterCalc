@@ -1170,6 +1170,8 @@ struct CalculatorWindowView: View {
         guard let session = functionChooser else { return }
         updateWindowSettings { $0.functionKeyAssignments.assign(function, to: session.slot) }
         VoiceOver.announce(String(format: speechLocalize("a11y.selected"), functionKeyLabel(function)))
+        // The choice says it all; no "Edit Action closed" after it.
+        VoiceOver.suppressNextPaneClosure()
         // The accessibility tree exposes no readable label for these keys, so
         // this is the only way QA can confirm which function landed where.
         DebugLog.emit("functionKeys", "\(session.slot.rawValue) = \(function.rawValue); layout = \(describeFunctionKeyLayout())")

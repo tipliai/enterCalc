@@ -726,6 +726,8 @@ struct EnterCalcIOSView: View {
         guard let session = functionChooser else { return }
         updateActiveScreenSettings { $0.functionKeyAssignments.assign(function, to: session.slot) }
         VoiceOver.announce(String(format: localized("a11y.selected"), functionKeyLabel(function)))
+        // The choice says it all; no "Edit Action closed" after it.
+        VoiceOver.suppressNextPaneClosure()
         triggerActionFeedback(emphasized: true)
         DebugLog.emit("functionKeys", "\(session.slot.rawValue) = \(function.rawValue); layout = \(describeFunctionKeyLayout())")
         dismissFunctionChooser()
