@@ -783,6 +783,7 @@ struct EnterCalcIOSView: View {
                         set: { functionChooser?.isConfirmingReset = $0 }
                     ),
                     optionHint: localized("a11y.functionKey.hint"),
+                    closedAnnouncement: paneClosed("functionKey.chooser.title"),
                     label: { functionKeyLabel($0) },
                     onHighlight: { highlightFunctionChooserOption($0) },
                     onCommit: { commitFunctionChooser($0) },
@@ -1492,13 +1493,15 @@ private extension EnterCalcIOSView {
     }
 
     func announceActiveScreen(number: Int) {
+        let screen = activeScreen
         // After the page has moved, so VoiceOver's own page-change speech
-        // comes first.
+        // comes first; skipped if another swipe has moved on since.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            guard activeScreen === screen, screenStore.activeIndex + 1 == number else { return }
             VoiceOver.announce(DisplaySpeech.instanceAnnouncement(
                 number: number,
                 isWindow: false,
-                state: activeScreen.viewModel.displaySpeechState,
+                state: screen.viewModel.displaySpeechState,
                 localize: localized
             ))
         }

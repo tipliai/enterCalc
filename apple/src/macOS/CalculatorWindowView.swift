@@ -603,6 +603,9 @@ struct CalculatorWindowView: View {
                 hovering ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
             }
             .onTapGesture { toggleSettingsOverlay() }
+            // Tab stays in the open pane (#145): controls outside it stay
+            // clickable but leave the keyboard's focus order.
+            .focusable(!isKeypadCovered)
 
             Spacer()
 
@@ -624,6 +627,9 @@ struct CalculatorWindowView: View {
                 hovering ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
             }
             .help(macLocalized("history.toggle", bundle: currentLocalizationBundle))
+            // Tab stays in the open pane (#145): controls outside it stay
+            // clickable but leave the keyboard's focus order.
+            .focusable(!isKeypadCovered)
             .accessibilityLabel(Text(macLocalized("history.toggle", bundle: currentLocalizationBundle)))
 
             Button {
@@ -647,6 +653,9 @@ struct CalculatorWindowView: View {
                 hovering ? NSCursor.pointingHand.set() : NSCursor.arrow.set()
             }
             .help(macLocalized("window.new", bundle: currentLocalizationBundle))
+            // Tab stays in the open pane (#145): controls outside it stay
+            // clickable but leave the keyboard's focus order.
+            .focusable(!isKeypadCovered)
             .accessibilityLabel(Text(macLocalized("window.new", bundle: currentLocalizationBundle)))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1006,6 +1015,8 @@ struct CalculatorWindowView: View {
         .accessibilityLabel(Text(macLocalized("calculator.mode.menu", bundle: currentLocalizationBundle)))
         .accessibilityValue(Text(macLocalized(current.localizationKey, bundle: currentLocalizationBundle)))
         .accessibilityHint(Text(macLocalized("calculator.mode.picker.hint", bundle: currentLocalizationBundle)))
+        // Out of the keyboard's focus order while a pane is open (#145).
+        .focusable(!isKeypadCovered)
     }
 
     /// Says which window this is and what it shows when it comes to the
@@ -1019,6 +1030,9 @@ struct CalculatorWindowView: View {
         windowAnnouncedAt = Date()
         // After VoiceOver has read the window's own title.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            // Only if this window is still the one in front: the
+            // announcement goes to the key window.
+            guard windowReference?.isKeyWindow == true, MacWindowNumbers.openCount > 1 else { return }
             VoiceOver.announce(DisplaySpeech.instanceAnnouncement(
                 number: windowOrdinal,
                 isWindow: true,
@@ -1226,6 +1240,7 @@ struct CalculatorWindowView: View {
                         set: { functionChooser?.isConfirmingReset = $0 }
                     ),
                     optionHint: macLocalized("a11y.functionKey.hint", bundle: currentLocalizationBundle),
+                    closedAnnouncement: paneClosed("functionKey.chooser.title"),
                     label: { functionKeyLabel($0) },
                     onHighlight: { highlightFunctionChooserOption($0) },
                     onCommit: { commitFunctionChooser($0) },
@@ -1885,6 +1900,8 @@ struct CalculatorWindowView: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
+        // Out of the keyboard's focus order while a pane is open (#145).
+        .focusable(!isKeypadCovered)
     }
 
     private func roundingOverlay() -> some View {
@@ -2199,7 +2216,7 @@ struct CalculatorWindowView: View {
 
         // A history row with keyboard focus takes Space, which reuses its
         // result. Return is always =, never a button.
-        if MacHistoryRowFocus.isFocused, event.keyCode == 49 {
+        if MacHistoryRowFocus.isFocused(in: windowReference), event.keyCode == 49 {
             return false
         }
 
@@ -3292,10 +3309,10 @@ private struct HistoryEntryRow: View {
         .focusable()
         .focused($isKeyboardFocused)
         .onChange(of: isKeyboardFocused) { _, focused in
-            MacHistoryRowFocus.isFocused = focused
+            MacHistoryRowFocus.setFocused(focused, in: NSApp.keyWindow)
         }
         .onDisappear {
-            if isKeyboardFocused { MacHistoryRowFocus.isFocused = false }
+            if isKeyboardFocused { MacHistoryRowFocus.setFocused(false, in: NSApp.keyWindow) }
         }
         .onKeyPress(.space) { onSelect(); return .handled }
         .contextMenu {
@@ -4367,9 +4384,23 @@ enum MacWindowNumbers {
 }
 
 
-/// Whether a history row has keyboard focus, so the window's key monitor lets
-/// Return and Space reach it instead of treating Return as = (#145).
+/// Which window has a history row with keyboard focus, so that window's key
+/// monitor lets Space reach the row (#145). Per window: another window's
+/// keys are never affected.
 @MainActor
 enum MacHistoryRowFocus {
-    static var isFocused = false
+    private static weak var focusedWindow: NSWindow?
+
+    static func setFocused(_ focused: Bool, in window: NSWindow?) {
+        if focused {
+            focusedWindow = window
+        } else if focusedWindow === window || window == nil {
+            focusedWindow = nil
+        }
+    }
+
+    static func isFocused(in window: NSWindow?) -> Bool {
+        guard let window else { return false }
+        return focusedWindow === window
+    }
 }

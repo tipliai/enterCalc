@@ -129,6 +129,8 @@ public struct CalculatorFunctionKeyChooser: View {
     private let resetLabels: FunctionKeyResetLabels
     /// Read with each option: what choosing it does.
     private let optionHint: String
+    /// "Edit Action closed", said when the chooser goes away.
+    private let closedAnnouncement: String?
     private let label: (CalculatorFunctionKey) -> String
     private let onHighlight: (CalculatorFunctionKey?) -> Void
     private let onCommit: (CalculatorFunctionKey) -> Void
@@ -152,6 +154,7 @@ public struct CalculatorFunctionKeyChooser: View {
         resetLabels: FunctionKeyResetLabels,
         isConfirmingReset: Binding<Bool>,
         optionHint: String = "",
+        closedAnnouncement: String? = nil,
         label: @escaping (CalculatorFunctionKey) -> String,
         onHighlight: @escaping (CalculatorFunctionKey?) -> Void,
         onCommit: @escaping (CalculatorFunctionKey) -> Void,
@@ -167,6 +170,7 @@ public struct CalculatorFunctionKeyChooser: View {
         self.resetLabels = resetLabels
         self._isConfirmingReset = isConfirmingReset
         self.optionHint = optionHint
+        self.closedAnnouncement = closedAnnouncement
         self.label = label
         self.onHighlight = onHighlight
         self.onCommit = onCommit
@@ -193,7 +197,7 @@ public struct CalculatorFunctionKeyChooser: View {
             let origin = panelOrigin(in: geometry)
 
             panel
-                .accessibilityPane(title: title, onClose: onClose)
+                .accessibilityPane(title: title, closedAnnouncement: closedAnnouncement, onClose: onClose)
                 .frame(width: panelSize.width, height: panelSize.height)
                 .position(x: origin.x + panelSize.width / 2, y: origin.y + panelSize.height / 2)
         }
