@@ -3896,12 +3896,9 @@ private extension EnterCalcIOSView {
         guard activeOverlay == .rounding else { return false }
 
         switch event.keyCode {
-        case .keyboardUpArrow:
+        case .keyboardUpArrow, .keyboardReturnOrEnter, .keypadEnter:
+            // Return closes the pane, as in VAT and Tip.
             dismissActiveOverlay()
-            return true
-        case .keyboardReturnOrEnter, .keypadEnter:
-            // Return is =; with nothing to evaluate in the pane it does
-            // nothing (#145).
             return true
         case .keyboardEnd:
             dismissActiveOverlay()

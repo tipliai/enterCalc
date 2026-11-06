@@ -2062,12 +2062,10 @@ struct CalculatorWindowView: View {
         if isDisplayResizeShortcut(event) { return false }
 
         switch event.keyCode {
-        case 126:
+        case 126, 36, 76:
+            // Return closes the pane, as in VAT and Tip; Space presses the
+            // focused control.
             closeRoundingOverlay()
-            return true
-        case 36, 76:
-            // Return is =, and there is nothing to evaluate in the pane, so
-            // it does nothing; Space presses the focused control.
             return true
         case 119:
             closeRoundingOverlay()

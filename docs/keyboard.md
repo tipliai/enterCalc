@@ -32,7 +32,7 @@ Sources:
 | End | Clear all | Exit direct edit | Close overlay | Close overlay |
 | Backspace | Delete one char/digit via model backspace | Delete one char/digit before caret | Remove rounding and close overlay | Clear history and close overlay |
 | Forward Delete | Delete one char/digit via model backspace | Delete one char/digit before caret | Remove rounding and close overlay | Clear history and close overlay |
-| Return / Enter / Keypad Enter | Evaluate | Exit direct edit | Nothing | Nothing |
+| Return / Enter / Keypad Enter | Evaluate | Exit direct edit | Close overlay | Nothing |
 | Space | — | — | Press the control Tab has moved to | Reuse the history row Tab has moved to |
 | Digits 0-9 | Input digit | Insert at display caret | Not handled here | Suppressed |
 | Decimal . | Input decimal separator | Insert decimal at display caret | Not handled here | Suppressed |
