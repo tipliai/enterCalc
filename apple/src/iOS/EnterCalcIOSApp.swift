@@ -4849,6 +4849,14 @@ private struct IOSHistoryPanel: View {
         VStack(alignment: .leading, spacing: metrics.panelSpacing) {
             if let onResizeChanged {
                 historyOverlayHeader(onResizeChanged: onResizeChanged)
+            } else if metrics.foldPosture == .book && !entries.isEmpty {
+                // Book: no rail beside the history, so its trash sits at the
+                // top of the history half, where the pane keeps it (#132).
+                HStack(spacing: 0) {
+                    floatingHistoryActionButton
+                    Spacer(minLength: 0)
+                }
+                .frame(height: max(metrics.headerButtonSize, 44))
             }
 
             if entries.isEmpty {
