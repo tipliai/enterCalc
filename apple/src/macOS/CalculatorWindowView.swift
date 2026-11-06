@@ -290,6 +290,9 @@ struct CalculatorWindowView: View {
                     // rest of the window (#145).
                     .disabled(functionChooser != nil)
                     .accessibilityHidden(functionChooser != nil)
+                    // Clickable beside an open pane, but out of the Tab order
+                    // so the keyboard stays in the pane (#164).
+                    .keyboardNavigable(!isKeypadCovered)
                 }
             }
             .padding(8)
@@ -3322,6 +3325,7 @@ private struct HistoryPanel: View {
 // offers "Copy Operation".
 private struct HistoryEntryRow: View {
     @FocusState private var isKeyboardFocused: Bool
+    @Environment(\.keyboardNavigable) private var isKeyboardNavigable
     let entry: HistoryEntry
     let primaryForeground: Color
     let fadedForeground: Color
@@ -3361,7 +3365,7 @@ private struct HistoryEntryRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { onSelect() }
-        .focusable()
+        .focusable(isKeyboardNavigable)
         .focused($isKeyboardFocused)
         .onChange(of: isKeyboardFocused) { _, focused in
             MacHistoryRowFocus.setFocused(focused, in: NSApp.keyWindow)
