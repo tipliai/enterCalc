@@ -555,7 +555,31 @@ public struct CurrencyVATPanel: View {
         // the result, so a rate change that rounds to the same figure still
         // updates the operation line.
         .onAppear(perform: sendResult)
-        .onChange(of: ApplyKey(rate: rate, isRemoving: isRemoving)) { _, _ in sendResult() }
+        .onChange(of: ApplyKey(rate: rate, isRemoving: isRemoving)) { old, new in
+            sendResult()
+            // VoiceOver says what was chosen and the new amounts (#145):
+            // "Add VAT selected. VAT $0.40, Inc VAT $8.40".
+            let chosen = old.isRemoving != new.isRemoving
+                ? localized(new.isRemoving ? "currency.vat.remove" : "currency.vat.add")
+                : "\(formatRate(new.rate))%"
+            VoiceOver.announce(spokenChange(chosen: chosen))
+        }
+    }
+
+    /// "15% selected. VAT $1.50, Inc VAT $11.50": what was chosen, then the
+    /// VAT and the figure written to the display.
+    private func spokenChange(chosen: String) -> String {
+        let selected = String(format: localized("a11y.selected"), chosen)
+        guard let breakdown else { return selected }
+        let applied = isRemoving
+            ? "\(localized("currency.vat.net")) \(spokenAmount(breakdown.net))"
+            : "\(localized("currency.vat.gross")) \(spokenAmount(breakdown.gross))"
+        return "\(selected). \(localized("currency.vat.amount")) \(spokenAmount(breakdown.vat)), \(applied)"
+    }
+
+    /// "$0.40" as "40 cents" (#145).
+    private func spokenAmount(_ amount: Decimal) -> String {
+        DisplaySpeech.spokenAmount(format(amount), localize: localized)
     }
 
     private struct ApplyKey: Equatable {
@@ -629,6 +653,9 @@ public struct CurrencyTipPanel: View {
     /// The preset last pressed in this pane. Moving the slider clears it, so a
     /// preset is shown as selected only when it was actually pressed.
     @State private var pressedPreset: Int?
+    /// Set while the slider is changing the rate. VoiceOver already reads the
+    /// slider's value, which includes the amounts, so nothing more is said.
+    @State private var rateChangedBySlider = false
 
     public init(
         bill: Decimal,
@@ -712,10 +739,12 @@ public struct CurrencyTipPanel: View {
                     rate: rate,
                     label: localized("currency.tip.rate"),
                     offLabel: localized("currency.tip.off"),
+                    spokenAmounts: spokenAmounts,
                     palette: palette,
                     formatRate: formatRate,
                     onChange: { newRate in
                         pressedPreset = nil
+                        rateChangedBySlider = true
                         onRateChange(newRate)
                     }
                 )
@@ -731,7 +760,23 @@ public struct CurrencyTipPanel: View {
         }
         // Applied whenever the rate changes, not when the bill changes, so the
         // pane never re-applies over something the person has since typed.
-        .onChange(of: rate) { _, _ in sendResult() }
+        .onChange(of: rate) { _, newRate in
+            sendResult()
+            // A preset, the stepper or a typed rate: say what was chosen and
+            // the new amounts (#145), "15% selected. Tip $1.50, Total $11.50".
+            if rateChangedBySlider {
+                rateChangedBySlider = false
+            } else {
+                let chosen = newRate == 0 ? localized("currency.tip.off") : "\(formatRate(newRate))%"
+                VoiceOver.announce("\(String(format: localized("a11y.selected"), chosen)). \(spokenAmounts)")
+            }
+        }
+    }
+
+    /// "Tip $1.50, Total $11.50", for VoiceOver.
+    private var spokenAmounts: String {
+        "\(localized("currency.tip.amount")) \(DisplaySpeech.spokenAmount(format(tip), localize: localized)), "
+            + "\(localized("currency.tip.total")) \(DisplaySpeech.spokenAmount(format(total), localize: localized))"
     }
 
     /// A 0% tip is the slider's Off position: the tip is taken back off the
@@ -746,6 +791,22 @@ public struct CurrencyTipPanel: View {
     }
 }
 
+/// One notch of the Tip slider from the keyboard: ← and → move to the next
+/// 2% notch down or up, so 15% goes to 14% or 16%. Nil at the ends.
+public enum TipRateStep {
+    public static func next(after rate: Decimal, up: Bool) -> Decimal? {
+        let step = TipRateSlider.step
+        let current = NSDecimalNumber(decimal: rate).doubleValue
+        let target = up
+            ? (current / step).rounded(.down) * step + step
+            : (current / step).rounded(.up) * step - step
+        let clamped = min(max(target, TipRateSlider.range.lowerBound), TipRateSlider.range.upperBound)
+        let next = Decimal(Int(clamped))
+        guard up ? next > rate : next < rate else { return nil }
+        return next
+    }
+}
+
 /// The Tip pane's slider, styled like the rounding pane's: Off (a power icon)
 /// at the left, then a notch every 2% up to 40%. It moves in whole steps of
 /// 2%; a preset or a long-press edit can still set any rate, which the slider
@@ -757,6 +818,8 @@ private struct TipRateSlider: View {
     let rate: Decimal
     let label: String
     let offLabel: String
+    /// "Tip $1.50, Total $11.50": read with the rate on every change.
+    let spokenAmounts: String
     let palette: Palette
     let formatRate: (Decimal) -> String
     let onChange: (Decimal) -> Void
@@ -783,7 +846,8 @@ private struct TipRateSlider: View {
             )
             .tint(palette.sliderTint)
             .accessibilityLabel(Text(label))
-            .accessibilityValue(Text(rate == 0 ? offLabel : "\(formatRate(rate))%"))
+            // The rate and what it comes to, read on every step (#145).
+            .accessibilityValue(Text(rate == 0 ? offLabel : "\(formatRate(rate))%, \(spokenAmounts)"))
 
             GeometryReader { geometry in
                 ZStack(alignment: .topLeading) {

@@ -7,7 +7,8 @@ private let debugKeyCapture = DebugLog.isEnabled
 
 /// Invisible NSView that claims first responder so we can intercept keyboard input immediately.
 struct KeyCaptureView: NSViewRepresentable {
-    let onKeyDown: (NSEvent) -> Void
+    /// Returns whether the key was used.
+    let onKeyDown: (NSEvent) -> Bool
 
     func makeNSView(context: Context) -> KeyCatcherView {
         let view = KeyCatcherView()
@@ -23,7 +24,7 @@ struct KeyCaptureView: NSViewRepresentable {
 }
 
 final class KeyCatcherView: NSView {
-    var onKeyDown: (NSEvent) -> Void = { _ in }
+    var onKeyDown: (NSEvent) -> Bool = { _ in false }
     private var observers: [Any] = []
 
     override var acceptsFirstResponder: Bool { true }
@@ -107,7 +108,24 @@ final class KeyCatcherView: NSView {
 
     override func keyDown(with event: NSEvent) {
         if debugKeyCapture { print("[KeyCapture] keyDown keyCode:\(event.keyCode) chars:\(event.charactersIgnoringModifiers ?? "<nil>") command:\(event.modifierFlags.contains(.command))") }
-        onKeyDown(event)
+        let handled = onKeyDown(event)
+        // An unused Tab goes on to the window, which moves keyboard focus to
+        // the next control (#145). Other unused keys are dropped as before,
+        // rather than sounding the system alert.
+        if !handled, event.keyCode == 48 {
+            super.keyDown(with: event)
+        }
+    }
+}
+
+extension NSView {
+    /// The first view of this type in this view's subtree, depth first.
+    func firstDescendant<T: NSView>(ofType type: T.Type) -> T? {
+        for subview in subviews {
+            if let match = subview as? T { return match }
+            if let match = subview.firstDescendant(ofType: type) { return match }
+        }
+        return nil
     }
 }
 

@@ -89,6 +89,9 @@ struct CalculatorWindowView: View {
     @State private var windowReference: NSWindow? = nil
     /// This window's page, for counting its calculations towards the review gate.
     @State private var reviewPageID = UUID()
+    /// When an action key last announced the display, so the display's own
+    /// change announcement does not talk over it.
+    @State private var actionAnnouncedAt: Date?
     @State private var showCopyToast: Bool = false
     @State private var copyToastDismissWorkItem: DispatchWorkItem?
     @State private var operatorRevealProgress: Double = 0.0
@@ -111,6 +114,10 @@ struct CalculatorWindowView: View {
     private let historySpacing: CGFloat = 6
     private let calculatorContentCoordinateSpace = "calculatorContent"
     @State private var windowSettings: CalculatorScreenSettings
+    /// This window's number among the open calculator windows, for VoiceOver
+    /// (#145): "Window 2".
+    @State private var windowOrdinal: Int?
+    @State private var windowAnnouncedAt: Date?
     /// Live hold-and-drag reassignment of a configurable key, if one is running.
     @State private var functionChooser: FunctionKeyChooserSession? = nil
     // Currency-mode tool settings (#92, #124).
@@ -294,7 +301,12 @@ struct CalculatorWindowView: View {
                 windowReference = window
             })
             .focusedSceneValue(\.calculatorActions, actionContext)
+            .onDisappear {
+                MacWindowNumbers.release(windowOrdinal)
+                windowOrdinal = nil
+            }
             .onAppear {
+                if windowOrdinal == nil { windowOrdinal = MacWindowNumbers.claim() }
                 NSApp.activate(ignoringOtherApps: true)
                 normalizeWindowLanguageIfNeeded()
                 applyCurrentWindowSettings()
@@ -308,11 +320,12 @@ struct CalculatorWindowView: View {
                 startOperatorIntroAnimation()
             }
             .onChange(of: windowReference?.windowNumber) {
-                guard windowReference != nil else {
+                guard let window = windowReference else {
                     return
                 }
 
                 applyCurrentWindowSettings()
+                if window.isKeyWindow { announceWindow() }
             }
             .onChange(of: viewModel.activeCurrencySymbol) { _, _ in
                 dismissCurrencyToolsIfNeeded()
@@ -332,6 +345,7 @@ struct CalculatorWindowView: View {
                 }
 
                 applyCurrentWindowSettings()
+                announceWindow()
             }
             .onReceive(NotificationCenter.default.publisher(for: .enterCalcToggleHistoryPanel)) { _ in
                 let isFocusedWindow = windowReference?.isKeyWindow == true || windowReference?.isMainWindow == true
@@ -359,7 +373,7 @@ struct CalculatorWindowView: View {
             }
             .background(
                 KeyCaptureView { event in
-                    _ = handleKey(event)
+                    handleKeyAndSpeak(event)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .allowsHitTesting(false)
@@ -372,7 +386,7 @@ struct CalculatorWindowView: View {
                 }
             }
             .keyEventMonitor { event in
-                handleKey(event)
+                handleKeyAndSpeak(event)
             }
             .onChange(of: showHistory) {
                 updateWindowMinSize()
@@ -397,6 +411,7 @@ struct CalculatorWindowView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, headerToDisplaySpacing)
+            .disabled(isWholeCalculatorCovered)
 
             GeometryReader { geo in
                 let availableHeight = max(geo.size.height - keypadBottomPadding, 1)
@@ -409,11 +424,20 @@ struct CalculatorWindowView: View {
                 VStack(spacing: 0) {
                     display
                         .frame(maxWidth: .infinity, minHeight: displayHeight, maxHeight: displayHeight, alignment: .top)
+                        .disabled(isWholeCalculatorCovered)
 
-                    keypadResizeHandle(defaultKeypadHeight: defaultKeypadHeight, height: separatorHeight)
+                    // Under a pane nothing can be pressed, so it leaves the
+                    // keyboard's Tab order and VoiceOver (#145). The header,
+                    // display, mode picker and VAT and TIP stay usable above
+                    // the panes that leave them uncovered.
+                    Group {
+                        keypadResizeHandle(defaultKeypadHeight: defaultKeypadHeight, height: separatorHeight)
 
-                    keypadArea
-                        .frame(maxWidth: .infinity, minHeight: keypadHeight, maxHeight: keypadHeight, alignment: .top)
+                        keypadArea
+                            .frame(maxWidth: .infinity, minHeight: keypadHeight, maxHeight: keypadHeight, alignment: .top)
+                    }
+                    .disabled(isKeypadCovered)
+                    .accessibilityHidden(isKeypadCovered)
                 }
                 .onChange(of: defaultKeypadHeight, initial: true) { _, newValue in
                     lastDefaultKeypadHeight = newValue
@@ -453,6 +477,7 @@ struct CalculatorWindowView: View {
                                 }
                             }
                             .allowsHitTesting(activeOverlay != nil)
+                            .accessibilityHidden(true)
                             .animation(reduceMotionEnabled ? nil : .easeInOut, value: activeOverlay)
                             .padding(.horizontal, -8)
                             .padding(.top, -8)
@@ -460,12 +485,22 @@ struct CalculatorWindowView: View {
 
                         if showHistoryOverlay {
                             historyOverlay(defaultHeight: defaultHistoryHeight, windowHeight: geo.size.height, panelHeight: historyHeight)
+                                .accessibilityPane(
+                                    title: paneTitle("a11y.pane.history"),
+                                    closedAnnouncement: paneClosed("a11y.pane.history"),
+                                    onClose: { closeHistoryOverlay() }
+                                )
                                 .frame(width: geo.size.width, alignment: .top)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                                 .allowsHitTesting(activeOverlay == .history)
                                 .transition(.opacity)
                         } else if showVATOverlay {
                             vatOverlay()
+                                .accessibilityPane(
+                                    title: paneTitle("currency.vat.title"),
+                                    closedAnnouncement: paneClosed("currency.vat.title"),
+                                    onClose: { setActiveOverlay(nil) }
+                                )
                                 .paneTextScale(paneTextScale)
                                 .paneHeightLimit(geo.size.height * 0.8)
                                 .frame(width: geo.size.width, alignment: .top)
@@ -474,6 +509,11 @@ struct CalculatorWindowView: View {
                                 .transition(.opacity)
                         } else if showTipOverlay {
                             tipOverlay()
+                                .accessibilityPane(
+                                    title: paneTitle("currency.tip.title"),
+                                    closedAnnouncement: paneClosed("currency.tip.title"),
+                                    onClose: { setActiveOverlay(nil) }
+                                )
                                 .paneTextScale(paneTextScale)
                                 .paneHeightLimit(geo.size.height * 0.8)
                                 .frame(width: geo.size.width, alignment: .top)
@@ -482,6 +522,11 @@ struct CalculatorWindowView: View {
                                 .transition(.opacity)
                         } else if showRoundingOverlay {
                             roundingOverlay()
+                                .accessibilityPane(
+                                    title: paneTitle("rounding.title"),
+                                    closedAnnouncement: paneClosed("rounding.title"),
+                                    onClose: { closeRoundingOverlay() }
+                                )
                                 .paneTextScale(paneTextScale)
                                 .paneHeightLimit(geo.size.height * 0.8)
                                 .frame(width: geo.size.width, alignment: .top)
@@ -490,6 +535,11 @@ struct CalculatorWindowView: View {
                                 .transition(.opacity)
                         } else if showSettingsOverlay {
                             settingsOverlay
+                                .accessibilityPane(
+                                    title: paneTitle("settings.title"),
+                                    closedAnnouncement: paneClosed("settings.title"),
+                                    onClose: { closeSettingsOverlay() }
+                                )
                                 .frame(width: geo.size.width, height: overlayHeight, alignment: .top)
                                 .offset(y: overlayTop)
                                 .transition(.opacity)
@@ -687,6 +737,19 @@ struct CalculatorWindowView: View {
                 .offset(y: operationOffsetY)
                 .frame(maxWidth: .infinity, maxHeight: contentHeight, alignment: .topTrailing)
                 .clipped()
+                // One VoiceOver element for the operation line and the result
+                // (#145); the mode picker and VAT and TIP stay separate.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(macLocalized(DisplaySpeech.labelKey, bundle: currentLocalizationBundle)))
+                .accessibilityValue(Text(DisplaySpeech.value(for: viewModel.displaySpeechState, localize: speechLocalize)))
+                .accessibilityHint(Text(macLocalized(DisplaySpeech.hintKey, bundle: currentLocalizationBundle)))
+                .accessibilityAddTraits(.updatesFrequently)
+                .accessibilityAction {
+                    copyDisplayToPasteboardWithFlash()
+                }
+                .accessibilityAction(named: Text(macLocalized("history.copyOperation", bundle: currentLocalizationBundle))) {
+                    copyCurrentOperationToPasteboard()
+                }
 
                 memoryControls(opacity: basicOpacity)
             }
@@ -785,12 +848,48 @@ struct CalculatorWindowView: View {
                     .transition(.opacity)
             }
         }
+        // Announces the result after Enter, an error, or "Cleared" after AC,
+        // since VoiceOver's focus stays on the key or keyboard (#145). Typing
+        // is not announced. Every input path ends up here: keys, the keyboard
+        // and the menus.
+        .onChange(of: viewModel.displaySpeechState) { before, after in
+            if let actionAnnouncedAt, Date().timeIntervalSince(actionAnnouncedAt) < 0.5 {
+                self.actionAnnouncedAt = nil
+                return
+            }
+            guard let announcement = DisplaySpeech.announcement(from: before, to: after, localize: speechLocalize) else {
+                return
+            }
+            announceForVoiceOver(DisplaySpeech.text(for: announcement, localize: speechLocalize))
+        }
+    }
+
+    /// Looks a key up in this window's language, for `DisplaySpeech`.
+    private func speechLocalize(_ key: String) -> String {
+        macLocalized(key, bundle: currentLocalizationBundle)
+    }
+
+    /// Spoken by VoiceOver when it is running; ignored otherwise.
+    private func announceForVoiceOver(_ text: String) {
+        guard NSWorkspace.shared.isVoiceOverEnabled,
+              let window = windowReference ?? NSApp.keyWindow else {
+            return
+        }
+        NSAccessibility.post(
+            element: window,
+            notification: .announcementRequested,
+            userInfo: [
+                .announcement: text,
+                .priority: NSAccessibilityPriorityLevel.high.rawValue
+            ]
+        )
     }
 
     private func copyDisplayToPasteboardWithFlash() {
         viewModel.clearDisplayEditCursor()
         viewModel.copyToPasteboard()
         showCopiedToast()
+        announceForVoiceOver(macLocalized("copy.copied", bundle: currentLocalizationBundle))
         if reduceMotionEnabled {
             flashCopy = true
         } else {
@@ -876,15 +975,13 @@ struct CalculatorWindowView: View {
     private func modePicker(opacity: Double) -> some View {
         let current = CalculatorMode.current(for: viewModel)
         return Menu {
-            Picker(selection: Binding(get: { current }, set: { selectMode($0) })) {
-                ForEach(CalculatorMode.allCases) { mode in
+            // One checkmark item per mode. (An inline Picker's title is an
+            // extra menu item, so VoiceOver counted three options, #145.)
+            ForEach(CalculatorMode.allCases) { mode in
+                Toggle(isOn: Binding(get: { current == mode }, set: { _ in selectMode(mode) })) {
                     Label(macLocalized(mode.localizationKey, bundle: currentLocalizationBundle), systemImage: mode.systemImage)
-                        .tag(mode)
                 }
-            } label: {
-                Text(macLocalized("calculator.mode.menu", bundle: currentLocalizationBundle))
             }
-            .pickerStyle(.inline)
         } label: {
             HStack(spacing: 3) {
                 Text(macLocalized(current.localizationKey, bundle: currentLocalizationBundle))
@@ -907,11 +1004,56 @@ struct CalculatorWindowView: View {
         .accessibilityHint(Text(macLocalized("calculator.mode.picker.hint", bundle: currentLocalizationBundle)))
     }
 
+    /// Says which window this is and what it shows when it comes to the
+    /// front (#145): "Window 2, $1.55 shown". Only with more than one window
+    /// open, where it tells them apart.
+    private func announceWindow() {
+        guard let windowOrdinal, MacWindowNumbers.openCount > 1 else { return }
+        // Becoming key and getting its window reference can both fire for one
+        // arrival; say it once.
+        if let last = windowAnnouncedAt, Date().timeIntervalSince(last) < 1 { return }
+        windowAnnouncedAt = Date()
+        // After VoiceOver has read the window's own title.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            VoiceOver.announce(DisplaySpeech.instanceAnnouncement(
+                number: windowOrdinal,
+                isWindow: true,
+                state: viewModel.displaySpeechState,
+                localize: speechLocalize
+            ))
+        }
+    }
+
     private func selectMode(_ mode: CalculatorMode) {
         guard CalculatorMode.current(for: viewModel) != mode else { return }
         withAnimation(ModeControlsTransition.animation) {
             mode.select(on: viewModel, currencySymbol: windowSettings.currencySymbol)
         }
+        // "Now in Currency mode" (#145).
+        VoiceOver.announce(String(
+            format: speechLocalize("a11y.announce.mode"),
+            speechLocalize(mode.localizationKey)
+        ))
+    }
+
+    /// A pane or the function-key chooser is over the keypad.
+    private var isKeypadCovered: Bool {
+        activeOverlay != nil || functionChooser != nil
+    }
+
+    /// Settings or the function-key chooser covers the whole window.
+    private var isWholeCalculatorCovered: Bool {
+        activeOverlay == .settings || functionChooser != nil
+    }
+
+    /// A pane's name in this window's language, for VoiceOver.
+    private func paneTitle(_ key: String) -> String {
+        speechLocalize(key)
+    }
+
+    /// "Rounding closed", for VoiceOver when a pane closes.
+    private func paneClosed(_ titleKey: String) -> String {
+        String(format: speechLocalize("a11y.pane.closed"), speechLocalize(titleKey))
     }
 
     // The mode name follows the text size (#148); the row grows to fit it. The
@@ -994,9 +1136,22 @@ struct CalculatorWindowView: View {
         functionChooser?.highlighted = function
     }
 
+    func moveFunctionChooserHighlight(by offset: Int) {
+        guard let session = functionChooser,
+              let next = session.highlight(movedBy: offset, assignments: functionKeyAssignments) else { return }
+        highlightFunctionChooserOption(next)
+        VoiceOver.announce(session.spokenOption(
+            next,
+            assignments: functionKeyAssignments,
+            label: { functionKeyLabel($0) },
+            localize: speechLocalize
+        ))
+    }
+
     func commitFunctionChooser(_ function: CalculatorFunctionKey) {
         guard let session = functionChooser else { return }
         updateWindowSettings { $0.functionKeyAssignments.assign(function, to: session.slot) }
+        VoiceOver.announce(String(format: speechLocalize("a11y.selected"), functionKeyLabel(function)))
         // The accessibility tree exposes no readable label for these keys, so
         // this is the only way QA can confirm which function landed where.
         DebugLog.emit("functionKeys", "\(session.slot.rawValue) = \(function.rawValue); layout = \(describeFunctionKeyLayout())")
@@ -1046,6 +1201,7 @@ struct CalculatorWindowView: View {
                 Color.black.opacity(overlayScrimOpacity)
                     .contentShape(Rectangle())
                     .onTapGesture { dismissFunctionChooser() }
+                    .accessibilityHidden(true)
 
                 CalculatorFunctionKeyChooser(
                     session: session,
@@ -1061,6 +1217,11 @@ struct CalculatorWindowView: View {
                         confirm: macLocalized("functionKey.reset.confirm", bundle: currentLocalizationBundle),
                         cancel: macLocalized("functionKey.reset.cancel", bundle: currentLocalizationBundle)
                     ),
+                    isConfirmingReset: Binding(
+                        get: { functionChooser?.isConfirmingReset ?? false },
+                        set: { functionChooser?.isConfirmingReset = $0 }
+                    ),
+                    optionHint: macLocalized("a11y.functionKey.hint", bundle: currentLocalizationBundle),
                     label: { functionKeyLabel($0) },
                     onHighlight: { highlightFunctionChooserOption($0) },
                     onCommit: { commitFunctionChooser($0) },
@@ -1124,7 +1285,14 @@ struct CalculatorWindowView: View {
                                     kind: button.kind,
                                     height: cellHeight,
                                     disablesButtonSound: windowSettings.disablesButtonSound,
-                                    action: button.action,
+                                    action: {
+                                        // Function keys announce themselves
+                                        // in `performFunction`.
+                                        if button.slot == nil {
+                                            speakKeyPress(DisplaySpeech.spokenKey(button.title, localize: speechLocalize))
+                                        }
+                                        button.action()
+                                    },
                                     enabled: button.enabled,
                                     palette: palette,
                                     symbolName: button.symbolName,
@@ -1239,8 +1407,8 @@ struct CalculatorWindowView: View {
                 NSCursor.arrow.set()
             }
         }
-        .accessibilityLabel(Text("Resize keypad"))
-        .accessibilityHint(Text("Drag up or down to resize the keypad"))
+        .accessibilityLabel(Text(macLocalized("a11y.resize.keypad", bundle: currentLocalizationBundle)))
+        .accessibilityHint(Text(macLocalized("a11y.resize.keypad.hint", bundle: currentLocalizationBundle)))
     }
 
     private func historyOverlay(defaultHeight: CGFloat, windowHeight: CGFloat, panelHeight: CGFloat) -> some View {
@@ -1458,8 +1626,8 @@ struct CalculatorWindowView: View {
                 NSCursor.arrow.set()
             }
         }
-        .accessibilityLabel(Text("Resize history"))
-        .accessibilityHint(Text("Drag up or down to resize the history overlay"))
+        .accessibilityLabel(Text(macLocalized("a11y.resize.history", bundle: currentLocalizationBundle)))
+        .accessibilityHint(Text(macLocalized("a11y.resize.history.hint", bundle: currentLocalizationBundle)))
 
         return handle
     }
@@ -1722,6 +1890,7 @@ struct CalculatorWindowView: View {
             isEnabled: viewModel.isResultRoundingEnabled,
             precision: viewModel.resultRoundingPrecision,
             maxPrecision: viewModel.maxResultRoundingPrecision,
+            spokenValue: spokenDisplayValue,
             localizationBundle: currentLocalizationBundle,
             onSelectionChanged: { digits in
                 if let digits {
@@ -1840,6 +2009,12 @@ struct CalculatorWindowView: View {
         setRoundingOverlayVisible(true)
     }
 
+    private func stepTipRateFromKeyboard(up: Bool) {
+        if let next = TipRateStep.next(after: tipRate, up: up) {
+            tipRate = next
+        }
+    }
+
     private func adjustRoundingSelectionFromKeyboard(delta: Int) -> Bool {
         guard showRoundingOverlay else { return false }
 
@@ -1854,8 +2029,19 @@ struct CalculatorWindowView: View {
         } else {
             viewModel.setResultRoundingPrecision(nextStep)
         }
+        // The arrows change the slider without VoiceOver's focus being on it,
+        // so say the rounded result (#145).
+        VoiceOver.announce(spokenDisplayValue)
 
         return true
+    }
+
+    /// What the display shows, as VoiceOver should say it.
+    private var spokenDisplayValue: String {
+        let state = viewModel.displaySpeechState
+        return state.isError
+            ? state.display
+            : DisplaySpeech.spoken(state.display, decimalSeparator: state.decimalSeparator, localize: speechLocalize)
     }
 
     /// Shift + Up/Down are the display-resize menu shortcuts. The local key
@@ -1881,7 +2067,12 @@ struct CalculatorWindowView: View {
         case 125:
             // Already in the rounding overlay; no additional down-arrow action.
             return true
-        case 51, 53, 117:
+        case 53:
+            // Escape closes, like the close button (#145).
+            closeRoundingOverlay()
+            return true
+        case 51, 117:
+            // Delete presses the trash: rounding off, and the pane closes.
             viewModel.removeResultRounding()
             closeRoundingOverlay()
             return true
@@ -1894,11 +2085,17 @@ struct CalculatorWindowView: View {
         guard showHistoryOverlay else { return false }
 
         switch event.keyCode {
-        case 53, 51, 36, 76, 119:
+        case 53, 36, 76, 119:
             closeHistoryOverlay()
             return true
-        case 117:
-            clearHistoryAfterClosingOverlay()
+        case 51, 117:
+            // Delete presses the trash: clears the history, or just closes
+            // when there is none (#145).
+            if viewModel.history.isEmpty {
+                closeHistoryOverlay()
+            } else {
+                clearHistoryAfterClosingOverlay()
+            }
             return true
         default:
             // Suppress calculator input while history overlay is active.
@@ -1932,6 +2129,20 @@ struct CalculatorWindowView: View {
         setSettingsOverlayVisible(false)
     }
 
+    /// Closes whatever is in front: the function-key chooser, then any pane.
+    private func closeTopPane() {
+        if functionChooser != nil {
+            dismissFunctionChooser()
+        } else {
+            closeActiveOverlay()
+        }
+        // Typing goes back to the calculator.
+        if let window = windowReference,
+           let catcher = window.contentView?.firstDescendant(ofType: KeyCatcherView.self) {
+            window.makeFirstResponder(catcher)
+        }
+    }
+
     private func closeActiveOverlay() {
         switch activeOverlay {
         case .history:
@@ -1958,6 +2169,63 @@ struct CalculatorWindowView: View {
     // Routes a hardware-keyboard event to a calculator action. Returns true when
     // handled so the event is consumed. Active overlays get first refusal.
     @discardableResult
+    /// Handles a key and, when VoiceOver is on, says which key it was:
+    /// typing never moves VoiceOver's focus to the on-screen keys, so without
+    /// this nothing is heard until Enter (#145).
+    private func handleKeyAndSpeak(_ event: NSEvent) -> Bool {
+        // Tab and Shift-Tab always go to the window, which moves keyboard
+        // focus between controls, in a pane or on the calculator (#145).
+        if event.keyCode == 48 {
+            return false
+        }
+
+        // With a pane open, Space presses whichever of its controls has
+        // keyboard focus. The pane's own keys (the arrows and Return in
+        // Rounding, Escape everywhere) carry on as before.
+        let isPaneOpen = activeOverlay != nil || functionChooser != nil
+        if isPaneOpen, event.keyCode == 49 {
+            return false
+        }
+
+        // Settings is a pane of ordinary controls: Escape closes it, and no
+        // key reaches the calculator behind it.
+        if activeOverlay == .settings {
+            if event.keyCode == 53 {
+                closeSettingsOverlay()
+                return true
+            }
+            return false
+        }
+
+        let word = spokenWord(for: event)
+        let handled = handleKey(event)
+        if handled {
+            speakKeyPress(word)
+        }
+        return handled
+    }
+
+    private func spokenWord(for event: NSEvent) -> String? {
+        guard NSWorkspace.shared.isVoiceOverEnabled,
+              event.modifierFlags.intersection([.command, .control, .option]).isEmpty else {
+            return nil
+        }
+        if event.keyCode == 51 || event.keyCode == 117 { // Backspace / Delete
+            return speechLocalize("a11y.key.delete")
+        }
+        guard let characters = event.charactersIgnoringModifiers, characters.count == 1 else {
+            return nil
+        }
+        return DisplaySpeech.spokenKey(characters, localize: speechLocalize)
+    }
+
+    /// Says a key's word. It interrupts the previous key's word, so fast
+    /// typing never leaves VoiceOver lagging behind.
+    private func speakKeyPress(_ word: String?) {
+        guard let word, !word.isEmpty else { return }
+        announceForVoiceOver(word)
+    }
+
     private func handleKey(_ event: NSEvent) -> Bool {
         // While a VAT or Tip rate is being typed, every key belongs to its text
         // field rather than to the calculator (#124).
@@ -1965,10 +2233,28 @@ struct CalculatorWindowView: View {
             return false
         }
 
-        // VAT and Tip apply live to the display, so any key on the calculator
-        // while one is open — typing, or a shortcut such as ⌘V, ⌘Z or
-        // ⌘Delete — closes it first: the result stays, and the key then does
-        // what it always does. Escape just closes the pane.
+        let hasNoModifiers = event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty
+
+        // In the Tip pane, ← and → move the rate slider a notch, like they
+        // move the rounding slider; the pane says the new amounts.
+        if activeOverlay == .tip, event.keyCode == 123 || event.keyCode == 124, hasNoModifiers {
+            stepTipRateFromKeyboard(up: event.keyCode == 124)
+            return true
+        }
+
+        // Delete presses the pane's trash: VAT or Tip comes off the display
+        // and the pane closes (#145).
+        if activeOverlay == .vat || activeOverlay == .tip,
+           event.keyCode == 51 || event.keyCode == 117, hasNoModifiers {
+            viewModel.removeLiveToolResult(activeOverlay == .vat ? .vat : .tip)
+            setActiveOverlay(nil)
+            return true
+        }
+
+        // VAT and Tip apply live to the display, so any other key on the
+        // calculator while one is open — typing, or a shortcut such as ⌘V, ⌘Z
+        // or ⌘Delete — closes it first: the result stays, and the key then
+        // does what it always does. Escape just closes the pane.
         if activeOverlay == .vat || activeOverlay == .tip {
             closeToolPane()
             if event.keyCode == 53 { return true }
@@ -1978,12 +2264,31 @@ struct CalculatorWindowView: View {
         // as it was; every other key belongs to the chooser (Tab to move
         // between its buttons, Space to press one) and not to the calculator
         // (#131).
-        if functionChooser != nil {
-            if event.keyCode == 53 {
+        if let session = functionChooser {
+            // The reset confirmation takes its own keys.
+            if session.isConfirmingReset { return false }
+            switch event.keyCode {
+            // Delete presses the trash, which asks before resetting (#145).
+            case 51, 117:
+                functionChooser?.isConfirmingReset = true
+                return true
+            case 53:
                 dismissFunctionChooser()
                 return true
+            // The arrows move the highlight through the options and Return
+            // gives the key the highlighted one (#145).
+            case 123: moveFunctionChooserHighlight(by: -1); return true
+            case 124: moveFunctionChooserHighlight(by: 1); return true
+            case 126: moveFunctionChooserHighlight(by: -CalculatorFunctionKeyChooser.columns); return true
+            case 125: moveFunctionChooserHighlight(by: CalculatorFunctionKeyChooser.columns); return true
+            case 36, 76:
+                if let function = functionChooser?.highlighted {
+                    commitFunctionChooser(function)
+                }
+                return true
+            default:
+                return false
             }
-            return false
         }
 
         let chars = event.charactersIgnoringModifiers ?? ""
@@ -2279,6 +2584,18 @@ struct CalculatorWindowView: View {
         case .reciprocal: viewModel.reciprocal()
         case .parentheses: viewModel.inputParentheses()
         case .percent: viewModel.applyPercent()
+        }
+
+        // Rounding opens a pane; everything else changes the display without
+        // a sound, so say what it shows now (#145). The display's own
+        // announcement for this change is skipped so the two don't overlap.
+        if function != .rounding, NSWorkspace.shared.isVoiceOverEnabled {
+            actionAnnouncedAt = Date()
+            announceForVoiceOver(DisplaySpeech.actionAnnouncement(
+                functionKeyLabel(function),
+                state: viewModel.displaySpeechState,
+                localize: speechLocalize
+            ))
         }
     }
 
@@ -2945,6 +3262,14 @@ private struct HistoryEntryRow: View {
             if hovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
         }
         .onTapGesture { onSelect() }
+        // A row reuses its result, like a button; keyboard focus and VoiceOver
+        // need to know that, since the tap gesture alone is mouse-only (#145).
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { onSelect() }
+        .focusable()
+        .onKeyPress(.return) { onSelect(); return .handled }
+        .onKeyPress(.space) { onSelect(); return .handled }
         .contextMenu {
             Button(action: onCopyOperation) {
                 Label(macLocalized("history.copyOperation", bundle: localizationBundle), systemImage: "doc.on.doc")
@@ -3238,6 +3563,8 @@ private struct MacRoundingPanel: View {
     let isEnabled: Bool
     let precision: Int
     let maxPrecision: Int
+    /// The rounded result as VoiceOver should say it.
+    let spokenValue: String
     let localizationBundle: Bundle?
     let onSelectionChanged: (Int?) -> Void
     let onDisableAndDismiss: () -> Void
@@ -3264,6 +3591,7 @@ private struct MacRoundingPanel: View {
         isEnabled: Bool,
         precision: Int,
         maxPrecision: Int,
+        spokenValue: String,
         localizationBundle: Bundle?,
         onSelectionChanged: @escaping (Int?) -> Void,
         onDisableAndDismiss: @escaping () -> Void,
@@ -3274,6 +3602,7 @@ private struct MacRoundingPanel: View {
         self.isEnabled = isEnabled
         self.precision = precision
         self.maxPrecision = max(0, maxPrecision)
+        self.spokenValue = spokenValue
         self.localizationBundle = localizationBundle
         self.onSelectionChanged = onSelectionChanged
         self.onDisableAndDismiss = onDisableAndDismiss
@@ -3305,6 +3634,22 @@ private struct MacRoundingPanel: View {
             // Only sliders and links take the accent (#137); every other
             // control keeps its system colours.
             .tint(palette.sliderTint)
+            // VoiceOver hears the rounded result, not the slider's position,
+            // and steps one decimal place at a time (#145).
+            .accessibilityLabel(Text(macLocalized("rounding.title", bundle: localizationBundle)))
+            .accessibilityValue(Text(spokenValue))
+            .accessibilityAdjustableAction { direction in
+                let current = stepIndex(for: sliderValue)
+                let next: Int
+                switch direction {
+                case .increment: next = min(current + 1, maximumStepIndex)
+                case .decrement: next = max(current - 1, Self.offStepIndex)
+                @unknown default: return
+                }
+                guard next != current else { return }
+                sliderValue = Self.sliderPosition(for: next)
+                onSelectionChanged(digits(for: next))
+            }
 
             GeometryReader { geometry in
                 ZStack(alignment: .topLeading) {
@@ -3967,5 +4312,28 @@ private struct MacToolPaneBackground: ViewModifier {
             )
             .padding(.horizontal, -8)
             .padding(.bottom, -8)
+    }
+}
+
+
+/// Numbers the open calculator windows 1, 2, 3... for VoiceOver (#145). A new
+/// window takes the lowest free number, so closing Window 2 and opening another
+/// gives a new Window 2.
+@MainActor
+enum MacWindowNumbers {
+    private static var taken: Set<Int> = []
+
+    static var openCount: Int { taken.count }
+
+    static func claim() -> Int {
+        var number = 1
+        while taken.contains(number) { number += 1 }
+        taken.insert(number)
+        return number
+    }
+
+    static func release(_ number: Int?) {
+        guard let number else { return }
+        taken.remove(number)
     }
 }

@@ -12,6 +12,26 @@ This page is a quick guide to accessibility features available in EnterCalc.
 - Core controls in calculator, history, and settings are labeled for assistive technologies.
 - Configurable function keys announce the *function* they currently carry — "Undo", "Square Root" — rather than the glyph drawn on them, so the label follows the key when it is reassigned.
 
+### VoiceOver
+
+- **The display is one element.** It's labelled "Result". Its value is the number on screen plus where it came from: "12, from 5 plus 7" after a calculation, or "7, after 5 plus" while one is in progress. Operators are read as words ("plus", "divided by").
+- **Numbers are read the way people say them.** The whole part is read as a number and each decimal digit on its own, so 3.1415 is "3 point 1 4 1 5". A result cut off at the display's 16 digits, like 28 ÷ 3, is read as "9 point 3 3 3 repeating". Shorter numbers are read in full, since they are exact.
+- **Currency amounts read as money.** Under one unit they are read in cents ("71 cents", "30 pence").
+- **Changes are announced.** Enter announces the result ("Equals 12"), AC announces "Cleared", and an error is read out. Action keys say what they did and what is now shown ("Undo, 2 displayed"). Mode changes are announced ("Now in Currency mode"). Moving to another screen or window says which one and what it shows ("Screen 2, $1.55 shown").
+- **On the Mac, typed keys are spoken** ("5", "plus"), because VoiceOver's focus stays on the window while you type.
+- **The panes take VoiceOver focus.** History, Rounding, VAT, Tip, Settings and the Edit Action chooser announce themselves when they open and say "… closed" when they close. While a pane is open, VoiceOver and Tab only reach that pane's controls. The escape gesture closes the pane.
+- **Sliders read their meaning, not a percentage.** The Round Result slider reads the rounded value. The Tip slider reads the rate with the tip and total, and VAT and Tip choices say what was selected along with the new amounts ("15% selected. Tip $1.50, Total $11.50").
+- **The Edit Action chooser explains each option**, marks the key's current action, and confirms the choice ("Redo selected").
+- **The display offers Copy and Copy Operation** as VoiceOver actions.
+
+### Keyboard
+
+- **Escape** closes whichever pane is open, leaving everything as it was.
+- **Delete** does what the open pane's trash button does: turns rounding off, takes VAT or Tip off the display, clears the history, or asks to restore the default keys.
+- **← and →** move the Round Result and Tip sliders. In the Edit Action chooser, the arrow keys move through the options and **Return** chooses the highlighted one.
+- **Tab** moves between controls when the system's keyboard navigation (Mac) or Full Keyboard Access (iPhone and iPad) is on, and **Space** presses the focused control. Tab navigation without those settings is planned ([#164](https://github.com/tipliai/enterCalc/issues/164)).
+- All VoiceOver text is translated into the seven app languages. VoiceOver speaks with the system's voice.
+
 ### Reassigning a function key without a press-and-hold
 
 - Function keys are changed by pressing and holding on iOS, or from the **Edit** item in a key's context menu on macOS (#131). Neither is easy for a VoiceOver user, and the Mac hint names the context menu rather than press-and-hold.
@@ -61,14 +81,6 @@ This page is a quick guide to accessibility features available in EnterCalc.
 
 - Supports OS Reduced Motion, Increase Contrast, and larger text behavior.
 - Compact action labels and history/settings text scaling are enabled.
-
-## Planned for 1.2.0
-
-These VoiceOver improvements did not make 1.1.0 and are planned for 1.2.0 ([#145](https://github.com/tipliai/enterCalc/issues/145)):
-
-- Meaningful readout of the expression and result, with changes announced.
-- Overlays that keep VoiceOver focus inside them, read in a logical order, and close with the escape gesture.
-- End-to-end VoiceOver validation of the calculator, overlays, and settings on iPhone, iPad, and Mac.
 
 ## Notes
 

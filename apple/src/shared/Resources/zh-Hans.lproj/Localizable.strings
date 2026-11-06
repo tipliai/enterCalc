@@ -120,3 +120,43 @@
 /* Mode picker (#142) */
 "calculator.mode.menu" = "模式";
 "calculator.mode.picker.hint" = "选择计算器模式";
+
+/* VoiceOver: the calculator display and what it announces (#145). */
+"a11y.display.label" = "结果";
+"a11y.display.hint" = "拷贝结果。";
+"a11y.display.completed" = "%2$@ 的结果，%1$@";
+"a11y.display.pending" = "%2$@ 之后，%1$@";
+"a11y.operator.plus" = "加";
+"a11y.operator.minus" = "减";
+"a11y.operator.times" = "乘以";
+"a11y.operator.dividedBy" = "除以";
+"a11y.operator.equals" = "等于";
+"a11y.operator.approximately" = "约等于";
+"a11y.operator.percent" = "%";
+"a11y.operator.squareRoot" = "根号";
+"a11y.announce.result" = "等于 %@";
+"a11y.announce.cleared" = "已清除";
+"a11y.key.point" = "点";
+"a11y.key.delete" = "删除";
+"a11y.key.clear" = "清除输入";
+"a11y.key.parentheses" = "括号";
+"a11y.key.openParenthesis" = "左括号";
+"a11y.key.closeParenthesis" = "右括号";
+"a11y.number.repeating" = "循环";
+"a11y.currency.cent" = "1分";
+"a11y.currency.cents" = "%@分";
+"a11y.currency.penny" = "1便士";
+"a11y.currency.pence" = "%@便士";
+"a11y.announce.action" = "%1$@，显示 %2$@";
+"a11y.pane.history" = "历史记录";
+"a11y.pane.closed" = "%@ 已关闭";
+"a11y.announce.mode" = "已切换到%@模式";
+"a11y.announce.screen" = "屏幕 %1$@，显示 %2$@";
+"a11y.announce.window" = "窗口 %1$@，显示 %2$@";
+"a11y.resize.keypad" = "调整键盘大小";
+"a11y.resize.keypad.hint" = "向上或向下拖移以调整键盘大小";
+"a11y.resize.history" = "调整历史记录大小";
+"a11y.resize.history.hint" = "向上或向下拖移以调整历史记录大小";
+"a11y.selected" = "已选择 %@";
+"a11y.functionKey.current" = "%@，当前";
+"a11y.functionKey.hint" = "将此操作分配给该键";

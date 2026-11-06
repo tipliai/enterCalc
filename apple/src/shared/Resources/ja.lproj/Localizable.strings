@@ -120,3 +120,43 @@
 /* Mode picker (#142) */
 "calculator.mode.menu" = "モード";
 "calculator.mode.picker.hint" = "計算機のモードを選択";
+
+/* VoiceOver: the calculator display and what it announces (#145). */
+"a11y.display.label" = "結果";
+"a11y.display.hint" = "結果をコピーします。";
+"a11y.display.completed" = "%2$@ の結果、%1$@";
+"a11y.display.pending" = "%2$@ のあと、%1$@";
+"a11y.operator.plus" = "たす";
+"a11y.operator.minus" = "ひく";
+"a11y.operator.times" = "かける";
+"a11y.operator.dividedBy" = "わる";
+"a11y.operator.equals" = "は";
+"a11y.operator.approximately" = "約";
+"a11y.operator.percent" = "パーセント";
+"a11y.operator.squareRoot" = "ルート";
+"a11y.announce.result" = "答え %@";
+"a11y.announce.cleared" = "クリアしました";
+"a11y.key.point" = "点";
+"a11y.key.delete" = "削除";
+"a11y.key.clear" = "入力をクリア";
+"a11y.key.parentheses" = "かっこ";
+"a11y.key.openParenthesis" = "かっこ開き";
+"a11y.key.closeParenthesis" = "かっこ閉じ";
+"a11y.number.repeating" = "の繰り返し";
+"a11y.currency.cent" = "1セント";
+"a11y.currency.cents" = "%@セント";
+"a11y.currency.penny" = "1ペンス";
+"a11y.currency.pence" = "%@ペンス";
+"a11y.announce.action" = "%1$@、%2$@ を表示";
+"a11y.pane.history" = "履歴";
+"a11y.pane.closed" = "%@ を閉じました";
+"a11y.announce.mode" = "%@ モードになりました";
+"a11y.announce.screen" = "画面 %1$@、%2$@ を表示";
+"a11y.announce.window" = "ウインドウ %1$@、%2$@ を表示";
+"a11y.resize.keypad" = "キーパッドのサイズを変更";
+"a11y.resize.keypad.hint" = "上下にドラッグしてキーパッドのサイズを変更します";
+"a11y.resize.history" = "履歴のサイズを変更";
+"a11y.resize.history.hint" = "上下にドラッグして履歴のサイズを変更します";
+"a11y.selected" = "%@ を選択";
+"a11y.functionKey.current" = "%@、現在の設定";
+"a11y.functionKey.hint" = "このキーにこの操作を割り当てます";
