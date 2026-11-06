@@ -1860,7 +1860,13 @@ private extension EnterCalcIOSView {
             case .portraitUpsideDown: orientations = .landscapeRight
             case .portrait: orientations = .landscapeLeft
             case .landscapeLeft, .landscapeRight: orientations = .portrait
-            default: orientations = .all
+            default:
+                // Face up, face down and unknown say nothing about which way
+                // round the display is, so a request already made for it
+                // stands, with its correction. Before any was made, release
+                // whatever the front display asked for.
+                if holdsInnerDisplayOrientation { return }
+                orientations = .all
             }
             counterRotatesForUpsideDownPortrait = UIDevice.current.orientation == .landscapeRight
             holdsInnerDisplayOrientation = true
