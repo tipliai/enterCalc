@@ -823,6 +823,9 @@ struct EnterCalcIOSView: View {
 
                 layoutBody(metrics: metrics)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    // Positions in the layout, for lining up with the Duo's
+                    // fold (#132).
+                    .coordinateSpace(.named(Self.layoutCoordinateSpace))
                     .rotationEffect(.degrees(counterRotatesForUpsideDownPortrait ? 180 : 0))
                     // Under a pane's dimmed background nothing can be pressed,
                     // so it leaves the keyboard's Tab order and VoiceOver
@@ -883,7 +886,7 @@ struct EnterCalcIOSView: View {
                 applyActiveScreenConfiguration()
                 prepareActionFeedbackGenerators()
                 startDeviceOrientationObservation()
-                syncPhoneUpsideDownPresentation()
+                syncPhoneUpsideDownPresentation(atLaunch: true)
                 startDisplayShimmerParallaxMotion()
                 startOperatorIntroAnimation()
             }
@@ -1573,6 +1576,10 @@ private extension EnterCalcIOSView {
     /// How tall a VAT, Tip or rounding pane may grow before it scrolls: it
     /// keeps clear of the header and the top of the display.
     func paneMaximumHeight(metrics: IOSLayoutMetrics, containerSize: CGSize) -> CGFloat {
+        // Tabletop: below the fold only (#132).
+        if metrics.foldPosture == .tabletop {
+            return metrics.foldBottomHalfHeight
+        }
         let fraction: CGFloat = metrics.mode == .phoneLandscape ? 0.85 : 0.7
         return containerSize.height * fraction
     }
@@ -1754,6 +1761,8 @@ private extension EnterCalcIOSView {
                         palette.historyBackground
                             .ignoresSafeArea(edges: counterRotatesForUpsideDownPortrait ? .top : .bottom)
                     )
+                    // Book: over the calculator half only (#132).
+                    .padding(.leading, metrics.foldPosture == .book ? metrics.foldCalculatorMinX : 0)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .ignoresSafeArea(edges: counterRotatesForUpsideDownPortrait ? .top : .bottom)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -1805,22 +1814,57 @@ private extension EnterCalcIOSView {
 #endif
     }
 
-    func syncPhoneUpsideDownPresentation() {
+    /// iPhones do not turn the screen upside down, so the app turns its own
+    /// content round and asks for portrait. `atLaunch` is the first reading,
+    /// which can be stale (the iPhone Duo reports "upside down" at launch while
+    /// open in book position, #132), so it only counts if the screen really is
+    /// in portrait; later readings come from turning the device.
+    func syncPhoneUpsideDownPresentation(atLaunch: Bool = false) {
 #if canImport(UIKit)
         guard UIDevice.current.userInterfaceIdiom == .phone else {
             counterRotatesForUpsideDownPortrait = false
             return
         }
 
+        let windowScenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let activeWindowScene = windowScenes.first(where: { $0.activationState == .foregroundActive }) ?? windowScenes.first
+        let interfaceIsPortrait = activeWindowScene?.effectiveGeometry.interfaceOrientation.isPortrait ?? true
+
+        // The iPhone Duo's inner display (#132) rotates every way by itself,
+        // upside down included, so it is left to the system. Asking it for an
+        // orientation there locks the screen, and the device's orientation
+        // events can arrive late, so acting on one leaves it in the wrong
+        // posture. The one request made here releases any orientation the
+        // front display asked for before the Duo was opened. The folded front
+        // display is an iPhone screen and keeps the handling below.
+        if let bounds = activeWindowScene?.windows.first?.bounds, min(bounds.width, bounds.height) >= 600 {
+            if counterRotatesForUpsideDownPortrait {
+                counterRotatesForUpsideDownPortrait = false
+            }
+            activeWindowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: .allButUpsideDown)) { _ in }
+            return
+        }
+
         switch UIDevice.current.orientation {
-        case .portraitUpsideDown:
+        case .portraitUpsideDown where !atLaunch || interfaceIsPortrait:
             counterRotatesForUpsideDownPortrait = true
-
-            let windowScenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-            let activeWindowScene = windowScenes.first(where: { $0.activationState == .foregroundActive }) ?? windowScenes.first
-
             activeWindowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait)) { _ in }
         case .portrait, .landscapeLeft, .landscapeRight:
+            // Upside down asked for portrait, and that request holds. Ask for
+            // the orientation the device is in now, which turns the screen,
+            // then give rotation back to the system once it has turned.
+            if counterRotatesForUpsideDownPortrait {
+                let current: UIInterfaceOrientationMask
+                switch UIDevice.current.orientation {
+                case .landscapeLeft: current = .landscapeRight
+                case .landscapeRight: current = .landscapeLeft
+                default: current = .portrait
+                }
+                activeWindowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: current)) { _ in }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    activeWindowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: .allButUpsideDown)) { _ in }
+                }
+            }
             counterRotatesForUpsideDownPortrait = false
         default:
             counterRotatesForUpsideDownPortrait = false
@@ -2115,9 +2159,14 @@ private extension EnterCalcIOSView {
 
                 pager
             }
+            .padding(metrics.mode == .phoneLandscape ? metrics.landscapeCornerInsets : EdgeInsets())
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         } else {
             pager
+                // The neighbouring pages and the new-page placeholder stay
+                // inside the page area, out of a side safe area such as the
+                // iPhone Duo front display's camera strip (#132).
+                .clipped()
                 .overlay(alignment: .bottom) {
                     fixedPaginationOverlay(metrics: metrics)
                 }
@@ -2131,6 +2180,8 @@ private extension EnterCalcIOSView {
         fadingPaginationIndicator(metrics: metrics, isVisible: screenStore.screenCount > 1)
             .frame(height: metrics.pageIndicatorHeight, alignment: .top)
             .frame(maxWidth: .infinity)
+            // Book: centred under the calculator, not across the fold.
+            .padding(.leading, metrics.foldPosture == .book ? metrics.historyPanelWidth + IOSLayoutMetrics.foldGap : 0)
             .padding(.bottom, metrics.bottomPadding)
     }
 
@@ -2409,8 +2460,22 @@ private extension EnterCalcIOSView {
                 }
 
                 pageContentWithPagination(metrics: metrics) {
-                    calculatorSurface(metrics: metrics, screen: screen, paginationBottomInset: paginationBottomInset)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    if metrics.foldPosture == .book {
+                        // iPhone Duo held like a book (#132): history fills the
+                        // left half, and the right half is the calculator just
+                        // as on the folded front display.
+                        HStack(spacing: IOSLayoutMetrics.foldGap) {
+                            landscapeHistoryPane(metrics: metrics, screen: screen)
+                                .frame(width: metrics.historyPanelWidth)
+                                .frame(maxHeight: .infinity)
+
+                            calculatorSurface(metrics: metrics, screen: screen, paginationBottomInset: paginationBottomInset)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        }
+                    } else {
+                        calculatorSurface(metrics: metrics, screen: screen, paginationBottomInset: paginationBottomInset)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    }
                 }
             }
             .padding(.horizontal, metrics.outerPadding)
@@ -2443,6 +2508,8 @@ private extension EnterCalcIOSView {
         }
     }
 
+    static let layoutCoordinateSpace = "EnterCalcLayout"
+
     func calculatorSurface(
         metrics: IOSLayoutMetrics,
         screen: CalculatorScreenSession,
@@ -2452,7 +2519,10 @@ private extension EnterCalcIOSView {
             let scale = metrics.surfaceScaleFactor(for: geometry.size.height)
             let isLandscapeMode = metrics.mode == .phoneLandscape || metrics.mode == .padWide
             let fillsHeightWithoutScaling = metrics.mode == .padWide || (metrics.isPadWindow && metrics.mode == .phonePortrait)
-            let allowsKeypadResize = !isLandscapeMode
+            // Tabletop: the display fills the top half and the keypad the
+            // bottom, so the split is the fold and cannot be dragged (#132).
+            let isTabletop = metrics.foldPosture == .tabletop
+            let allowsKeypadResize = !isLandscapeMode && !isTabletop
             let showsInlineLandscapeHeader = !metrics.usesTitlebarHeader && !metrics.usesLandscapeNavigationRail
             let keypadHeightMultiplier = allowsKeypadResize ? normalizedKeypadHeightMultiplier(for: screen) : 1.0
             let baseKeypadHeight = metrics.keypadHeight
@@ -2489,9 +2559,20 @@ private extension EnterCalcIOSView {
             let landscapeDisplayTrim: CGFloat = isLandscapeMode ? 6 : 0
             // The result area takes whatever height the keypad leaves, so capped keys
             // on tall phones don't leave an empty band under the keypad (#134).
-            let resultAreaHeight = isLandscapeMode
+            let fittedResultAreaHeight = isLandscapeMode
                 ? max(0, availableSurfaceHeight - actualKeypadHeight - landscapeDisplayTrim)
                 : max(initialResultAreaHeight, availableSurfaceHeight - actualKeypadHeight)
+            // Tabletop: the display ends half the fold gap above the fold; the
+            // keypad, after the usual spacing and separator, starts below it.
+            let surfaceTop = geometry.frame(in: .named(Self.layoutCoordinateSpace)).minY + metrics.contentTopPadding
+                + headerHeightContribution + (showsInlineLandscapeHeader ? metrics.sectionSpacing : 0)
+            let tabletopResultAreaHeight = max(0, min(availableSurfaceHeight, metrics.foldLayoutY - IOSLayoutMetrics.foldGap / 2 - surfaceTop))
+            let resultAreaHeight = isTabletop ? tabletopResultAreaHeight : fittedResultAreaHeight
+            let tabletopKeypadHeight = max(0, availableSurfaceHeight - tabletopResultAreaHeight)
+            let keypadButtonHeight = isTabletop
+                ? max(0, (tabletopKeypadHeight - metrics.gridSpacing * keypadSpacingUnits) / baseRowUnits)
+                : actualButtonHeight
+            let keypadHeight = isTabletop ? tabletopKeypadHeight : actualKeypadHeight
 
             VStack(spacing: metrics.sectionSpacing) {
                 if showsInlineLandscapeHeader {
@@ -2522,8 +2603,8 @@ private extension EnterCalcIOSView {
                             .frame(height: separatorHeight)
                     }
 
-                    keypad(metrics: metrics, screen: screen, buttonHeight: actualButtonHeight)
-                        .frame(maxWidth: .infinity, minHeight: actualKeypadHeight, maxHeight: actualKeypadHeight, alignment: .bottom)
+                    keypad(metrics: metrics, screen: screen, buttonHeight: keypadButtonHeight)
+                        .frame(maxWidth: .infinity, minHeight: keypadHeight, maxHeight: keypadHeight, alignment: .bottom)
                 }
                 .overlay {
                     if allowsKeypadResize && isResizingKeypadHeight {
@@ -4106,7 +4187,9 @@ private extension EnterCalcIOSView {
 
     func maximumHistoryOverlayHeight(metrics: IOSLayoutMetrics, containerHeight: CGFloat) -> CGFloat {
         let verticalInsets = metrics.overlayBottomPadding + (metrics.usesBottomOverlaySheet ? 0 : metrics.topPadding)
-        return max(0, min(containerHeight * 0.8, containerHeight - verticalInsets))
+        let maximum = max(0, min(containerHeight * 0.8, containerHeight - verticalInsets))
+        // Tabletop: below the fold only (#132).
+        return metrics.foldPosture == .tabletop ? min(maximum, metrics.foldBottomHalfHeight) : maximum
     }
 
     func currentDeviceFamily() -> IOSDeviceFamily {
@@ -4697,7 +4780,8 @@ private struct IOSHistoryPanel: View {
     @State private var hadEntriesWhilePresented: Bool = false
 
     private var showsCloseButton: Bool {
-        metrics.mode == .phonePortrait
+        // Book: history is part of the page, not a pane to close (#132).
+        metrics.mode == .phonePortrait && metrics.foldPosture != .book
     }
 
     init(
@@ -4841,8 +4925,11 @@ private struct IOSHistoryPanel: View {
                 .fill(panelBackgroundColor)
         )
         .overlay(
+            // Beside the calculator (landscape, and the Duo's book layout),
+            // history stands alone with no box around it (#132).
             Rectangle()
                 .stroke(palette.buttonBorder, lineWidth: 1)
+                .opacity(metrics.usesInlineLandscapeHistory ? 0 : 1)
         )
         .onChange(of: entries.count) { _, count in
             if count > 0 {
@@ -5275,6 +5362,18 @@ private enum IOSLayoutMode {
     case padWide
 }
 
+/// How an iPhone Duo's inner display is being held (#132). Folded, or on any
+/// other iPhone, there is no fold on screen.
+private enum IOSFoldPosture {
+    case none
+    /// Fold down the middle: history on the left half, the calculator on the
+    /// right.
+    case book
+    /// Fold across the middle: the display on the top half, the keypad on the
+    /// bottom.
+    case tabletop
+}
+
 private enum IOSDeviceFamily {
     case phone
     case pad
@@ -5309,6 +5408,8 @@ private extension View {
 
 private struct IOSLayoutMetrics {
     static let minimumPadWindowSize = CGSize(width: 340, height: 440)
+    /// Left clear over the iPhone Duo's fold, so nothing sits on the crease.
+    static let foldGap: CGFloat = 24
     static let defaultPadWindowSize = minimumPadWindowSize
 
     let isPadWindow: Bool
@@ -5356,6 +5457,18 @@ private struct IOSLayoutMetrics {
     let pageIndicatorVerticalSpacing: CGFloat
     let usesTitlebarHeader: Bool
     let usesInlineLandscapeHistory: Bool
+    let foldPosture: IOSFoldPosture
+    /// Extra room from the screen's edges and rounded corners for a phone in
+    /// landscape with no safe area on one side, such as the iPhone Duo's front
+    /// display, whose camera is on the other side (#132). Other iPhones have
+    /// insets on both sides in landscape and get none.
+    let landscapeCornerInsets: EdgeInsets
+    /// Book: where the calculator starts, from the leading safe-area edge.
+    let foldCalculatorMinX: CGFloat
+    /// Tabletop: where the fold falls in the layout (the safe area), and how
+    /// tall the bottom half is, for the panes that must stay below it.
+    let foldLayoutY: CGFloat
+    let foldBottomHalfHeight: CGFloat
     let titlebarLeadingInset: CGFloat
     let usesAdaptiveScaling: Bool
 
@@ -5378,7 +5491,39 @@ private struct IOSLayoutMetrics {
         isPadWindow = deviceFamily == .pad
         let pageIndicatorReserve: CGFloat = isPadWindow ? 18 : 0
 
-        if usesWidePadLayout {
+        // The Duo's inner display, unfolded, is about 1.4:1, and each half of it
+        // is a phone-shaped calculator laid out as on the front display.
+        let fullWidth = size.width + safeAreaInsets.leading + safeAreaInsets.trailing
+        let fullHeight = size.height + safeAreaInsets.top + safeAreaInsets.bottom
+        // Only a display at least 600 points across its short side unfolds:
+        // the Duo's inner display is 669, its front display 466, and the
+        // largest iPhone 440.
+        let isUnfoldedDisplay = deviceFamily == .phone && min(fullWidth, fullHeight) >= 600
+        if isUnfoldedDisplay && isGeometryLandscape && size.width < size.height * 1.7 {
+            foldPosture = .book
+        } else if isUnfoldedDisplay && !isGeometryLandscape && size.height < size.width * 1.7 {
+            foldPosture = .tabletop
+        } else {
+            foldPosture = .none
+        }
+        foldCalculatorMinX = fullWidth / 2 - safeAreaInsets.leading + Self.foldGap / 2
+        foldLayoutY = fullHeight / 2 - safeAreaInsets.top
+        foldBottomHalfHeight = fullHeight / 2 - Self.foldGap / 2
+
+        if deviceFamily == .phone && isGeometryLandscape && min(safeAreaInsets.leading, safeAreaInsets.trailing) < 12 {
+            landscapeCornerInsets = EdgeInsets(
+                top: max(0, 12 - safeAreaInsets.top),
+                leading: max(0, 16 - safeAreaInsets.leading),
+                bottom: max(0, 10 - safeAreaInsets.bottom),
+                trailing: max(0, 16 - safeAreaInsets.trailing)
+            )
+        } else {
+            landscapeCornerInsets = EdgeInsets()
+        }
+
+        if foldPosture != .none {
+            mode = .phonePortrait
+        } else if usesWidePadLayout {
             mode = .padWide
         } else if isGeometryLandscape && !isPadWindow {
             mode = .phoneLandscape
@@ -5388,9 +5533,12 @@ private struct IOSLayoutMetrics {
 
         switch mode {
         case .phonePortrait:
-            outerPadding = isPadWindow ? max(14, safeAreaInsets.leading + 14) : 12
+            // Book: clear of the inner display's rounded corners (#132).
+            outerPadding = isPadWindow ? max(14, safeAreaInsets.leading + 14) : (foldPosture == .book ? 20 : 12)
             innerHorizontalPadding = 0
-            topPadding = isPadWindow ? 8 : 0
+            // Book: no status bar runs along the top of the Duo's inner display,
+            // so leave room for its rounded corners (#132).
+            topPadding = isPadWindow ? 8 : (foldPosture == .book ? max(16, 24 - safeAreaInsets.top) : 0)
             bottomPadding = isPadWindow ? max(8, safeAreaInsets.bottom + 2) : 8
             contentTopPadding = 6
             contentBottomPadding = 6
@@ -5418,7 +5566,10 @@ private struct IOSLayoutMetrics {
             buttonFontSize = min(max(unit * 0.42, isPadWindow ? 17 : 20), 30)
             buttonCornerRadius = min(max(unit * 0.28, 14), 24)
             surfaceCornerRadius = 24
-            historyPanelWidth = 0
+            // Book: history runs from the page's edge to just short of the fold.
+            historyPanelWidth = foldPosture == .book
+                ? max(foldCalculatorMinX - Self.foldGap - outerPadding, 0)
+                : 0
             overlayPanelWidth = min(max(size.width - outerPadding * 2, 280), 460)
             panelSpacing = 12
             panelItemSpacing = 8
@@ -5433,7 +5584,7 @@ private struct IOSLayoutMetrics {
             pageIndicatorSpacing = 8
             pageIndicatorVerticalSpacing = isPadWindow ? 10 : sectionSpacing
             usesTitlebarHeader = isPadWindow
-            usesInlineLandscapeHistory = false
+            usesInlineLandscapeHistory = foldPosture == .book
             titlebarLeadingInset = isPadWindow ? 84 : 0
             usesAdaptiveScaling = isPadWindow
         case .phoneLandscape:
