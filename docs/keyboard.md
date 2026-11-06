@@ -28,11 +28,12 @@ Sources:
 | Shift + Down Arrow | Decrease display size (20pt) | Decrease display size | Decrease display size | Decrease display size |
 | Shift + Left Arrow | iPad: go to the page on the **left** | Same | Same | Same |
 | Shift + Right Arrow | iPad: go to the page on the **right** | Same | Same | Same |
-| Escape | Clear all | Exit direct edit | Remove rounding and close overlay | Close overlay |
+| Escape | Clear all | Exit direct edit | Close overlay (rounding stays) | Close overlay |
 | End | Clear all | Exit direct edit | Close overlay | Close overlay |
-| Backspace | Delete one char/digit via model backspace | Delete one char/digit before caret | Remove rounding and close overlay | Close overlay |
+| Backspace | Delete one char/digit via model backspace | Delete one char/digit before caret | Remove rounding and close overlay | Clear history and close overlay |
 | Forward Delete | Delete one char/digit via model backspace | Delete one char/digit before caret | Remove rounding and close overlay | Clear history and close overlay |
-| Return / Enter / Keypad Enter | Evaluate | Exit direct edit | Close overlay | Close overlay |
+| Return / Enter / Keypad Enter | Evaluate | Exit direct edit | Nothing | Nothing |
+| Space | — | — | Press the control Tab has moved to | Reuse the history row Tab has moved to |
 | Digits 0-9 | Input digit | Insert at display caret | Not handled here | Suppressed |
 | Decimal . | Input decimal separator | Insert decimal at display caret | Not handled here | Suppressed |
 | + - * / | Set operator | Set operator (exits direct edit in model flow) | Not handled here | Suppressed |

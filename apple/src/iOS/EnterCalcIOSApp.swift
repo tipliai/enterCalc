@@ -3871,8 +3871,11 @@ private extension EnterCalcIOSView {
         guard activeOverlay == .history else { return false }
 
         switch event.keyCode {
-        case .keyboardEscape, .keyboardReturnOrEnter, .keypadEnter, .keyboardEnd:
+        case .keyboardEscape, .keyboardEnd:
             dismissActiveOverlay()
+            return true
+        case .keyboardReturnOrEnter, .keypadEnter:
+            // Return is =; with nothing to evaluate here it does nothing.
             return true
         case .keyboardDeleteOrBackspace, .keyboardDeleteForward:
             // Delete presses the trash: clears the history and closes, or
@@ -3893,8 +3896,12 @@ private extension EnterCalcIOSView {
         guard activeOverlay == .rounding else { return false }
 
         switch event.keyCode {
-        case .keyboardUpArrow, .keyboardReturnOrEnter, .keypadEnter:
+        case .keyboardUpArrow:
             dismissActiveOverlay()
+            return true
+        case .keyboardReturnOrEnter, .keypadEnter:
+            // Return is =; with nothing to evaluate in the pane it does
+            // nothing (#145).
             return true
         case .keyboardEnd:
             dismissActiveOverlay()

@@ -2062,8 +2062,12 @@ struct CalculatorWindowView: View {
         if isDisplayResizeShortcut(event) { return false }
 
         switch event.keyCode {
-        case 126, 36, 76:
+        case 126:
             closeRoundingOverlay()
+            return true
+        case 36, 76:
+            // Return is =, and there is nothing to evaluate in the pane, so
+            // it does nothing; Space presses the focused control.
             return true
         case 119:
             closeRoundingOverlay()
@@ -2089,8 +2093,12 @@ struct CalculatorWindowView: View {
         guard showHistoryOverlay else { return false }
 
         switch event.keyCode {
-        case 53, 36, 76, 119:
+        case 53, 119:
             closeHistoryOverlay()
+            return true
+        case 36, 76:
+            // Return is =, so with nothing to evaluate here it does nothing;
+            // Space reuses a focused row.
             return true
         case 51, 117:
             // Delete presses the trash: clears the history, or just closes
@@ -2191,10 +2199,9 @@ struct CalculatorWindowView: View {
             return false
         }
 
-        // A history row with keyboard focus takes Return and Space, which
-        // reuse its result; otherwise Return is = or closes History.
-        if MacHistoryRowFocus.isFocused,
-           event.keyCode == 36 || event.keyCode == 76 || event.keyCode == 49 {
+        // A history row with keyboard focus takes Space, which reuses its
+        // result. Return is always =, never a button.
+        if MacHistoryRowFocus.isFocused, event.keyCode == 49 {
             return false
         }
 
@@ -3292,7 +3299,6 @@ private struct HistoryEntryRow: View {
         .onDisappear {
             if isKeyboardFocused { MacHistoryRowFocus.isFocused = false }
         }
-        .onKeyPress(.return) { onSelect(); return .handled }
         .onKeyPress(.space) { onSelect(); return .handled }
         .contextMenu {
             Button(action: onCopyOperation) {
