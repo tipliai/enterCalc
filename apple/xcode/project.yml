@@ -94,6 +94,24 @@ targets:
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/EnterCalc.app/EnterCalc
         BUNDLE_LOADER: $(TEST_HOST)
 
+  # Xcode's accessibility audit of each screen and pane (#145); run with the
+  # EnterCalc-iOSAccessibility scheme, not by the regular test scheme.
+  EnterCalc-iOSAccessibilityUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: ../a11yuitests
+    dependencies:
+      - target: EnterCalc-iOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tipliai.entercalc.a11yuitests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 5QN344W68F
+        TEST_TARGET_NAME: EnterCalc-iOS
+
   EnterCalc-macOS:
     type: application
     platform: macOS
@@ -156,3 +174,15 @@ targets:
         DEVELOPMENT_TEAM: 5QN344W68F
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/EnterCalc.app/Contents/MacOS/EnterCalc
         BUNDLE_LOADER: $(TEST_HOST)
+
+schemes:
+  EnterCalc-iOSAccessibility:
+    build:
+      targets:
+        EnterCalc-iOS: all
+        EnterCalc-iOSAccessibilityUITests: [test]
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - EnterCalc-iOSAccessibilityUITests

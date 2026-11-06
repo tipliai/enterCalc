@@ -24,6 +24,8 @@ This page is a quick guide to accessibility features available in EnterCalc.
 - **The Edit Action chooser explains each option**, marks the key's current action, and confirms the choice ("Redo selected").
 - **The display offers Copy and Copy Operation** as VoiceOver actions.
 
+- **Checked before each release.** A light automated audit checks that every control has a name, and the [VoiceOver test script](voiceover-test-script.md) is run by hand on iPhone, iPad and Mac.
+
 ### Keyboard
 
 - **Escape** closes whichever pane is open, leaving everything as it was.
