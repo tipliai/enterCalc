@@ -12,7 +12,7 @@
 - VoiceOver reads results, announcements and panes in order, and says which calculator and page it is on.
 - Fixed the keypad stopping short on the iPhone Pro Max, C after a trailing operator, and the Mac's rounding setting.
 - Large text sizes work on the smallest iPhones: the mode and VAT/Tip controls stay reachable, numbers never break across lines, and Settings values stay readable.
-- Panes follow every system text size, including the smaller ones.
+- Pane text now follows the smaller system text sizes too, not only the larger ones.
 - The function key chooser stays clear of the status bar.
 - Rating prompt on the Mac, following Apple's guidance.
 
