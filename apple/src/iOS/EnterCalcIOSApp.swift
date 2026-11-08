@@ -555,10 +555,6 @@ struct EnterCalcIOSView: View {
         screen.viewModel.shouldShowAllClearButton ? "AC" : "C"
     }
 
-    private func handleContextualClear() {
-        activeScreen.viewModel.clearEntry()
-    }
-
     private var palette: Palette {
         activeTheme.palette(using: colorScheme, increasedContrast: colorSchemeContrast == .increased)
     }
@@ -628,14 +624,6 @@ struct EnterCalcIOSView: View {
         )
     }
 
-    private var activeSettingsTitleKey: String {
-        activeScreen.isHomeScreen ? "settings.title" : "settings.screen.title"
-    }
-
-    private var activeAppearanceLabelKey: String {
-        activeScreen.isHomeScreen ? "settings.appearance.label" : "settings.appearance.screenLabel"
-    }
-
     // The rate in use belongs to this window (or iPad scene) for the session,
     // so changing it in one window never rewrites another window's display.
     // The stored value is only the default a new window starts from.
@@ -697,7 +685,7 @@ struct EnterCalcIOSView: View {
     private func basicRows(for screen: CalculatorScreenSession) -> [[IOSCalcButton]] {
         [
             [
-                .function(clearButtonTitle(for: screen), action: { _ in self.handleContextualClear() }),
+                .function(clearButtonTitle(for: screen), action: { $0.clearEntry() }),
                 configurableKeypadButton(for: .parenthesesKey, screen: screen),
                 configurableKeypadButton(for: .percentKey, screen: screen),
                 .operation("÷", action: { $0.setOperator(.divide) })
@@ -1161,7 +1149,9 @@ struct EnterCalcIOSView: View {
             // With two calculators on the Duo the settings show as a card over
             // that half instead (#168), see `duoSettingsPanel`.
             .sheet(isPresented: settingsSheetBinding) {
-                settingsSheetContent()
+                // The cover shows the right calculator, so its sheet is that
+                // screen's whichever half was selected before folding (#168).
+                settingsSheetContent(for: screenStore.activeScreen, asCard: false)
             }
             .onIOSDeviceOrientationChange {
                 isResizingKeypadHeight = false
@@ -1203,6 +1193,8 @@ private extension EnterCalcIOSView {
     func restoreSettingsAfterUnfolding() {
         guard !showSettingsSheet, Date().timeIntervalSince(settingsSheetDismissedAt) < 1.5 else { return }
         settingsSheetDismissedAt = .distantPast
+        // The cover's sheet was the right calculator's, so the card is too.
+        focusedHalf = .right
         showSettingsSheet = true
     }
 
@@ -1230,20 +1222,26 @@ private extension EnterCalcIOSView {
         }
     }
 
-    func settingsSheetContent(onClose: (() -> Void)? = nil) -> some View {
+    /// Settings for one screen. The bindings hold that screen, not whichever
+    /// is selected when a draft is committed: folding the Duo with the left
+    /// card open selects the right calculator, and the outgoing card's
+    /// drafts must still land on the left one (#168).
+    func settingsSheetContent(for screen: CalculatorScreenSession, asCard: Bool) -> some View {
         IOSSettingsSheet(
-            titleKey: activeSettingsTitleKey,
-            appearanceLabelKey: activeAppearanceLabelKey,
-            selectedTheme: activeThemeBinding,
-            selectedLanguage: activeLanguageBinding,
-            usesScientificNotation: activeScientificNotationBinding,
-            selectedNumberFormat: activeNumberFormatBinding,
-            selectedCurrencySymbol: activeCurrencySymbolBinding,
-            disablesSwipeDownToRound: activeDisableSwipeDownToRoundBinding,
+            titleKey: settingsTitleKey(for: screen),
+            appearanceLabelKey: appearanceLabelKey(for: screen),
+            selectedTheme: themeBinding(for: screen),
+            selectedLanguage: languageBinding(for: screen),
+            usesScientificNotation: scientificNotationBinding(for: screen),
+            selectedNumberFormat: numberFormatBinding(for: screen),
+            selectedCurrencySymbol: currencySymbolBinding(for: screen),
+            disablesSwipeDownToRound: disableSwipeDownToRoundBinding(for: screen),
             availableLanguages: availableLanguageOptions(),
             // The card sits in the layout, which is already turned.
-            counterRotatesForUpsideDownPortrait: onClose == nil && counterRotatesForUpsideDownPortrait,
-            onClose: onClose
+            counterRotatesForUpsideDownPortrait: !asCard && counterRotatesForUpsideDownPortrait,
+            // Closing here is the user's doing, so it is not recorded as a
+            // dismissal the Duo's unfolding may have caused.
+            onClose: { closeSettings() }
         )
         // A sheet takes its text size from the window, not the root
         // view's environment, so the Text Size setting is applied here too.
@@ -1260,7 +1258,7 @@ private extension EnterCalcIOSView {
         // taken the header's row.
         let topInset = metrics.topPadding + (metrics.usesTrailingRail ? metrics.contentTopPadding : metrics.headerHeight)
         let shape = RoundedRectangle(cornerRadius: metrics.surfaceCornerRadius, style: .continuous)
-        settingsSheetContent(onClose: { closeSettings() })
+        settingsSheetContent(for: activeScreen, asCard: true)
             .frame(width: metrics.foldKeypadWidth, height: max(0, containerSize.height - topInset - metrics.bottomPadding))
             .clipShape(shape)
             .shadow(color: Color.black.opacity(0.3), radius: 16, y: 8)
@@ -1268,68 +1266,68 @@ private extension EnterCalcIOSView {
             .padding(.top, topInset)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .accessibilityPane(
-                title: localized(activeSettingsTitleKey),
-                closedAnnouncement: paneClosed(activeSettingsTitleKey),
+                title: localized(settingsTitleKey(for: activeScreen)),
+                closedAnnouncement: paneClosed(settingsTitleKey(for: activeScreen)),
                 onClose: { closeSettings() }
             )
     }
 
-    var activeThemeBinding: Binding<String> {
+    func themeBinding(for screen: CalculatorScreenSession) -> Binding<String> {
         Binding(
-            get: { activeScreen.settings.themeRawValue },
+            get: { screen.settings.themeRawValue },
             set: { newValue in
-                updateActiveScreenSettings { $0.themeRawValue = newValue }
+                updateSettings(of: screen) { $0.themeRawValue = newValue }
             }
         )
     }
 
-    var activeLanguageBinding: Binding<String> {
+    func languageBinding(for screen: CalculatorScreenSession) -> Binding<String> {
         Binding(
-            get: { activeScreen.settings.languageCode },
+            get: { screen.settings.languageCode },
             set: { newValue in
-                updateActiveScreenSettings { $0.languageCode = newValue }
-                applyLanguage(newValue, refreshing: activeScreen.viewModel)
+                updateSettings(of: screen) { $0.languageCode = newValue }
+                applyLanguage(newValue, refreshing: screen.viewModel)
             }
         )
     }
 
-    var activeScientificNotationBinding: Binding<Bool> {
+    func scientificNotationBinding(for screen: CalculatorScreenSession) -> Binding<Bool> {
         Binding(
-            get: { activeScreen.settings.usesScientificNotation },
+            get: { screen.settings.usesScientificNotation },
             set: { newValue in
-                updateActiveScreenSettings { $0.usesScientificNotation = newValue }
+                updateSettings(of: screen) { $0.usesScientificNotation = newValue }
             }
         )
     }
 
-    var activeNumberFormatBinding: Binding<String> {
+    func numberFormatBinding(for screen: CalculatorScreenSession) -> Binding<String> {
         Binding(
-            get: { activeScreen.settings.numberFormatStyleRawValue },
+            get: { screen.settings.numberFormatStyleRawValue },
             set: { newValue in
-                updateActiveScreenSettings { $0.numberFormatStyleRawValue = newValue }
+                updateSettings(of: screen) { $0.numberFormatStyleRawValue = newValue }
             }
         )
     }
 
-    var activeCurrencySymbolBinding: Binding<String> {
+    func currencySymbolBinding(for screen: CalculatorScreenSession) -> Binding<String> {
         Binding(
-            get: { activeScreen.settings.currencySymbol },
+            get: { screen.settings.currencySymbol },
             set: { newValue in
-                updateActiveScreenSettings { $0.currencySymbol = newValue }
+                updateSettings(of: screen) { $0.currencySymbol = newValue }
                 // Re-label a value already on screen so the change is visible
                 // immediately rather than only on the next entry.
-                if activeScreen.viewModel.activeCurrencySymbol != nil {
-                    activeScreen.viewModel.inputCurrencySymbol(newValue)
+                if screen.viewModel.activeCurrencySymbol != nil {
+                    screen.viewModel.inputCurrencySymbol(newValue)
                 }
             }
         )
     }
 
-    var activeDisableSwipeDownToRoundBinding: Binding<Bool> {
+    func disableSwipeDownToRoundBinding(for screen: CalculatorScreenSession) -> Binding<Bool> {
         Binding(
-            get: { activeScreen.settings.disablesSwipeDownToRound },
+            get: { screen.settings.disablesSwipeDownToRound },
             set: { newValue in
-                updateActiveScreenSettings { $0.disablesSwipeDownToRound = newValue }
+                updateSettings(of: screen) { $0.disablesSwipeDownToRound = newValue }
             }
         )
     }
@@ -1711,13 +1709,17 @@ private extension EnterCalcIOSView {
     }
 
     func updateActiveScreenSettings(_ update: (inout CalculatorScreenSettings) -> Void) {
-        var updated = activeScreen.settings
+        updateSettings(of: activeScreen, update)
+    }
+
+    func updateSettings(of screen: CalculatorScreenSession, _ update: (inout CalculatorScreenSettings) -> Void) {
+        var updated = screen.settings
         update(&updated)
 
-        if activeScreen.isHomeScreen {
+        if screen.isHomeScreen {
             storeHomeScreenSettings(updated)
         } else {
-            activeScreen.replaceSettings(updated)
+            screen.replaceSettings(updated)
         }
     }
 
@@ -1750,7 +1752,13 @@ private extension EnterCalcIOSView {
         if index < screenStore.screenCount - 1 {
             navigateToScreen(at: index + 1, half: focusedPagingHalf)
         } else if screenStore.canCreateScreen {
-            createScreenAfterActive()
+            // Two calculators: the new page belongs to the focused half's
+            // pager, as it does when that half swipes past its last page.
+            if showsSecondaryCalculator {
+                createScreenBySwipe(on: focusedPagingHalf)
+            } else {
+                createScreenAfterActive()
+            }
         }
     }
 
@@ -3301,7 +3309,7 @@ private extension EnterCalcIOSView {
                             .frame(height: separatorHeight)
                     }
 
-                    keypad(metrics: metrics, screen: screen, buttonHeight: keypadButtonHeight)
+                    keypad(metrics: metrics, screen: screen, buttonHeight: keypadButtonHeight, half: half)
                         .frame(maxWidth: .infinity, minHeight: keypadHeight, maxHeight: keypadHeight, alignment: .bottom)
                 }
                 .overlay {
@@ -4401,7 +4409,7 @@ private extension EnterCalcIOSView {
         return sections
     }
 
-    func keypad(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, buttonHeight: CGFloat) -> some View {
+    func keypad(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, buttonHeight: CGFloat, half: DuoHalf? = nil) -> some View {
         let palette = self.palette(for: screen)
         let localized = self.localizer(for: screen)
         let slots = CalculatorFunctionSlot.actionRowSlots
@@ -4427,6 +4435,7 @@ private extension EnterCalcIOSView {
                         isHighlighted: function == .currency && screen.viewModel.activeCurrencySymbol != nil,
                         pressFeedback: triggerActionFeedback,
                         action: {
+                            if let half { focusHalf(half) }
                             performFunction(function, on: screen)
                             if isLandscapeMode {
                                 resetLandscapeDisplayScroll(for: screen)
@@ -4460,6 +4469,11 @@ private extension EnterCalcIOSView {
                                     buttonHeight: buttonHeight,
                                     pressFeedback: triggerKeyPressFeedback,
                                     action: {
+                                        // A key pressed through VoiceOver
+                                        // never passed the half's touch
+                                        // gesture, so select the half here
+                                        // before the panes it may open (#168).
+                                        if let half { focusHalf(half) }
                                         ReviewPromptIdleWait.shared.noteInput()
                                         let speechBefore = screen.viewModel.displaySpeechState
                                         // Only the calculation is timed, so the
