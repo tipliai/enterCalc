@@ -4340,29 +4340,23 @@ private extension CalculatorWindowView {
 // removed, AppKit does not necessarily re-resolve the hosting view's effective
 // appearance before SwiftUI reads it again, so the ambient value can stay on the
 // previous theme while native chrome has already moved to the system one.
-// Reading the global-domain setting sidesteps that entirely: it is the user's
-// system preference, so it cannot report back an override this app applied.
+// The application's effective appearance sidesteps that: the app only ever sets
+// window appearances, never `NSApp.appearance`, so `NSApp.effectiveAppearance` is
+// the system's Light/Dark setting and cannot report back an override this app
+// applied. It replaces reading `AppleInterfaceStyle` from the global defaults
+// domain, which the privacy manifest's UserDefaults reason (CA92.1) doesn't allow.
 private final class SystemAppearanceMonitor: ObservableObject {
     // Every calculator window resolves the same system setting, so they share one
-    // monitor rather than each registering its own notification observer.
+    // monitor rather than each registering its own observer.
     static let shared = SystemAppearanceMonitor()
 
     @Published private(set) var colorScheme: ColorScheme
 
-    private let defaults: UserDefaults
-    private var observer: NSObjectProtocol?
+    private var observation: NSKeyValueObservation?
 
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        colorScheme = Self.resolveColorScheme(from: defaults)
-
-        observer = DistributedNotificationCenter.default().addObserver(
-            forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            // The global domain is updated slightly after this notification is
-            // delivered, so re-read on the next runloop pass.
+    init() {
+        colorScheme = Self.resolveColorScheme()
+        observation = NSApplication.shared.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
             DispatchQueue.main.async {
                 self?.refresh()
             }
@@ -4370,23 +4364,19 @@ private final class SystemAppearanceMonitor: ObservableObject {
     }
 
     deinit {
-        if let observer {
-            DistributedNotificationCenter.default().removeObserver(observer)
-        }
+        observation?.invalidate()
     }
 
     func refresh() {
-        let resolved = Self.resolveColorScheme(from: defaults)
+        let resolved = Self.resolveColorScheme()
         guard resolved != colorScheme else { return }
         colorScheme = resolved
     }
 
-    private static func resolveColorScheme(from defaults: UserDefaults) -> ColorScheme {
-        // Read through the global domain rather than `string(forKey:)` so the
-        // value is not served from this process's cached registration domain.
-        let rawValue = defaults.persistentDomain(forName: UserDefaults.globalDomain)?["AppleInterfaceStyle"] as? String
-        let resolved = SystemAppearance.colorScheme(forInterfaceStyle: rawValue)
-        DebugLog.emit("Theme", "system appearance AppleInterfaceStyle=\(rawValue ?? "nil") resolved=\(resolved)")
+    private static func resolveColorScheme() -> ColorScheme {
+        let name = NSApplication.shared.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua])
+        let resolved = SystemAppearance.colorScheme(forAppearanceName: name?.rawValue)
+        DebugLog.emit("Theme", "system appearance \(name?.rawValue ?? "nil") resolved=\(resolved)")
         return resolved
     }
 }
