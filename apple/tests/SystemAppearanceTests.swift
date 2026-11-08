@@ -24,4 +24,12 @@ final class SystemAppearanceTests: XCTestCase {
         XCTAssertEqual(SystemAppearance.colorScheme(forInterfaceStyle: "Aqua"), .light)
         XCTAssertEqual(SystemAppearance.colorScheme(forInterfaceStyle: ""), .light)
     }
+
+    // NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) names.
+    func testAppearanceNamesResolve() {
+        XCTAssertEqual(SystemAppearance.colorScheme(forAppearanceName: "NSAppearanceNameDarkAqua"), .dark)
+        XCTAssertEqual(SystemAppearance.colorScheme(forAppearanceName: "NSAppearanceNameAqua"), .light)
+        XCTAssertEqual(SystemAppearance.colorScheme(forAppearanceName: "NSAppearanceNameAccessibilityHighContrastDarkAqua"), .dark)
+        XCTAssertEqual(SystemAppearance.colorScheme(forAppearanceName: nil), .light)
+    }
 }

@@ -48,6 +48,10 @@ targets:
         buildPhase: resources
         type: file
         group: Resources
+      - path: ../src/shared/Resources/PrivacyInfo.xcprivacy
+        buildPhase: resources
+        type: file
+        group: Resources
     dependencies:
       - package: enterCalcPackage
         product: EnterCalcCore
@@ -123,6 +127,10 @@ targets:
         type: file
         group: Resources
       - path: ../../LICENSE
+        buildPhase: resources
+        type: file
+        group: Resources
+      - path: ../src/shared/Resources/PrivacyInfo.xcprivacy
         buildPhase: resources
         type: file
         group: Resources

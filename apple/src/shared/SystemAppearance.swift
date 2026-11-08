@@ -18,4 +18,11 @@ public enum SystemAppearance {
         guard let rawValue else { return .light }
         return rawValue.lowercased().hasPrefix("dark") ? .dark : .light
     }
+
+    /// Maps an appearance name, such as AppKit's `NSAppearanceNameDarkAqua`, to
+    /// a color scheme. Any dark variant is dark; anything else, or none, is light.
+    public static func colorScheme(forAppearanceName name: String?) -> ColorScheme {
+        guard let name else { return .light }
+        return name.range(of: "dark", options: .caseInsensitive) != nil ? .dark : .light
+    }
 }

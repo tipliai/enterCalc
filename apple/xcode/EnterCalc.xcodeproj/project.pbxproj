@@ -19,6 +19,8 @@
 		B8F9B687E7972D0F224675B5 /* MacLocalization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 238EE0EEE4F567719B32897A /* MacLocalization.swift */; };
 		BC5D6A0E18912CC4B70F1AF2 /* Settings.bundle in Resources */ = {isa = PBXBuildFile; fileRef = 0F4D979034A94F4439CDBDAC /* Settings.bundle */; };
 		C423B2D9907634F5A6CC1F6A /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = C024FCEE61269929862097E5 /* LICENSE */; };
+		7A1C2E3F4B5D6E7F8A9B0C2E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7A1C2E3F4B5D6E7F8A9B0C1D /* PrivacyInfo.xcprivacy */; };
+		7A1C2E3F4B5D6E7F8A9B0C3F /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7A1C2E3F4B5D6E7F8A9B0C1D /* PrivacyInfo.xcprivacy */; };
 		CA734AB7431B5773A7ECB9B8 /* CalculatorViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E065957E28B3CCF7A5CF940 /* CalculatorViewModelTests.swift */; };
 		F1972E266D6660D9DE97B6A2 /* EnterCalc.icon in Resources */ = {isa = PBXBuildFile; fileRef = AD6BE06469541BC663A60C53 /* EnterCalc.icon */; };
 		F8D88845082D9A2DF9FF47EA /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = C024FCEE61269929862097E5 /* LICENSE */; };
@@ -70,6 +72,7 @@
 		BB495AF3949718FD71195A6C /* EnterCalcIOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnterCalcIOSApp.swift; sourceTree = "<group>"; };
 		BC5FD7E70350F7936A39DDE0 /* fr.lproj */ = {isa = PBXFileReference; lastKnownFileType = folder; path = fr.lproj; sourceTree = "<group>"; };
 		C024FCEE61269929862097E5 /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; name = LICENSE; path = ../../LICENSE; sourceTree = "<group>"; };
+		7A1C2E3F4B5D6E7F8A9B0C1D /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = ../src/shared/Resources/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		EC1605B6AF4F0A247313C498 /* CalculatorWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalculatorWindowView.swift; sourceTree = "<group>"; };
 		EF3FAB0686DACBD7EA2B303B /* zh-Hans.lproj */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "zh-Hans.lproj"; sourceTree = "<group>"; };
 		F328066E909C5F92BBDFD95B /* EnterCalc-macOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "EnterCalc-macOSTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -162,6 +165,7 @@
 			isa = PBXGroup;
 			children = (
 				C024FCEE61269929862097E5 /* LICENSE */,
+				7A1C2E3F4B5D6E7F8A9B0C1D /* PrivacyInfo.xcprivacy */,
 				AD6BE06469541BC663A60C53 /* EnterCalc.icon */,
 			);
 			name = Resources;
@@ -389,6 +393,7 @@
 			isa = PBXResourcesBuildPhase;
 			files = (
 				F8D88845082D9A2DF9FF47EA /* LICENSE in Resources */,
+				7A1C2E3F4B5D6E7F8A9B0C3F /* PrivacyInfo.xcprivacy in Resources */,
 				23F9AF3D7A27C257ADDCF262 /* EnterCalc.icon in Resources */,
 			);
 		};
@@ -396,6 +401,7 @@
 			isa = PBXResourcesBuildPhase;
 			files = (
 				C423B2D9907634F5A6CC1F6A /* LICENSE in Resources */,
+				7A1C2E3F4B5D6E7F8A9B0C2E /* PrivacyInfo.xcprivacy in Resources */,
 				BC5D6A0E18912CC4B70F1AF2 /* Settings.bundle in Resources */,
 				F1972E266D6660D9DE97B6A2 /* EnterCalc.icon in Resources */,
 			);
