@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.2.0 - Unreleased
+## 1.2.0 - November 8, 2026
 
 - Added iPhone Duo support.
 - Use two calculators side by side on iPhone Duo and iPad.
