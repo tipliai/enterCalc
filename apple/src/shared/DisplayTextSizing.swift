@@ -80,7 +80,11 @@ public enum DisplayTextSizing {
     /// widest unbreakable run (a grouped number, or the last number with its
     /// "=") to fit on one line, so a wrap falls between terms. `measure` gives
     /// a run's width at `fontSize`. Never grows; never below `minimumScale`.
-    /// Where every run already fits it returns `fontSize` unchanged.
+    /// Where every run already fits it returns `fontSize` unchanged. A run
+    /// still too wide at `minimumScale` (an expanded result reused as an
+    /// operand, in a narrow column) breaks across lines, since the line is
+    /// never limited for it: smaller than that would not be readable, and
+    /// breaking keeps every digit in view rather than cutting any off.
     public static func operationFontSize(
         _ fontSize: CGFloat,
         fitting text: String,
@@ -97,6 +101,14 @@ public enum DisplayTextSizing {
             .max() ?? 0
         guard widest > width else { return fontSize }
         return fontSize * max(width / widest, minimumScale)
+    }
+
+    /// Whether text `textWidth` wide at its full size fits one line of
+    /// `width` once shrunk to `minimumScale`, with the same margin as
+    /// `operationFitWidth`. Where it doesn't, the caller lets it wrap rather
+    /// than limit it to one line and cut it off.
+    public static func fitsOnOneLine(textWidth: CGFloat, in width: CGFloat, minimumScale: CGFloat) -> Bool {
+        textWidth * minimumScale <= operationFitWidth(width)
     }
 
     /// How much the base sizes can grow for the room the display has, before

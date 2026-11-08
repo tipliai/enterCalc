@@ -5916,13 +5916,35 @@ private struct IOSHistoryPanel: View {
     /// text in the narrow landscape column), so it wraps between terms.
     private func historyExpressionFontSize(_ lineText: String) -> CGFloat {
         let base = scaledHistoryFontSize(metrics.panelSecondaryFontSize)
-        // The list's own inset and the tile's padding, on both sides.
-        let textWidth = historyListWidth - 2 * (metrics.panelTilePadding + 6) - 2 * metrics.panelTilePadding
+        let textWidth = historyTextWidth
         guard textWidth > 0 else { return base }
         let font = EnterCalcFont.platformFont(size: base)
         return DisplayTextSizing.operationFontSize(base, fitting: lineText, width: DisplayTextSizing.operationFitWidth(textWidth)) { run in
             ceil((run as NSString).size(withAttributes: [.font: font]).width)
         }
+    }
+
+    /// The width a tile's text has: the list less its own inset and the
+    /// tile's padding, on both sides. Zero until the list is measured.
+    private var historyTextWidth: CGFloat {
+        historyListWidth - 2 * (metrics.panelTilePadding + 6) - 2 * metrics.panelTilePadding
+    }
+
+    private static let historyResultMinimumScale: CGFloat = 0.3
+
+    /// Whether an entry's result fits one line once shrunk as far as allowed.
+    /// A longer one (an expanded result with scientific notation off) wraps
+    /// instead, so no digit is ever cut off.
+    private func historyResultFitsOnOneLine(_ result: String) -> Bool {
+        let textWidth = historyTextWidth
+        guard textWidth > 0 else { return true }
+        let font = EnterCalcFont.platformFont(size: scaledHistoryFontSize(metrics.panelPrimaryFontSize))
+        let resultWidth = ceil((result as NSString).size(withAttributes: [.font: font]).width)
+        return DisplayTextSizing.fitsOnOneLine(
+            textWidth: resultWidth,
+            in: textWidth,
+            minimumScale: Self.historyResultMinimumScale
+        )
     }
 
     var body: some View {
@@ -5980,12 +6002,15 @@ private struct IOSHistoryPanel: View {
                                             .multilineTextAlignment(.trailing)
                                             .frame(maxWidth: .infinity, alignment: .trailing)
                                             .accessibilityLabel(Text(verbatim: expression))
+                                        let resultFitsOnOneLine = historyResultFitsOnOneLine(entry.displayResult)
                                         Text(entry.displayResult)
                                             .font(EnterCalcFont.appFont(size: scaledHistoryFontSize(metrics.panelPrimaryFontSize)))
                                             .foregroundColor(palette.textPrimary)
-                                            // One number: shrink it to fit, never break it.
-                                            .lineLimit(1)
-                                            .minimumScaleFactor(0.3)
+                                            // One number: shrink it to fit rather than break
+                                            // it, unless even the smallest size is too wide;
+                                            // then it wraps, so no digit is cut off.
+                                            .lineLimit(resultFitsOnOneLine ? 1 : nil)
+                                            .minimumScaleFactor(resultFitsOnOneLine ? Self.historyResultMinimumScale : 1)
                                             .frame(maxWidth: .infinity, alignment: .trailing)
                                     }
                                     .padding(metrics.panelTilePadding)

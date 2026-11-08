@@ -189,4 +189,24 @@ final class DisplayTextSizingTests: XCTestCase {
         let size = DisplayTextSizing.operationFontSize(20, fitting: String(repeating: "9", count: 100), width: 50) { fakeWidth($0, at: 20) }
         XCTAssertEqual(size, 10)
     }
+
+    // A history result shrinks onto one line while it can; one too wide even
+    // at the smallest scale (an expanded 41-digit result in the landscape
+    // column) wraps instead of being cut off.
+    func testResultFitsOnOneLineOnlyWhileTheMinimumScaleFitsIt() {
+        XCTAssertTrue(DisplayTextSizing.fitsOnOneLine(textWidth: 400, in: 200, minimumScale: 0.3))
+        XCTAssertFalse(DisplayTextSizing.fitsOnOneLine(textWidth: 900, in: 200, minimumScale: 0.3))
+        // The margin for SwiftUI's wider layout applies here too.
+        XCTAssertFalse(DisplayTextSizing.fitsOnOneLine(textWidth: 200, in: 200, minimumScale: 1))
+    }
+
+    // A long result reused as an operand, too wide to fit even at the floor,
+    // gets the floor size; the line then breaks inside it, keeping every digit.
+    func testLongReusedResultStopsAtTheFloorSize() {
+        let line = DisplayTextSizing.operationLineText("12,345,678,912,345,670,000,000,000,000,000 + 1 =")
+        let size = DisplayTextSizing.operationFontSize(20, fitting: line, width: 100, minimumScale: 0.5) { run in
+            CGFloat(run.count) * 10
+        }
+        XCTAssertEqual(size, 10)
+    }
 }
