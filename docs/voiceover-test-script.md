@@ -22,6 +22,6 @@ The automated audit (the `EnterCalc-iOSAccessibility` scheme) already checks tha
 | 9 | In any pane, swipe through it | VoiceOver stays in the pane; the escape gesture closes it ("… closed") |
 | 10 | Edit Action on a key, choose an option | Each option is explained; "… selected" |
 | 11 | Second screen (iPhone/iPad) or window (Mac) | "Screen 2, … shown" / "Window 2, … shown" |
-| 12 | Two calculators side by side (iPhone Duo inner display, or iPad in landscape): open the second with "Two calculators", then swipe across both | Each half is a group, "Left calculator" and "Right calculator"; moving to a half says "Left, Screen 1, … shown"; the rail's toggle says which half is selected |
+| 12 | Two calculators side by side (iPhone Duo inner display, or iPad in landscape): open the second with "Two calculators", swipe across both halves, then move the left half to its next page | Each half is a group, "Left calculator" and "Right calculator", and the rail's toggle says which half is selected; the page change says "Left, Screen 2, … shown" |
 | 13 | Keyboard (Mac, or iPad with Full Keyboard Access): Tab, Space, Return | Tab moves with a ring, Space presses, Return is = |
 | 14 | Voice Control on: "Show names" | Every control shows a name; "Tap 7" works |

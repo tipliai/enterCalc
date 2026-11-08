@@ -1,25 +1,16 @@
 # Changelog
 
-## 1.2.0 — Unreleased
+## 1.2.0 - Unreleased
 
-- iPhone Duo support: the calculator fills the inner display in book and top/bottom positions, and keeps its state when you fold or unfold.
-- Two calculators side by side on the iPhone Duo's inner display and on the iPad in landscape, each with its own pages, theme and language.
-- Header buttons move into a rail beside the calculator on the iPhone Duo and the iPad in landscape, with the resizable display.
-- Text Size setting with five sizes, and the VAT, tip and rounding panes scale with it.
-- Choose the calculator mode from a list by tapping its name.
-- The alternative keypad is gone; its keys live on as function keys.
-- Keyboard: Tab and Space reach every control, Shift + arrows switch pages, Command + arrows pick a calculator, and Shift + Up/Down resize the display on the Mac.
-- VoiceOver reads results, announcements and panes in order, and says which calculator and page it is on.
-- Fixed the keypad stopping short on the iPhone Pro Max, C after a trailing operator, and the Mac's rounding setting.
-- Large text sizes work on the smallest iPhones: the mode and VAT/Tip controls stay reachable, numbers never break across lines, and Settings values stay readable.
-- Pane text now follows the smaller system text sizes too, not only the larger ones.
-- The function key chooser stays clear of the status bar.
-- On the Mac, the VAT, Tip and rounding panes reach the window's edges and bottom even when large text makes them scroll.
-- Button labels in the VAT pane keep whole words at large text sizes, shrinking rather than breaking a long word.
-- Close buttons are named in every language for VoiceOver; they were read as "close" everywhere.
-- Rating prompt on the Mac, following Apple's guidance.
+- Added iPhone Duo support.
+- Use two calculators side by side on iPhone Duo and iPad.
+- New Text Size setting and improved layouts.
+- Easier mode selection, with alternative keypad keys now available as function keys.
+- Expanded keyboard navigation and shortcuts.
+- Improved VoiceOver support and accessibility.
+- Fixed calculation, layout, and macOS settings issues.
 
-## 1.1.0 — October 7, 2026
+## 1.1.0 - October 7, 2026
 
 - New currency mode with VAT and tip tools.
 - Customize function keys and save your own VAT and tip rates.
@@ -28,6 +19,6 @@
 - Fixed percentage calculations, currency editing, and macOS theme issues.
 - Improved accessibility.
 
-## 1.0.0 — June 12, 2026
+## 1.0.0 - June 12, 2026
 
 - Initial release.

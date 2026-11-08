@@ -10,7 +10,7 @@ This page is a quick guide to accessibility features available in EnterCalc.
 ### Labels and control clarity
 
 - Core controls in calculator, history, and settings are labeled for assistive technologies.
-- Configurable function keys announce the *function* they currently carry — "Undo", "Square Root" — rather than the glyph drawn on them, so the label follows the key when it is reassigned.
+- Configurable function keys announce the *function* they currently carry ("Undo", "Square Root") rather than the glyph drawn on them, so the label follows the key when it is reassigned.
 
 ### VoiceOver
 
