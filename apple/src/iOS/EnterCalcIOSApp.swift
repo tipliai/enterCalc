@@ -365,6 +365,24 @@ struct EnterCalcIOSApp: App {
                 .keyboardShortcut(.rightArrow, modifiers: [.shift])
                 .disabled(actionContext?.goToNextScreen == nil)
 
+                // Two calculators side by side: the arrow names the one to
+                // give the keyboard to (#168, #172).
+                Button {
+                    actionContext?.selectLeftCalculator?()
+                } label: {
+                    Label(localized("a11y.half.leftCalculator"), systemImage: "1.circle")
+                }
+                .keyboardShortcut(.leftArrow, modifiers: [.command])
+                .disabled(actionContext?.selectLeftCalculator == nil)
+
+                Button {
+                    actionContext?.selectRightCalculator?()
+                } label: {
+                    Label(localized("a11y.half.rightCalculator"), systemImage: "2.circle")
+                }
+                .keyboardShortcut(.rightArrow, modifiers: [.command])
+                .disabled(actionContext?.selectRightCalculator == nil)
+
                 Divider()
 
                 Menu(localized("calculator.mode.menu")) {
@@ -423,6 +441,9 @@ struct EnterCalcIOSView: View {
     /// The iPhone Duo's fold position as last laid out, for the actions that
     /// depend on it (#168).
     @State private var foldPosture: IOSFoldPosture = .none
+    /// Whether the layout last laid out has room for two calculators side
+    /// by side: the iPad in landscape, wide enough for two (#172).
+    @State private var layoutSupportsTwoCalculators: Bool = false
     /// With two calculators side by side (#168), the half touched last: typed
     /// keys, the panes and the settings sheet go to its screen.
     @State private var focusedHalf: DuoHalf = .right
@@ -490,7 +511,13 @@ struct EnterCalcIOSView: View {
     /// The iPhone Duo in book position with a screen open on the left half
     /// (#168).
     private var showsSecondaryCalculator: Bool {
-        foldPosture == .book && screenStore.secondaryIndex != nil
+        screenStore.secondaryIndex != nil && (foldPosture == .book || layoutSupportsTwoCalculators)
+    }
+
+    /// Settings opens as a card over a calculator rather than a sheet: on the
+    /// Duo's inner display, and wherever two calculators show (#168, #172).
+    private var showsCardSettings: Bool {
+        foldPosture == .book || showsSecondaryCalculator
     }
 
     /// The page the focused half is on (#168).
@@ -517,7 +544,14 @@ struct EnterCalcIOSView: View {
     /// right calculator's strip, so with two calculators side by side they
     /// follow its theme, not the selected one's (#168).
     private var windowTheme: AppTheme {
-        showsSecondaryCalculator ? theme(for: screenStore.activeScreen) : activeTheme
+        guard showsSecondaryCalculator else { return activeTheme }
+        // The iPad's time, date and app name sit at the left of its status
+        // bar, over the left calculator; iPadOS colours the bar as a whole,
+        // so the small icons at the right go with it (#172).
+        if foldPosture != .book, let leftScreen = screenStore.secondaryScreen {
+            return theme(for: leftScreen)
+        }
+        return theme(for: screenStore.activeScreen)
     }
 
     private var storedHomeScreenSettings: CalculatorScreenSettings {
@@ -619,6 +653,8 @@ struct EnterCalcIOSView: View {
             shrinkDisplayArea: { adjustDisplayHeightFromKeyboard(byPoints: -Self.keyboardDisplayResizeStep) },
             goToNextScreen: { goToNextScreenFromKeyboard() },
             goToPreviousScreen: { goToPreviousScreenFromKeyboard() },
+            selectLeftCalculator: showsSecondaryCalculator ? { selectCalculatorHalf(.left) } : nil,
+            selectRightCalculator: showsSecondaryCalculator ? { selectCalculatorHalf(.right) } : nil,
             currentMode: CalculatorMode.current(for: viewModel),
             selectMode: { selectMode($0, on: activeScreen) }
         )
@@ -919,7 +955,7 @@ struct EnterCalcIOSView: View {
                 if showsSecondaryCalculator, let leftScreen = screenStore.secondaryScreen {
                     HStack(spacing: 0) {
                         palette(for: leftScreen).surface
-                            .frame(width: metrics.foldLeadingInset + metrics.foldDividerX)
+                            .frame(width: metrics.sideBySideDividerX)
                         // The right calculator's colour runs on under the
                         // rail's strip whichever half is selected.
                         palette(for: screenStore.activeScreen).surface
@@ -956,6 +992,18 @@ struct EnterCalcIOSView: View {
                             focusedHalf = .right
                         } else {
                             restoreSettingsAfterUnfolding()
+                        }
+                    }
+                    // The iPad: two calculators need the landscape layout
+                    // and the room; turned to portrait or narrowed below
+                    // it, the second calculator closes and its screen stays
+                    // in the pages (#172). The Duo keeps its second
+                    // calculator through a fold.
+                    .onChange(of: metrics.supportsTwoCalculators, initial: true) { _, supports in
+                        layoutSupportsTwoCalculators = supports
+                        if !supports, metrics.isPadWindow, screenStore.secondaryIndex != nil {
+                            screenStore.closeSecondary()
+                            focusedHalf = .right
                         }
                     }
 
@@ -1177,9 +1225,9 @@ private extension EnterCalcIOSView {
     /// calculator, so the open cover and the inner display match (#168).
     var settingsSheetBinding: Binding<Bool> {
         Binding(
-            get: { showSettingsSheet && foldPosture != .book },
+            get: { showSettingsSheet && !showsCardSettings },
             set: {
-                if !$0, foldPosture != .book {
+                if !$0, !showsCardSettings {
                     settingsSheetDismissedAt = Date()
                     showSettingsSheet = false
                 }
@@ -1202,7 +1250,7 @@ private extension EnterCalcIOSView {
     /// the rest stays in view (#168); on the right alone when it is the only
     /// calculator.
     var showsDuoSettings: Bool {
-        showSettingsSheet && foldPosture == .book
+        showSettingsSheet && showsCardSettings
     }
 
     /// The Duo's card appears in place, with no animation (#168).
@@ -1253,13 +1301,14 @@ private extension EnterCalcIOSView {
     /// like the other panes.
     @ViewBuilder
     func duoSettingsPanel(metrics: IOSLayoutMetrics, containerSize: CGSize) -> some View {
-        let leadingInset = focusedHalf == .left ? metrics.foldLeftCalculatorLeadingPadding : metrics.foldCalculatorMinX
-        // Under the header, or from the display's top where the rail has
+        let leadingInset = focusedHalf == .left ? metrics.sideBySideLeftCalculatorMinX : metrics.sideBySideRightCalculatorMinX
+        // Under the header, or from the display's top where a rail has
         // taken the header's row.
-        let topInset = metrics.topPadding + (metrics.usesTrailingRail ? metrics.contentTopPadding : metrics.headerHeight)
+        let hasRail = metrics.usesTrailingRail || metrics.mode == .padWide
+        let topInset = metrics.topPadding + (hasRail ? metrics.contentTopPadding : metrics.headerHeight)
         let shape = RoundedRectangle(cornerRadius: metrics.surfaceCornerRadius, style: .continuous)
         settingsSheetContent(for: activeScreen, asCard: true)
-            .frame(width: metrics.foldKeypadWidth, height: max(0, containerSize.height - topInset - metrics.bottomPadding))
+            .frame(width: metrics.sideBySideCalculatorWidth, height: max(0, containerSize.height - topInset - metrics.bottomPadding))
             .clipShape(shape)
             .shadow(color: Color.black.opacity(0.3), radius: 16, y: 8)
             .padding(.leading, leadingInset)
@@ -1470,17 +1519,18 @@ private extension EnterCalcIOSView {
                 viewModel.clearAll()
                 return true
             }
+            // ⌘← and ⌘→ move the keyboard to the left or the right of two
+            // calculators side by side, on the iPhone Duo and the iPad
+            // (#168, #172). With one calculator they are not handled.
+            if event.keyCode == .keyboardLeftArrow || event.keyCode == .keyboardRightArrow {
+                guard showsSecondaryCalculator else { return false }
+                selectCalculatorHalf(event.keyCode == .keyboardLeftArrow ? .left : .right)
+                return true
+            }
             switch chars.lowercased() {
             case ",":
                 // ⌘, opens Settings, as on the Mac (#164).
                 openSettings()
-                return true
-            case "`":
-                // ⌘` moves the keyboard to the other of two calculators side
-                // by side on the iPhone Duo (#168), the key that cycles
-                // windows on the Mac. With one calculator it is not handled.
-                guard showsSecondaryCalculator else { return false }
-                switchCalculatorHalf()
                 return true
             case "c":
                 // Handled here as well as in the menu, because this capture
@@ -1816,11 +1866,16 @@ private extension EnterCalcIOSView {
         applyActiveScreenConfiguration()
     }
 
-    /// ⌘`: the other calculator takes the keyboard, and VoiceOver hears which
+    /// The 1 | 2 toggle: the other calculator takes the keyboard, and VoiceOver hears which
     /// one is active and what it shows (#168).
     func switchCalculatorHalf() {
-        guard showsSecondaryCalculator else { return }
-        let half: DuoHalf = focusedHalf == .left ? .right : .left
+        selectCalculatorHalf(focusedHalf == .left ? .right : .left)
+    }
+
+    /// Makes a half the one typed keys, the panes and Settings go to, and
+    /// says so (#168).
+    func selectCalculatorHalf(_ half: DuoHalf) {
+        guard showsSecondaryCalculator, focusedHalf != half else { return }
         focusedHalf = half
         activeOverlay = nil
         let screen = activeScreen
@@ -1851,18 +1906,22 @@ private extension EnterCalcIOSView {
     /// on a new screen when there is only one (#168). The left half takes
     /// the typing, as a new screen does.
     func enterDualMode() {
-        guard foldPosture == .book, !showsSecondaryCalculator else { return }
+        guard foldPosture == .book || layoutSupportsTwoCalculators, !showsSecondaryCalculator else { return }
+        activeOverlay = nil
         if screenStore.screenCount > 1 {
             let active = screenStore.activeIndex
             let index = active + 1 < screenStore.screenCount ? active + 1 : active - 1
-            activeOverlay = nil
             _ = screenStore.showSecondaryScreen(at: index)
-            focusedHalf = .left
-            focusLockedUntil = Date().addingTimeInterval(0.4)
-            applyActiveScreenConfiguration()
         } else {
-            createScreenAfterActive()
+            guard screenStore.canCreateScreen else { return }
+            isResizingHistoryOverlay = false
+            liveHistoryOverlayHeight = nil
+            liveHistoryOverlayScreenID = nil
+            _ = screenStore.insertSecondaryScreenAfterActive(homeSettings: storedHomeScreenSettings)
         }
+        focusedHalf = .left
+        focusLockedUntil = Date().addingTimeInterval(0.4)
+        applyActiveScreenConfiguration()
     }
 
     func createScreenAfterActive() {
@@ -1872,7 +1931,7 @@ private extension EnterCalcIOSView {
         // right half's pager grows by a page that stays off screen, and the
         // settings button of a page added mid-animation was left with a
         // stale frame (it is UIKit-hosted for its context menu).
-        if foldPosture == .book {
+        if foldPosture == .book || showsSecondaryCalculator {
             activeOverlay = nil
             isResizingHistoryOverlay = false
             liveHistoryOverlayHeight = nil
@@ -2000,6 +2059,15 @@ private extension EnterCalcIOSView {
         guard metrics.foldPosture == .book, focusedHalf == .left, showsSecondaryCalculator else { return 0 }
         // The left calculator's colour runs up to the divider.
         return metrics.foldRightHalfWidth + metrics.foldCalculatorMinX - metrics.foldDividerX
+    }
+
+    /// The iPad in landscape: the side panes keep clear of the rail, and
+    /// with two calculators they hang off the focused one's trailing edge
+    /// (#172).
+    func padPaneTrailingInset(metrics: IOSLayoutMetrics) -> CGFloat {
+        guard metrics.mode == .padWide else { return 0 }
+        let leftFocused = showsSecondaryCalculator && focusedHalf == .left
+        return metrics.padRailWidth + (leftFocused ? metrics.padHalfCalculatorWidth + metrics.padHalfGap : 0)
     }
 
     /// The overlay panes' text scale (#152): the Text Size setting, or the
@@ -2237,9 +2305,10 @@ private extension EnterCalcIOSView {
             content()
                 .frame(width: metrics.overlayPanelWidth)
                 .padding(.bottom, metrics.overlayBottomPadding)
-                .padding(.trailing, metrics.outerPadding)
+                .padding(.trailing, metrics.outerPadding + padPaneTrailingInset(metrics: metrics))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                .transition(.move(edge: .trailing).combined(with: .opacity))
+                // Up from the bottom into its place, never in from the side (#172).
+                .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 
@@ -2613,6 +2682,8 @@ private extension EnterCalcIOSView {
 
         if metrics.foldPosture == .book {
             bookLayout(metrics: metrics)
+        } else if metrics.mode == .padWide {
+            padWideLayout(metrics: metrics, pager: pager)
         } else if usesLandscapeNavigationRail {
             HStack(spacing: metrics.sectionSpacing) {
                 landscapeNavigationRail(
@@ -2682,6 +2753,71 @@ private extension EnterCalcIOSView {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// The iPad in landscape (#172): the Duo's inner display brought over.
+    /// One calculator keeps the history column beside it; the dual-mode
+    /// button in the rail opens a second calculator in the history's place,
+    /// each half paging the shared screens on its own, as in book position.
+    /// The rail stands at the trailing edge, with the page dots under each
+    /// pager rather than in it.
+    @ViewBuilder
+    func padWideLayout<Pager: View>(metrics: IOSLayoutMetrics, pager: Pager) -> some View {
+        HStack(spacing: 0) {
+            if showsSecondaryCalculator, let leftIndex = screenStore.secondaryIndex {
+                bookHalfPager(metrics: metrics, half: .left, activeIndex: leftIndex)
+                    .frame(width: metrics.outerPadding + metrics.padHalfCalculatorWidth + metrics.padHalfGap / 2)
+                    .frame(maxHeight: .infinity)
+
+                bookHalfPager(metrics: metrics, half: .right, activeIndex: screenStore.activeIndex)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                pager
+                    .clipped()
+                    .overlay(alignment: .bottom) {
+                        fixedPaginationOverlay(metrics: metrics, screen: activeScreen)
+                    }
+            }
+
+            padRail(metrics: metrics)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// The iPad's rail: the Duo's, for the selected calculator, with the
+    /// history's trash while the history column shows (#172).
+    @ViewBuilder
+    func padRail(metrics: IOSLayoutMetrics) -> some View {
+        let half: DuoHalf? = showsSecondaryCalculator ? focusedPagingHalf : nil
+        let screen = activeScreen
+        let colours = screenStore.activeScreen
+        VStack(spacing: metrics.headerSpacing) {
+            if metrics.supportsTwoCalculators {
+                dualModeControl(metrics: metrics, screen: screen, colours: colours)
+            }
+
+            settingsButton(metrics: metrics, screen: screen, half: half, colours: colours)
+
+            if metrics.showsHistoryButton {
+                historyButton(metrics: metrics, screen: screen, half: half, colours: colours)
+            } else if !screen.viewModel.history.isEmpty {
+                landscapeHistoryClearButton(
+                    metrics: metrics,
+                    screen: screen,
+                    buttonSize: metrics.headerButtonSize,
+                    iconSize: metrics.headerIconFontSize
+                )
+            }
+
+            if screen.settings.disablesSwipeDownToRound {
+                roundingButton(metrics: metrics, screen: screen, half: half, colours: colours)
+            }
+
+            pageActionButton(metrics: metrics, screen: screen, half: half, colours: colours)
+        }
+        .frame(width: metrics.padRailWidth)
+        .padding(.top, metrics.topPadding + metrics.contentTopPadding)
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     @ViewBuilder
@@ -2833,8 +2969,8 @@ private extension EnterCalcIOSView {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .padding(.leading, half == .left ? metrics.foldLeftCalculatorLeadingPadding : 0)
-        .padding(.trailing, half == .right ? metrics.outerPadding : metrics.foldLeftCalculatorTrailingPadding)
+        .padding(.leading, half == .left ? metrics.sideBySideLeftCalculatorMinX : metrics.sideBySideRightHalfLeadingPadding)
+        .padding(.trailing, half == .right ? metrics.outerPadding : metrics.sideBySideLeftHalfTrailingPadding)
         .padding(.top, metrics.topPadding)
         .padding(.bottom, metrics.bottomPadding)
     }
@@ -2882,7 +3018,7 @@ private extension EnterCalcIOSView {
             : palette.textPrimary.opacity(0.18)
 
         CalculatorScreenPageIndicator(
-            axis: usesLandscapeNavigationRail ? .vertical : .horizontal,
+            axis: usesLandscapeNavigationRail && metrics.mode != .padWide ? .vertical : .horizontal,
             pageCount: screenStore.screenCount,
             activeIndex: activeIndex ?? screenStore.activeIndex,
             activeColor: activePaginationColor,
@@ -3075,7 +3211,8 @@ private extension EnterCalcIOSView {
             let paginationSpacing = metrics.pageIndicatorVerticalSpacing
             let paginationReserve = metrics.pageIndicatorHeight + paginationSpacing
 
-            if usesLandscapeNavigationRail {
+            // The iPad's dots sit under the page like the Duo's (#172).
+            if usesLandscapeNavigationRail && metrics.mode != .padWide {
                 content()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
@@ -3213,7 +3350,9 @@ private extension EnterCalcIOSView {
             // Tabletop: the display fills the top half and the keypad the
             // bottom, so the split is the fold and cannot be dragged (#132).
             let isTabletop = metrics.foldPosture == .tabletop
-            let allowsKeypadResize = !isLandscapeMode && !isTabletop
+            // The iPad in landscape resizes like the Duo's halves (#172);
+            // the phone's landscape layout has no room to.
+            let allowsKeypadResize = (!isLandscapeMode || metrics.mode == .padWide) && !isTabletop
             // The Duo's rail takes the header's buttons and its row, for the
             // selected calculator in book position and the only one on the
             // front display (#168).
@@ -3238,7 +3377,11 @@ private extension EnterCalcIOSView {
             }
             let baseActualKeypadHeight = keypadHeightForButtons(baseButtonHeight)
             let baseResultAreaHeight = metrics.displayHeight + metrics.memoryHeight + (baseKeypadHeight - baseActualKeypadHeight)
-            let separatorHeight: CGFloat = 10
+            // The resize handle stands 36 pt tall for the finger (`keypadResizeHandle`).
+            // Portrait leaves the keypad slack below, but the iPad's landscape
+            // layout fills its height exactly, so the handle's room is counted
+            // there or the keypad lands over the page dots (#172).
+            let separatorHeight: CGFloat = allowsKeypadResize && metrics.mode == .padWide ? 36 : 10
             let headerHeightContribution = showsInlineLandscapeHeader ? metrics.headerHeight : 0
             let outerSpacingTotal = CGFloat(showsInlineLandscapeHeader ? 2 : 1) * metrics.sectionSpacing
             let verticalPaddingTotal = metrics.contentTopPadding + metrics.contentBottomPadding
@@ -3255,7 +3398,7 @@ private extension EnterCalcIOSView {
             let availableKeypadHeight = max(0, availableSurfaceHeight - initialResultAreaHeight)
             let fittedButtonHeight = buttonHeightFitting(availableKeypadHeight)
             let actualButtonHeight = fillsHeightWithoutScaling
-                ? fittedButtonHeight
+                ? fittedButtonHeight * keypadHeightMultiplier
                 : (isLandscapeMode
                     ? min(baseButtonHeight, fittedButtonHeight)
                     : min(baseButtonHeight, fittedButtonHeight))
@@ -4554,7 +4697,7 @@ private extension EnterCalcIOSView {
                 let deltaText = String(format: "%.3f", delta)
                 let multiplierText = String(format: "%.3f", newMultiplier)
                 DebugLog.emit("UI", "Keypad resize changed screen:\(screen.id) translationY:\(translationText) delta:\(deltaText) multiplier:\(multiplierText)")
-                updateActiveScreenSettings { $0.keypadHeightMultiplier = newMultiplier }
+                updateSettings(of: screen) { $0.keypadHeightMultiplier = newMultiplier }
             }
             .onEnded { _ in
                 let finalMultiplierText = String(format: "%.3f", normalizedKeypadHeightMultiplier(for: screen))
@@ -4846,8 +4989,9 @@ private extension EnterCalcIOSView {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: metrics.overlayAlignment)
                 .padding(.top, metrics.topPadding)
                 .padding(.bottom, metrics.overlayBottomPadding)
-                .padding(.trailing, metrics.outerPadding)
-                .transition(.move(edge: .trailing).combined(with: .opacity))
+                .padding(.trailing, metrics.outerPadding + padPaneTrailingInset(metrics: metrics))
+                // Up from the bottom into its place, never in from the side (#172).
+                .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 
@@ -4882,9 +5026,10 @@ private extension EnterCalcIOSView {
             content()
                 .frame(width: metrics.overlayPanelWidth, height: panelHeight)
                 .padding(.bottom, metrics.overlayBottomPadding)
-                .padding(.trailing, metrics.outerPadding)
+                .padding(.trailing, metrics.outerPadding + padPaneTrailingInset(metrics: metrics))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                .transition(.move(edge: .trailing).combined(with: .opacity))
+                // Up from the bottom into its place, never in from the side (#172).
+                .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 
@@ -5592,8 +5737,10 @@ private struct IOSHistoryPanel: View {
         self.onCopyOperationEntry = onCopyOperationEntry
     }
 
+    /// The phone's landscape column reads from its top; the iPad's column
+    /// and pane centre the message, like the Duo's (#172).
     private var alignsEmptyStateToTop: Bool {
-        metrics.mode == .phoneLandscape || metrics.mode == .padWide
+        metrics.mode == .phoneLandscape
     }
 
     private var shouldShowAfterClearMessage: Bool {
@@ -6203,6 +6350,7 @@ private struct IOSLayoutMetrics {
 
     let isPadWindow: Bool
     let mode: IOSLayoutMode
+    let size: CGSize
     let outerPadding: CGFloat
     /// The leading margin of a page: on the iPhone Duo's front display it
     /// matches the 20 pt the top and the bottom keep, while the trailing
@@ -6270,6 +6418,16 @@ private struct IOSLayoutMetrics {
     let foldTrailingInset: CGFloat
     let titlebarLeadingInset: CGFloat
     let usesAdaptiveScaling: Bool
+    /// The iPad in landscape (#172): the rail's column at the trailing edge,
+    /// the width of each of two calculators side by side and the gap
+    /// between them.
+    let padRailWidth: CGFloat
+    let padHalfCalculatorWidth: CGFloat
+    let padHalfGap: CGFloat
+    /// The narrowest calculator supported: the iPhone SE's, 375 pt less its
+    /// margins. Two calculators show only where each gets at least this.
+    static let minimumCalculatorWidth: CGFloat = 351
+    static let minimumCalculatorHeight: CGFloat = 560
 
     init(
         size: CGSize,
@@ -6289,6 +6447,7 @@ private struct IOSLayoutMetrics {
             && size.width >= landscapeScreenWidth * 0.97
             && size.height >= landscapeScreenHeight * 0.97
         isPadWindow = deviceFamily == .pad
+        self.size = size
         let pageIndicatorReserve: CGFloat = isPadWindow ? 18 : 0
 
         // The Duo's inner display, unfolded, is about 1.4:1, and each half of it
@@ -6392,6 +6551,9 @@ private struct IOSLayoutMetrics {
             pageIndicatorDotSize = 7
             pageIndicatorSpacing = 8
             pageIndicatorVerticalSpacing = isPadWindow ? 10 : sectionSpacing
+            padRailWidth = 0
+            padHalfGap = 0
+            padHalfCalculatorWidth = 0
             usesTitlebarHeader = isPadWindow
             // Two calculators side by side each get the history button and
             // the overlay instead, as on a single portrait calculator (#168).
@@ -6445,6 +6607,9 @@ private struct IOSLayoutMetrics {
             pageIndicatorDotSize = 6
             pageIndicatorSpacing = 6
             pageIndicatorVerticalSpacing = isPadWindow ? 1 : sectionSpacing
+            padRailWidth = 0
+            padHalfGap = 0
+            padHalfCalculatorWidth = 0
             usesTitlebarHeader = isPadWindow
             usesInlineLandscapeHistory = !isPadWindow
             titlebarLeadingInset = isPadWindow ? 54 : 0
@@ -6466,7 +6631,6 @@ private struct IOSLayoutMetrics {
             headerIconFontSize = 26
             headerCornerRadius = 9
             titleFontSize = 22
-            let maxSurfaceWidth = max(0, size.width - outerPadding * 2)
             let availableHeight = max(size.height - topPadding - bottomPadding, 320)
             displayHeight = min(max(availableHeight * 0.15, 82), 156)
             displaySpacing = 6
@@ -6483,7 +6647,15 @@ private struct IOSLayoutMetrics {
             buttonCornerRadius = min(max(unit * 0.24, 16), 24)
             surfaceCornerRadius = 26
             historyPanelWidth = min(max(size.width * 0.275, 225), 375)
-            overlayPanelWidth = min(max(size.width * (isGeometryLandscape ? 0.32 : 0.38), 320), min(maxSurfaceWidth, 420))
+            padRailWidth = headerButtonSize + 18
+            // The two calculators stand as far apart as the rail is wide.
+            padHalfGap = padRailWidth
+            padHalfCalculatorWidth = max(0, (size.width - outerPadding * 2 - padRailWidth - padHalfGap) / 2)
+            // The panes are as wide as the calculator they open over: the
+            // half, or the one beside the history column (#172).
+            overlayPanelWidth = showsTwoCalculators
+                ? padHalfCalculatorWidth
+                : max(0, size.width - padRailWidth - outerPadding * 3 - historyPanelWidth)
             panelSpacing = 14
             panelItemSpacing = 10
             panelHorizontalPadding = 12
@@ -6497,10 +6669,47 @@ private struct IOSLayoutMetrics {
             pageIndicatorSpacing = 8
             pageIndicatorVerticalSpacing = sectionSpacing
             usesTitlebarHeader = false
-            usesInlineLandscapeHistory = true
+            usesInlineLandscapeHistory = !showsTwoCalculators
             titlebarLeadingInset = 0
             usesAdaptiveScaling = false
         }
+    }
+
+    /// The iPad in landscape with room for two calculators no smaller than
+    /// the smallest iPhone's (#172): full screen on every iPad, not the
+    /// narrower Split View and Stage Manager windows.
+    var supportsTwoCalculators: Bool {
+        mode == .padWide
+            && padHalfCalculatorWidth >= Self.minimumCalculatorWidth
+            && size.height - topPadding - bottomPadding >= Self.minimumCalculatorHeight
+    }
+
+    /// Two calculators side by side, on the Duo's inner display or the iPad:
+    /// where each starts, how wide it is, and where the background changes
+    /// from the left one's colour to the right one's, from the window's
+    /// leading edge (#168, #172).
+    var sideBySideCalculatorWidth: CGFloat {
+        mode == .padWide ? padHalfCalculatorWidth : foldKeypadWidth
+    }
+
+    var sideBySideLeftCalculatorMinX: CGFloat {
+        mode == .padWide ? outerPadding : foldLeftCalculatorLeadingPadding
+    }
+
+    var sideBySideRightCalculatorMinX: CGFloat {
+        mode == .padWide ? outerPadding + padHalfCalculatorWidth + padHalfGap : foldCalculatorMinX
+    }
+
+    var sideBySideLeftHalfTrailingPadding: CGFloat {
+        mode == .padWide ? padHalfGap / 2 : foldLeftCalculatorTrailingPadding
+    }
+
+    var sideBySideRightHalfLeadingPadding: CGFloat {
+        mode == .padWide ? padHalfGap / 2 : 0
+    }
+
+    var sideBySideDividerX: CGFloat {
+        foldLeadingInset + (mode == .padWide ? outerPadding + padHalfCalculatorWidth + padHalfGap / 2 : foldDividerX)
     }
 
     func buttonHeight(for availableHeight: CGFloat) -> CGFloat {
@@ -6625,7 +6834,7 @@ private struct IOSLayoutMetrics {
     }
 
     var overlayAlignment: Alignment {
-        mode == .padWide ? .trailing : .bottom
+        mode == .padWide ? .bottomTrailing : .bottom
     }
 }
 

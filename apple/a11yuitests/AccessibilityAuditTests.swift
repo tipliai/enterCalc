@@ -40,7 +40,7 @@ final class AccessibilityAuditTests: XCTestCase {
 
 /// EnterCalc animates continuously (the display shimmer), so the app never
 /// goes idle and XCUITest would wait for it before every tap.
-private enum QuiescenceBypass {
+enum QuiescenceBypass {
     private static var installed = false
 
     static func install() {
