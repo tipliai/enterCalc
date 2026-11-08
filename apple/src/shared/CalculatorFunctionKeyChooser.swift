@@ -193,15 +193,24 @@ public struct CalculatorFunctionKeyChooser: View {
     }
 
     public var body: some View {
-        GeometryReader { geometry in
-            let origin = panelOrigin(in: geometry)
+        // The outer reader keeps to the safe area; the inner one spans the
+        // whole screen. The panel is placed in the inner one but kept inside
+        // the outer one, clear of the status bar, notch and home indicator: on
+        // a short phone the function row sits too near the top for the panel
+        // to fit above it, and it used to land on the clock.
+        GeometryReader { safeArea in
+            let safeFrame = safeArea.frame(in: .global)
 
-            panel
-                .accessibilityPane(title: title, closedAnnouncement: closedAnnouncement, onClose: onClose)
-                .frame(width: panelSize.width, height: panelSize.height)
-                .position(x: origin.x + panelSize.width / 2, y: origin.y + panelSize.height / 2)
+            GeometryReader { geometry in
+                let origin = panelOrigin(in: geometry, safeFrame: safeFrame)
+
+                panel
+                    .accessibilityPane(title: title, closedAnnouncement: closedAnnouncement, onClose: onClose)
+                    .frame(width: panelSize.width, height: panelSize.height)
+                    .position(x: origin.x + panelSize.width / 2, y: origin.y + panelSize.height / 2)
+            }
+            .ignoresSafeArea()
         }
-        .ignoresSafeArea()
         .onPreferenceChange(FunctionOptionFramesKey.self) { frames in
             optionFrames = frames
             updateHighlight()
@@ -367,19 +376,30 @@ public struct CalculatorFunctionKeyChooser: View {
     /// Keeps the key being edited in view: on touch the panel prefers to sit
     /// above it, clear of the finger; with a pointer it opens below it, under
     /// the menu it came from (#131). Either way it flips to the other side
-    /// when there is no room, and always stays inside the container.
-    private func panelOrigin(in geometry: GeometryProxy) -> CGPoint {
-        Self.panelOrigin(anchor: session.anchor, panelSize: panelSize, container: geometry.frame(in: .global))
+    /// when there is no room, and always stays inside the container: on
+    /// touch, inside its safe area, clear of the status bar.
+    private func panelOrigin(in geometry: GeometryProxy, safeFrame: CGRect) -> CGPoint {
+        let container = geometry.frame(in: .global)
+        #if os(macOS)
+        let bounds = container
+        #else
+        let safeBounds = container.intersection(safeFrame)
+        let bounds = safeBounds.isNull || safeBounds.isEmpty ? container : safeBounds
+        #endif
+        return Self.panelOrigin(anchor: session.anchor, panelSize: panelSize, container: container, bounds: bounds)
     }
 
-    static func panelOrigin(anchor: CGRect, panelSize size: CGSize, container: CGRect) -> CGPoint {
+    /// `container` is the space the origin is returned in; `bounds` (the
+    /// container when nil) is where the panel has to stay.
+    static func panelOrigin(anchor: CGRect, panelSize size: CGSize, container: CGRect, bounds: CGRect? = nil) -> CGPoint {
+        let bounds = bounds ?? container
         var x = anchor.midX - size.width / 2
-        x = min(max(x, container.minX + screenMargin), max(container.maxX - size.width - screenMargin, container.minX + screenMargin))
+        x = min(max(x, bounds.minX + screenMargin), max(bounds.maxX - size.width - screenMargin, bounds.minX + screenMargin))
 
         let above = anchor.minY - anchorGap - size.height
         let below = anchor.maxY + anchorGap
-        let fitsAbove = above >= container.minY + screenMargin
-        let fitsBelow = below + size.height + screenMargin <= container.maxY
+        let fitsAbove = above >= bounds.minY + screenMargin
+        let fitsBelow = below + size.height + screenMargin <= bounds.maxY
         #if os(macOS)
         let prefersBelow = true
         #else
@@ -395,10 +415,10 @@ public struct CalculatorFunctionKeyChooser: View {
             y = below
         } else {
             // No room either side: as close to the preferred side as fits.
-            let lowest = container.maxY - screenMargin - size.height
+            let lowest = bounds.maxY - screenMargin - size.height
             y = prefersBelow
-                ? max(container.minY + screenMargin, min(below, lowest))
-                : max(container.minY + screenMargin, min(above, lowest))
+                ? max(bounds.minY + screenMargin, min(below, lowest))
+                : max(bounds.minY + screenMargin, min(above, lowest))
         }
 
         return CGPoint(x: x - container.minX, y: y - container.minY)
