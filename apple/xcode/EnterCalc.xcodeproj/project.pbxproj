@@ -24,6 +24,7 @@
 		F8D88845082D9A2DF9FF47EA /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = C024FCEE61269929862097E5 /* LICENSE */; };
 		FD50C9803C0CF7A629D459C8 /* CalculatorWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC1605B6AF4F0A247313C498 /* CalculatorWindowView.swift */; };
 		D5742DF8B573962CC479D4DE /* AccessibilityAuditTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBE50818CFAED4AC8799CEC8 /* AccessibilityAuditTests.swift */; };
+		7A3C1D2E4F5061728394A5B6 /* DualCalculatorKeyboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B4D2E3F506172839405B6C7 /* DualCalculatorKeyboardTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -73,6 +74,7 @@
 		EF3FAB0686DACBD7EA2B303B /* zh-Hans.lproj */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "zh-Hans.lproj"; sourceTree = "<group>"; };
 		F328066E909C5F92BBDFD95B /* EnterCalc-macOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "EnterCalc-macOSTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BBE50818CFAED4AC8799CEC8 /* AccessibilityAuditTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityAuditTests.swift; sourceTree = "<group>"; };
+		8B4D2E3F506172839405B6C7 /* DualCalculatorKeyboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DualCalculatorKeyboardTests.swift; sourceTree = "<group>"; };
 		560EC1E5BA0822B5D41A2123 /* EnterCalc-iOSAccessibilityUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "EnterCalc-iOSAccessibilityUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -223,6 +225,7 @@
 			isa = PBXGroup;
 			children = (
 				BBE50818CFAED4AC8799CEC8 /* AccessibilityAuditTests.swift */,
+				8B4D2E3F506172839405B6C7 /* DualCalculatorKeyboardTests.swift */,
 			);
 			path = a11yuitests;
 			sourceTree = "<group>";
@@ -431,6 +434,7 @@
 			isa = PBXSourcesBuildPhase;
 			files = (
 				D5742DF8B573962CC479D4DE /* AccessibilityAuditTests.swift in Sources */,
+				7A3C1D2E4F5061728394A5B6 /* DualCalculatorKeyboardTests.swift in Sources */,
 			);
 		};
 /* End PBXSourcesBuildPhase section */

@@ -20,6 +20,10 @@ public struct CalculatorActionContext {
     public let shrinkDisplayArea: (() -> Void)?
     public let goToNextScreen: (() -> Void)?
     public let goToPreviousScreen: (() -> Void)?
+    /// Two calculators side by side (#168, #172): make the left or the right
+    /// one the keyboard's; nil with one calculator.
+    public let selectLeftCalculator: (() -> Void)?
+    public let selectRightCalculator: (() -> Void)?
     /// The focused page's mode and a way to change it, for the Mode menu (#142).
     public let currentMode: CalculatorMode?
     public let selectMode: ((CalculatorMode) -> Void)?
@@ -41,6 +45,8 @@ public struct CalculatorActionContext {
         shrinkDisplayArea: (() -> Void)? = nil,
         goToNextScreen: (() -> Void)? = nil,
         goToPreviousScreen: (() -> Void)? = nil,
+        selectLeftCalculator: (() -> Void)? = nil,
+        selectRightCalculator: (() -> Void)? = nil,
         currentMode: CalculatorMode? = nil,
         selectMode: ((CalculatorMode) -> Void)? = nil
     ) {
@@ -60,6 +66,8 @@ public struct CalculatorActionContext {
         self.shrinkDisplayArea = shrinkDisplayArea
         self.goToNextScreen = goToNextScreen
         self.goToPreviousScreen = goToPreviousScreen
+        self.selectLeftCalculator = selectLeftCalculator
+        self.selectRightCalculator = selectRightCalculator
         self.currentMode = currentMode
         self.selectMode = selectMode
     }
