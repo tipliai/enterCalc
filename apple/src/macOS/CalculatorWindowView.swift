@@ -513,6 +513,7 @@ struct CalculatorWindowView: View {
                                 )
                                 .paneTextScale(paneTextScale)
                                 .paneHeightLimit(geo.size.height * 0.8)
+                                .modifier(MacBottomPaneChrome(color: memoryOverlayBackgroundColor))
                                 .frame(width: geo.size.width, alignment: .top)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                                 .allowsHitTesting(activeOverlay == .vat)
@@ -526,6 +527,7 @@ struct CalculatorWindowView: View {
                                 )
                                 .paneTextScale(paneTextScale)
                                 .paneHeightLimit(geo.size.height * 0.8)
+                                .modifier(MacBottomPaneChrome(color: memoryOverlayBackgroundColor))
                                 .frame(width: geo.size.width, alignment: .top)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                                 .allowsHitTesting(activeOverlay == .tip)
@@ -539,6 +541,7 @@ struct CalculatorWindowView: View {
                                 )
                                 .paneTextScale(paneTextScale)
                                 .paneHeightLimit(geo.size.height * 0.8)
+                                .modifier(MacBottomPaneChrome(color: memoryOverlayBackgroundColor))
                                 .frame(width: geo.size.width, alignment: .top)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                                 .allowsHitTesting(activeOverlay == .rounding)
@@ -1768,7 +1771,7 @@ struct CalculatorWindowView: View {
             },
             onDismiss: { setActiveOverlay(nil) }
         )
-        .modifier(MacToolPaneBackground(color: memoryOverlayBackgroundColor))
+        .modifier(MacToolPaneBackground())
     }
 
     private func tipOverlay() -> some View {
@@ -1796,7 +1799,7 @@ struct CalculatorWindowView: View {
             },
             onDismiss: { setActiveOverlay(nil) }
         )
-        .modifier(MacToolPaneBackground(color: memoryOverlayBackgroundColor))
+        .modifier(MacToolPaneBackground())
     }
 
     /// The operation line left behind after a tool writes its result, so the
@@ -1923,7 +1926,6 @@ struct CalculatorWindowView: View {
     private func roundingOverlay() -> some View {
         MacRoundingPanel(
             palette: palette,
-            overlayBackgroundColor: memoryOverlayBackgroundColor,
             isEnabled: viewModel.isResultRoundingEnabled,
             precision: viewModel.resultRoundingPrecision,
             maxPrecision: viewModel.maxResultRoundingPrecision,
@@ -3680,7 +3682,6 @@ private struct SettingsSheet: View {
 private struct MacRoundingPanel: View {
     @Environment(\.paneTextScale) private var textScale
     let palette: Palette
-    let overlayBackgroundColor: Color
     let isEnabled: Bool
     let precision: Int
     let maxPrecision: Int
@@ -3708,7 +3709,6 @@ private struct MacRoundingPanel: View {
 
     init(
         palette: Palette,
-        overlayBackgroundColor: Color,
         isEnabled: Bool,
         precision: Int,
         maxPrecision: Int,
@@ -3719,7 +3719,6 @@ private struct MacRoundingPanel: View {
         onDismiss: @escaping () -> Void
     ) {
         self.palette = palette
-        self.overlayBackgroundColor = overlayBackgroundColor
         self.isEnabled = isEnabled
         self.precision = precision
         self.maxPrecision = max(0, maxPrecision)
@@ -3798,18 +3797,8 @@ private struct MacRoundingPanel: View {
         .padding(.bottom, 10)
         .frame(maxWidth: .infinity, alignment: .top)
         .fixedSize(horizontal: false, vertical: true)
-        .background(overlayBackgroundColor)
-        .clipShape(
-            UnevenRoundedRectangle(
-                topLeadingRadius: 10,
-                bottomLeadingRadius: 0,
-                bottomTrailingRadius: 0,
-                topTrailingRadius: 10,
-                style: .continuous
-            )
-        )
-        .padding(.horizontal, -8)
-        .padding(.bottom, -8)
+        // The background and the reach to the window's edges are drawn by
+        // the caller, outside the pane's height limit (MacBottomPaneChrome).
         .onChange(of: precision) { _, newValue in
             sliderValue = sliderPosition(for: Self.stepIndex(isEnabled: isEnabled, precision: newValue, maxPrecision: maxPrecision))
         }
@@ -4405,12 +4394,24 @@ private struct CalculatorWindowResolver: NSViewRepresentable {
 /// the fill runs past the window's content inset to the edges, with rounded
 /// top corners, so all three panes sit the same way.
 private struct MacToolPaneBackground: ViewModifier {
-    let color: Color
-
     func body(content: Content) -> some View {
         content
             .frame(maxWidth: .infinity, alignment: .top)
             .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// A bottom pane's background, drawn edge to edge: across the window's full
+/// width and down to its bottom edge, past the 8pt margin the calculator sits
+/// in. Applied outside `paneHeightLimit`, so a pane that scrolls (large text
+/// in a short window) keeps its full width, its rounded top corners and its
+/// reach to the bottom; inside the scroll view they were clipped to the
+/// margin.
+private struct MacBottomPaneChrome: ViewModifier {
+    let color: Color
+
+    func body(content: Content) -> some View {
+        content
             .background(color)
             .clipShape(
                 UnevenRoundedRectangle(

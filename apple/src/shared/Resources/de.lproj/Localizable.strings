@@ -95,6 +95,7 @@
 "currency.tip.amount" = "Trinkgeld";
 "currency.tip.total" = "Gesamt";
 "currency.tool.close" = "Schließen";
+"close" = "Schließen";
 
 /* Typed rates and editable presets on the VAT and Tip panels (issue #124) */
 "currency.rate.type" = "Prozentsatz eingeben";

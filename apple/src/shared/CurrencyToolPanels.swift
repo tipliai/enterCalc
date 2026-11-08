@@ -612,8 +612,13 @@ public struct CurrencyVATPanel: View {
             Text(title)
                 .paneFont(size: 13, weight: .medium)
                 .foregroundStyle(isSelected ? palette.accentText : palette.textPrimary)
-                // Long translations wrap rather than truncate at large sizes.
+                // Long translations wrap rather than truncate at large sizes,
+                // one word to a line at most: a word too long for the button
+                // ("herausrechnen" at the largest German size) shrinks the
+                // label rather than breaking inside it.
                 .multilineTextAlignment(.center)
+                .lineLimit(WholeWordWrapping.lineLimit(for: title))
+                .minimumScaleFactor(0.6)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.vertical, 8)
@@ -625,6 +630,17 @@ public struct CurrencyVATPanel: View {
                 .fill(isSelected ? AnyShapeStyle(palette.accentGradient) : AnyShapeStyle(palette.buttonFunction))
         )
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+}
+
+/// Keeps a wrapping label's words whole. Limiting it to one line per word
+/// means a word that would have to break across lines makes the label shrink
+/// instead (with `minimumScaleFactor`). Text written without spaces, such as
+/// Japanese or Chinese, gets no limit: it may wrap anywhere.
+enum WholeWordWrapping {
+    static func lineLimit(for text: String) -> Int? {
+        let words = text.split(whereSeparator: { $0.isWhitespace })
+        return text.contains(where: { $0.isWhitespace }) ? words.count : nil
     }
 }
 

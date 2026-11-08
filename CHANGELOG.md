@@ -14,6 +14,9 @@
 - Large text sizes work on the smallest iPhones: the mode and VAT/Tip controls stay reachable, numbers never break across lines, and Settings values stay readable.
 - Pane text now follows the smaller system text sizes too, not only the larger ones.
 - The function key chooser stays clear of the status bar.
+- On the Mac, the VAT, Tip and rounding panes reach the window's edges and bottom even when large text makes them scroll.
+- Button labels in the VAT pane keep whole words at large text sizes, shrinking rather than breaking a long word.
+- Close buttons are named in every language for VoiceOver; they were read as "close" everywhere.
 - Rating prompt on the Mac, following Apple's guidance.
 
 ## 1.1.0 — October 7, 2026

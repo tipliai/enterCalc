@@ -200,3 +200,18 @@ final class RateFieldTextTests: XCTestCase {
         XCTAssertEqual(RateEntry(typed: "12,5 %", decimalSeparator: ",")?.value, Decimal(string: "12.5"))
     }
 }
+
+// The VAT pane's Add/Remove labels wrap a word to a line at most, so a word
+// too long for the button shrinks the label instead of breaking inside it
+// ("MwSt. herausrechnen" at the largest German size on the Mac).
+final class WholeWordWrappingTests: XCTestCase {
+    func testOneLinePerWord() {
+        XCTAssertEqual(WholeWordWrapping.lineLimit(for: "MwSt. herausrechnen"), 2)
+        XCTAssertEqual(WholeWordWrapping.lineLimit(for: "Retirer la TVA"), 3)
+    }
+
+    func testTextWithoutSpacesMayWrapAnywhere() {
+        XCTAssertNil(WholeWordWrapping.lineLimit(for: "消費税を差し引く"))
+        XCTAssertNil(WholeWordWrapping.lineLimit(for: "Total"))
+    }
+}
