@@ -589,8 +589,10 @@ struct EnterCalcIOSView: View {
         screen.viewModel.shouldShowAllClearButton ? "AC" : "C"
     }
 
+    /// The selected calculator's palette: with two side by side the window's
+    /// scheme follows one of them, and a pane over the other must not (#172).
     private var palette: Palette {
-        activeTheme.palette(using: colorScheme, increasedContrast: colorSchemeContrast == .increased)
+        palette(for: activeScreen)
     }
 
     /// Each screen draws in its own theme and language, so two calculators
@@ -653,8 +655,10 @@ struct EnterCalcIOSView: View {
             shrinkDisplayArea: { adjustDisplayHeightFromKeyboard(byPoints: -Self.keyboardDisplayResizeStep) },
             goToNextScreen: { goToNextScreenFromKeyboard() },
             goToPreviousScreen: { goToPreviousScreenFromKeyboard() },
-            selectLeftCalculator: showsSecondaryCalculator ? { selectCalculatorHalf(.left) } : nil,
-            selectRightCalculator: showsSecondaryCalculator ? { selectCalculatorHalf(.right) } : nil,
+            // Off while Settings is open, like the key capture: the card's
+            // drafts belong to the calculator it opened over.
+            selectLeftCalculator: showsSecondaryCalculator && !showSettingsSheet ? { selectCalculatorHalf(.left) } : nil,
+            selectRightCalculator: showsSecondaryCalculator && !showSettingsSheet ? { selectCalculatorHalf(.right) } : nil,
             currentMode: CalculatorMode.current(for: viewModel),
             selectMode: { selectMode($0, on: activeScreen) }
         )
@@ -1466,6 +1470,17 @@ private extension EnterCalcIOSView {
             }
         }
 
+        // ⌘← and ⌘→ move the keyboard to the left or the right of two
+        // calculators side by side, on the iPhone Duo and the iPad (#168,
+        // #172). Before the input side effects below: naming the half
+        // already selected must leave its pane and scroll alone.
+        if event.modifierFlags.contains(.command),
+           event.keyCode == .keyboardLeftArrow || event.keyCode == .keyboardRightArrow {
+            guard showsSecondaryCalculator else { return false }
+            selectCalculatorHalf(event.keyCode == .keyboardLeftArrow ? .left : .right)
+            return true
+        }
+
         resetLandscapeDisplayScroll(for: activeScreen)
 
         let hasNoModifiers = event.modifierFlags.intersection([.command, .alternate, .control, .shift]).isEmpty
@@ -1517,14 +1532,6 @@ private extension EnterCalcIOSView {
         if isCommand {
             if event.keyCode == .keyboardDeleteOrBackspace || event.keyCode == .keyboardDeleteForward {
                 viewModel.clearAll()
-                return true
-            }
-            // ⌘← and ⌘→ move the keyboard to the left or the right of two
-            // calculators side by side, on the iPhone Duo and the iPad
-            // (#168, #172). With one calculator they are not handled.
-            if event.keyCode == .keyboardLeftArrow || event.keyCode == .keyboardRightArrow {
-                guard showsSecondaryCalculator else { return false }
-                selectCalculatorHalf(event.keyCode == .keyboardLeftArrow ? .left : .right)
                 return true
             }
             switch chars.lowercased() {
@@ -3398,7 +3405,7 @@ private extension EnterCalcIOSView {
             let availableKeypadHeight = max(0, availableSurfaceHeight - initialResultAreaHeight)
             let fittedButtonHeight = buttonHeightFitting(availableKeypadHeight)
             let actualButtonHeight = fillsHeightWithoutScaling
-                ? fittedButtonHeight * keypadHeightMultiplier
+                ? fittedButtonHeight
                 : (isLandscapeMode
                     ? min(baseButtonHeight, fittedButtonHeight)
                     : min(baseButtonHeight, fittedButtonHeight))
