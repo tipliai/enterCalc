@@ -95,6 +95,7 @@
 "currency.tip.amount" = "チップ";
 "currency.tip.total" = "合計";
 "currency.tool.close" = "閉じる";
+"close" = "閉じる";
 
 /* Typed rates and editable presets on the VAT and Tip panels (issue #124) */
 "currency.rate.type" = "割合を入力";

@@ -95,6 +95,7 @@
 "currency.tip.amount" = "Tip";
 "currency.tip.total" = "Total";
 "currency.tool.close" = "Close";
+"close" = "Close";
 
 /* Typed rates and editable presets on the VAT and Tip panels (issue #124) */
 "currency.rate.type" = "Type a Rate";

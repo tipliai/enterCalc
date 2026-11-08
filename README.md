@@ -66,6 +66,6 @@ Opening the `apple/` folder itself will surface the local Swift package (`EnterC
 
 ### Additional Documentation
 
-- [CHANGELOG.md](CHANGELOG.md) — Changes in each release
-- [CONTRIBUTING.md](CONTRIBUTING.md) — Issue reporting guidance and pull request policy
-- [docs/keyboard.md](docs/keyboard.md) — Keyboard actions and context behavior matrix for iOS and macOS
+- [CHANGELOG.md](CHANGELOG.md): Changes in each release
+- [CONTRIBUTING.md](CONTRIBUTING.md): Issue reporting guidance and pull request policy
+- [docs/keyboard.md](docs/keyboard.md): Keyboard actions and context behavior matrix for iOS and macOS

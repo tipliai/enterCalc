@@ -95,6 +95,7 @@
 "currency.tip.amount" = "小费";
 "currency.tip.total" = "总计";
 "currency.tool.close" = "关闭";
+"close" = "关闭";
 
 /* Typed rates and editable presets on the VAT and Tip panels (issue #124) */
 "currency.rate.type" = "输入比率";
