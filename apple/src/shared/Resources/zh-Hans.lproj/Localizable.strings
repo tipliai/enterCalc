@@ -153,6 +153,14 @@
 "a11y.announce.mode" = "已切换到%@模式";
 "a11y.announce.screen" = "屏幕 %1$@，显示 %2$@";
 "a11y.announce.window" = "窗口 %1$@，显示 %2$@";
+"a11y.announce.halfScreen" = "%1$@，%2$@";
+"a11y.half.left" = "左";
+"a11y.half.right" = "右";
+"a11y.half.leftCalculator" = "左侧计算器";
+"a11y.half.rightCalculator" = "右侧计算器";
+"a11y.half.active" = "已激活";
+"rail.dualMode" = "两个计算器";
+"a11y.announce.halfActive" = "%1$@ 已激活，%2$@";
 "a11y.resize.keypad" = "调整键盘大小";
 "a11y.resize.keypad.hint" = "向上或向下拖移以调整键盘大小";
 "a11y.resize.history" = "调整历史记录大小";

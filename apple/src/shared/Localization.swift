@@ -72,8 +72,35 @@ public func localizationDisplayName(for code: String, currentLocale: Locale = .c
         ?? code
 }
 
+/// The string for one screen's language rather than the app's current one,
+/// for two calculators in different languages side by side (#168). `nil` or
+/// the default selection means the app's own language.
+public func localized(_ key: String, languageCode: String?) -> String {
+    guard let languageCode, !isDefaultLocalizationSelection(languageCode) else {
+        return localized(key, inOverride: nil)
+    }
+    if let bundle = cachedLocalizationBundle(for: languageCode) {
+        let value = bundle.localizedString(forKey: key, value: nil, table: "Localizable")
+        if value != key { return value }
+    }
+    return localized(key, inOverride: nil)
+}
+
+private var localizationBundleCache: [String: Bundle] = [:]
+
+private func cachedLocalizationBundle(for code: String) -> Bundle? {
+    if let bundle = localizationBundleCache[code] { return bundle }
+    let bundle = localizationBundle(for: code)
+    if let bundle { localizationBundleCache[code] = bundle }
+    return bundle
+}
+
 public func localized(_ key: String) -> String {
-    if let bundle = languageOverrideBundle {
+    localized(key, inOverride: languageOverrideBundle)
+}
+
+private func localized(_ key: String, inOverride override: Bundle?) -> String {
+    if let bundle = override {
         let value = bundle.localizedString(forKey: key, value: nil, table: "Localizable")
         if value != key { return value }
     }

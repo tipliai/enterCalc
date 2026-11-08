@@ -153,6 +153,14 @@
 "a11y.announce.mode" = "%@ モードになりました";
 "a11y.announce.screen" = "画面 %1$@、%2$@ を表示";
 "a11y.announce.window" = "ウインドウ %1$@、%2$@ を表示";
+"a11y.announce.halfScreen" = "%1$@、%2$@";
+"a11y.half.left" = "左";
+"a11y.half.right" = "右";
+"a11y.half.leftCalculator" = "左の電卓";
+"a11y.half.rightCalculator" = "右の電卓";
+"a11y.half.active" = "アクティブ";
+"rail.dualMode" = "計算機を2つ表示";
+"a11y.announce.halfActive" = "%1$@ がアクティブ、%2$@";
 "a11y.resize.keypad" = "キーパッドのサイズを変更";
 "a11y.resize.keypad.hint" = "上下にドラッグしてキーパッドのサイズを変更します";
 "a11y.resize.history" = "履歴のサイズを変更";

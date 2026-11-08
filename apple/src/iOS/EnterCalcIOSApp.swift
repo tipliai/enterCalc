@@ -420,10 +420,26 @@ struct EnterCalcIOSView: View {
     /// The iPhone Duo's inner display asked the scene for an orientation,
     /// which the front display has to give back (#169).
     @State private var holdsInnerDisplayOrientation: Bool = false
+    /// The iPhone Duo's fold position as last laid out, for the actions that
+    /// depend on it (#168).
+    @State private var foldPosture: IOSFoldPosture = .none
+    /// With two calculators side by side (#168), the half touched last: typed
+    /// keys, the panes and the settings sheet go to its screen.
+    @State private var focusedHalf: DuoHalf = .right
+    /// Until when touches leave `focusedHalf` alone: the press that opens the
+    /// left half ends on the right half, and must not take the focus back.
+    @State private var focusLockedUntil: Date = .distantPast
+    /// Halves whose pager must not move through the current update: the
+    /// other half closed a screen that this one was not showing (#168).
+    @State private var halvesHoldingStill: Set<DuoHalf> = []
+    @State private var settingsSheetDismissedAt: Date = .distantPast
     @State private var flashCopy: Bool = false
     @State private var showCopyToast: Bool = false
     @State private var copyToastDismissWorkItem: DispatchWorkItem?
     @State private var copyStreakActive: Bool = false
+    /// The screen whose display flashes on copy; with two calculators side
+    /// by side the other keeps still (#168).
+    @State private var copyFlashScreenID: UUID?
     @State private var copyStreakTravel: CGFloat = 1.35
     @State private var displayShimmerParallaxOffset: CGSize = .zero
     @State private var displayShimmerAngleDegrees: Double = -28
@@ -434,6 +450,10 @@ struct EnterCalcIOSView: View {
 #endif
     @State private var operatorRevealProgress: Double = 0.0
     @State private var operatorAnimFadeOpacity: Double = 1.0
+    /// The screen the intro animation plays on, or nil for every screen. A
+    /// screen added while another is in view, on the iPhone Duo's two halves
+    /// (#168), plays it alone.
+    @State private var operatorIntroScreenID: UUID?
     @State private var previousScreenCount: Int = 1
     @State private var keypadResizeGestureStartMultiplier: Double = 1.0
     @State private var isResizingKeypadHeight: Bool = false
@@ -461,7 +481,28 @@ struct EnterCalcIOSView: View {
     @AppStorage("settings.functionKeys.assignments") private var preferredFunctionKeyAssignmentsRaw: String = ""
 
     private var activeScreen: CalculatorScreenSession {
-        screenStore.activeScreen
+        if focusedHalf == .left, showsSecondaryCalculator, let screen = screenStore.secondaryScreen {
+            return screen
+        }
+        return screenStore.activeScreen
+    }
+
+    /// The iPhone Duo in book position with a screen open on the left half
+    /// (#168).
+    private var showsSecondaryCalculator: Bool {
+        foldPosture == .book && screenStore.secondaryIndex != nil
+    }
+
+    /// The page the focused half is on (#168).
+    private var focusedScreenIndex: Int {
+        if focusedHalf == .left, showsSecondaryCalculator, let index = screenStore.secondaryIndex {
+            return index
+        }
+        return screenStore.activeIndex
+    }
+
+    private var focusedPagingHalf: DuoHalf {
+        focusedHalf == .left && showsSecondaryCalculator ? .left : .right
     }
 
     private var viewModel: CalculatorViewModel {
@@ -470,6 +511,13 @@ struct EnterCalcIOSView: View {
 
     private var activeTheme: AppTheme {
         AppTheme(rawValue: activeScreen.settings.themeRawValue) ?? .system
+    }
+
+    /// The theme the window takes: the status bar's time and ring sit in the
+    /// right calculator's strip, so with two calculators side by side they
+    /// follow its theme, not the selected one's (#168).
+    private var windowTheme: AppTheme {
+        showsSecondaryCalculator ? theme(for: screenStore.activeScreen) : activeTheme
     }
 
     private var storedHomeScreenSettings: CalculatorScreenSettings {
@@ -488,21 +536,67 @@ struct EnterCalcIOSView: View {
     }
 
     private var equalsButtonTitle: String {
+        equalsButtonTitle(for: activeScreen)
+    }
+
+    /// In the screen's own language, so two calculators side by side can
+    /// differ (#168).
+    private func equalsButtonTitle(for screen: CalculatorScreenSession) -> String {
         EqualsKeyLabel.usesEnterWord(
-            resolvedLocalizationCode: resolvedLocalizationCode(for: activeScreen.settings.languageCode)
-        ) ? localized("key.enter") : EqualsKeyLabel.symbol
+            resolvedLocalizationCode: resolvedLocalizationCode(for: screen.settings.languageCode)
+        ) ? localizer(for: screen)("key.enter") : EqualsKeyLabel.symbol
     }
 
     private var clearButtonTitle: String {
-        activeScreen.viewModel.shouldShowAllClearButton ? "AC" : "C"
+        clearButtonTitle(for: activeScreen)
     }
 
-    private func handleContextualClear() {
-        activeScreen.viewModel.clearEntry()
+    private func clearButtonTitle(for screen: CalculatorScreenSession) -> String {
+        screen.viewModel.shouldShowAllClearButton ? "AC" : "C"
     }
 
     private var palette: Palette {
         activeTheme.palette(using: colorScheme, increasedContrast: colorSchemeContrast == .increased)
+    }
+
+    /// Each screen draws in its own theme and language, so two calculators
+    /// side by side on the iPhone Duo can differ (#168). The calculator
+    /// subtree shadows `palette` and `localized` with these.
+    private func theme(for screen: CalculatorScreenSession) -> AppTheme {
+        AppTheme(rawValue: screen.settings.themeRawValue) ?? .system
+    }
+
+    private func palette(for screen: CalculatorScreenSession) -> Palette {
+        theme(for: screen).palette(using: baseColorScheme, increasedContrast: colorSchemeContrast == .increased)
+    }
+
+    /// What a screen on the system theme follows. The window's scheme follows
+    /// the focused screen's theme, so with two calculators side by side it
+    /// would drag a system-themed one along (#168): the device's appearance
+    /// is used instead.
+    private var baseColorScheme: ColorScheme {
+        guard showsSecondaryCalculator else { return colorScheme }
+#if canImport(UIKit)
+        return UIScreen.main.traitCollection.userInterfaceStyle == .dark ? .dark : .light
+#else
+        return colorScheme
+#endif
+    }
+
+    /// Whether a screen draws dark, for the shading that is not in the palette.
+    private func isDarkScheme(for screen: CalculatorScreenSession) -> Bool {
+        (theme(for: screen).preferredColorScheme ?? baseColorScheme) == .dark
+    }
+
+    private func localizer(for screen: CalculatorScreenSession) -> (String) -> String {
+        let code = screen.settings.languageCode
+        return { EnterCalcCore.localized($0, languageCode: code) }
+    }
+
+    /// With two calculators side by side, the one typed keys do not go to (#168).
+    private func isInactiveCalculator(_ half: DuoHalf?) -> Bool {
+        guard let half, showsSecondaryCalculator else { return false }
+        return focusedHalf != half
     }
 
     private var actionContext: CalculatorActionContext {
@@ -526,16 +620,8 @@ struct EnterCalcIOSView: View {
             goToNextScreen: { goToNextScreenFromKeyboard() },
             goToPreviousScreen: { goToPreviousScreenFromKeyboard() },
             currentMode: CalculatorMode.current(for: viewModel),
-            selectMode: { selectMode($0) }
+            selectMode: { selectMode($0, on: activeScreen) }
         )
-    }
-
-    private var activeSettingsTitleKey: String {
-        activeScreen.isHomeScreen ? "settings.title" : "settings.screen.title"
-    }
-
-    private var activeAppearanceLabelKey: String {
-        activeScreen.isHomeScreen ? "settings.appearance.label" : "settings.appearance.screenLabel"
     }
 
     // The rate in use belongs to this window (or iPad scene) for the session,
@@ -599,7 +685,7 @@ struct EnterCalcIOSView: View {
     private func basicRows(for screen: CalculatorScreenSession) -> [[IOSCalcButton]] {
         [
             [
-                .function(clearButtonTitle, action: { _ in self.handleContextualClear() }),
+                .function(clearButtonTitle(for: screen), action: { $0.clearEntry() }),
                 configurableKeypadButton(for: .parenthesesKey, screen: screen),
                 configurableKeypadButton(for: .percentKey, screen: screen),
                 .operation("÷", action: { $0.setOperator(.divide) })
@@ -616,7 +702,7 @@ struct EnterCalcIOSView: View {
             [
                 .decimal(),
                 .digit("0"),
-                .equals(title: equalsButtonTitle, columnSpan: 2)
+                .equals(title: equalsButtonTitle(for: screen), columnSpan: 2)
             ]
         ]
     }
@@ -797,9 +883,10 @@ struct EnterCalcIOSView: View {
                     onReset: { resetFunctionKeys() }
                 )
                 // The Duo's fold layouts keep the chooser on the calculator's
-                // side of the fold: the right half in book, the bottom half
-                // in top/bottom, which it fits in either way (#132).
-                .padding(.leading, metrics.foldPosture == .book ? metrics.foldCalculatorMinX : 0)
+                // side of the fold: the focused half in book (#168), the
+                // bottom half in top/bottom, which it fits in either way (#132).
+                .padding(.leading, foldPaneLeadingInset(metrics: metrics))
+                .padding(.trailing, foldPaneTrailingInset(metrics: metrics))
                 .padding(.top, metrics.foldPosture == .tabletop ? metrics.foldLayoutY + IOSLayoutMetrics.foldGap / 2 : 0)
             }
             // While the press that opened it is still down, the chooser must
@@ -822,12 +909,27 @@ struct EnterCalcIOSView: View {
                 horizontalSizeClass: horizontalSizeClass,
                 deviceFamily: currentDeviceFamily(),
                 isLandscapePresentation: isLandscapePresentation,
-                screenReferenceSize: screenReferenceSize
+                screenReferenceSize: screenReferenceSize,
+                showsTwoCalculators: screenStore.secondaryIndex != nil
             )
 
             ZStack(alignment: .top) {
-                palette.surface
+                // Two calculators side by side each bring their own theme,
+                // split at the fold (#168).
+                if showsSecondaryCalculator, let leftScreen = screenStore.secondaryScreen {
+                    HStack(spacing: 0) {
+                        palette(for: leftScreen).surface
+                            .frame(width: metrics.foldLeadingInset + metrics.foldDividerX)
+                        // The right calculator's colour runs on under the
+                        // rail's strip whichever half is selected.
+                        palette(for: screenStore.activeScreen).surface
+                    }
                     .ignoresSafeArea()
+                    .rotationEffect(.degrees(counterRotatesForUpsideDownPortrait ? 180 : 0))
+                } else {
+                    palette.surface
+                        .ignoresSafeArea()
+                }
 
                 layoutBody(metrics: metrics)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -845,6 +947,16 @@ struct EnterCalcIOSView: View {
                     // so no orientation event follows it (#132).
                     .onChange(of: metrics.foldPosture) { _, _ in
                         syncPhoneUpsideDownPresentation()
+                    }
+                    // Actions outside the layout need the posture too, and
+                    // the left half's calculator only shows in book (#168).
+                    .onChange(of: metrics.foldPosture, initial: true) { _, posture in
+                        foldPosture = posture
+                        if posture != .book {
+                            focusedHalf = .right
+                        } else {
+                            restoreSettingsAfterUnfolding()
+                        }
                     }
 
                 if showsOverlayScrim(metrics: metrics) {
@@ -883,7 +995,7 @@ struct EnterCalcIOSView: View {
             // instead — background, keys and text together, rather than the
             // background alone, which would look worse than the hard cut.
             .animation(reduceMotionEnabled ? nil : .easeInOut(duration: Self.themeTransitionDuration), value: activeTheme)
-            .preferredColorScheme(activeTheme.preferredColorScheme)
+            .preferredColorScheme(windowTheme.preferredColorScheme)
             .focusedSceneValue(\.calculatorActions, actionContext)
             .transaction { transaction in
                 if reduceMotionEnabled {
@@ -958,12 +1070,23 @@ struct EnterCalcIOSView: View {
             .onValueChange(of: screenStore.screenCount) { newCount in
                 defer { previousScreenCount = newCount }
                 guard newCount > previousScreenCount else { return }
-                startOperatorIntroAnimation()
+                let newScreen = foldPosture == .book ? screenStore.secondaryScreen : screenStore.activeScreen
+                startOperatorIntroAnimation(for: newScreen?.id)
             }
             // Swiping to, adding or closing a screen says which screen is now
             // showing and its value (#145): "Screen 2, $1.55 shown".
             .onValueChange(of: screenStore.activeIndex) { index in
-                announceActiveScreen(number: index + 1)
+                announceScreen(number: index + 1, half: .right)
+            }
+            .onValueChange(of: screenStore.secondaryIndex) { index in
+                if let index {
+                    announceScreen(number: index + 1, half: .left)
+                } else {
+                    focusedHalf = .right
+                }
+            }
+            .onValueChange(of: focusedHalf) { _ in
+                applyActiveScreenConfiguration()
             }
             .onValueChange(of: preferredThemeRaw) { _ in
                 syncHomeScreenFromStoredSettings()
@@ -1023,22 +1146,12 @@ struct EnterCalcIOSView: View {
                 activeOverlay = nil
                 resetHistoryOverlayResizeState()
             }
-            .sheet(isPresented: $showSettingsSheet) {
-                IOSSettingsSheet(
-                    titleKey: activeSettingsTitleKey,
-                    appearanceLabelKey: activeAppearanceLabelKey,
-                    selectedTheme: activeThemeBinding,
-                    selectedLanguage: activeLanguageBinding,
-                    usesScientificNotation: activeScientificNotationBinding,
-                    selectedNumberFormat: activeNumberFormatBinding,
-                    selectedCurrencySymbol: activeCurrencySymbolBinding,
-                    disablesSwipeDownToRound: activeDisableSwipeDownToRoundBinding,
-                    availableLanguages: availableLanguageOptions(),
-                    counterRotatesForUpsideDownPortrait: counterRotatesForUpsideDownPortrait
-                )
-                // A sheet takes its text size from the window, not the root
-                // view's environment, so the Text Size setting is applied here too.
-                .appTextSize()
+            // With two calculators on the Duo the settings show as a card over
+            // that half instead (#168), see `duoSettingsPanel`.
+            .sheet(isPresented: settingsSheetBinding) {
+                // The cover shows the right calculator, so its sheet is that
+                // screen's whichever half was selected before folding (#168).
+                settingsSheetContent(for: screenStore.activeScreen, asCard: false)
             }
             .onIOSDeviceOrientationChange {
                 isResizingKeypadHeight = false
@@ -1057,62 +1170,164 @@ struct EnterCalcIOSView: View {
 }
 
 private extension EnterCalcIOSView {
-    var activeThemeBinding: Binding<String> {
+    /// The centred sheet, everywhere but the Duo's inner display in book
+    /// position, where Settings is a card over the calculator instead. The
+    /// sheet also goes when the Duo opens into that position, and that
+    /// dismissal must not close Settings: the card takes over on the right
+    /// calculator, so the open cover and the inner display match (#168).
+    var settingsSheetBinding: Binding<Bool> {
         Binding(
-            get: { activeScreen.settings.themeRawValue },
-            set: { newValue in
-                updateActiveScreenSettings { $0.themeRawValue = newValue }
-            }
-        )
-    }
-
-    var activeLanguageBinding: Binding<String> {
-        Binding(
-            get: { activeScreen.settings.languageCode },
-            set: { newValue in
-                updateActiveScreenSettings { $0.languageCode = newValue }
-                applyLanguage(newValue, refreshing: activeScreen.viewModel)
-            }
-        )
-    }
-
-    var activeScientificNotationBinding: Binding<Bool> {
-        Binding(
-            get: { activeScreen.settings.usesScientificNotation },
-            set: { newValue in
-                updateActiveScreenSettings { $0.usesScientificNotation = newValue }
-            }
-        )
-    }
-
-    var activeNumberFormatBinding: Binding<String> {
-        Binding(
-            get: { activeScreen.settings.numberFormatStyleRawValue },
-            set: { newValue in
-                updateActiveScreenSettings { $0.numberFormatStyleRawValue = newValue }
-            }
-        )
-    }
-
-    var activeCurrencySymbolBinding: Binding<String> {
-        Binding(
-            get: { activeScreen.settings.currencySymbol },
-            set: { newValue in
-                updateActiveScreenSettings { $0.currencySymbol = newValue }
-                // Re-label a value already on screen so the change is visible
-                // immediately rather than only on the next entry.
-                if activeScreen.viewModel.activeCurrencySymbol != nil {
-                    activeScreen.viewModel.inputCurrencySymbol(newValue)
+            get: { showSettingsSheet && foldPosture != .book },
+            set: {
+                if !$0, foldPosture != .book {
+                    settingsSheetDismissedAt = Date()
+                    showSettingsSheet = false
                 }
             }
         )
     }
 
-    var activeDisableSwipeDownToRoundBinding: Binding<Bool> {
+    /// The Duo opening dismisses the cover's sheet before the layout learns
+    /// of the new posture; a dismissal moments before the posture turns to
+    /// book was that, and Settings opens again as the card (#168).
+    func restoreSettingsAfterUnfolding() {
+        guard !showSettingsSheet, Date().timeIntervalSince(settingsSheetDismissedAt) < 1.5 else { return }
+        settingsSheetDismissedAt = .distantPast
+        // The cover's sheet was the right calculator's, so the card is too.
+        focusedHalf = .right
+        showSettingsSheet = true
+    }
+
+    /// Book: the focused half's settings show as a card over that half, so
+    /// the rest stays in view (#168); on the right alone when it is the only
+    /// calculator.
+    var showsDuoSettings: Bool {
+        showSettingsSheet && foldPosture == .book
+    }
+
+    /// The Duo's card appears in place, with no animation (#168).
+    func openSettings() {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            showSettingsSheet = true
+        }
+    }
+
+    func closeSettings() {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            showSettingsSheet = false
+        }
+    }
+
+    /// Settings for one screen. The bindings hold that screen, not whichever
+    /// is selected when a draft is committed: folding the Duo with the left
+    /// card open selects the right calculator, and the outgoing card's
+    /// drafts must still land on the left one (#168).
+    func settingsSheetContent(for screen: CalculatorScreenSession, asCard: Bool) -> some View {
+        IOSSettingsSheet(
+            titleKey: settingsTitleKey(for: screen),
+            appearanceLabelKey: appearanceLabelKey(for: screen),
+            selectedTheme: themeBinding(for: screen),
+            selectedLanguage: languageBinding(for: screen),
+            usesScientificNotation: scientificNotationBinding(for: screen),
+            selectedNumberFormat: numberFormatBinding(for: screen),
+            selectedCurrencySymbol: currencySymbolBinding(for: screen),
+            disablesSwipeDownToRound: disableSwipeDownToRoundBinding(for: screen),
+            availableLanguages: availableLanguageOptions(),
+            // The card sits in the layout, which is already turned.
+            counterRotatesForUpsideDownPortrait: !asCard && counterRotatesForUpsideDownPortrait,
+            // Closing here is the user's doing, so it is not recorded as a
+            // dismissal the Duo's unfolding may have caused.
+            onClose: { closeSettings() }
+        )
+        // A sheet takes its text size from the window, not the root
+        // view's environment, so the Text Size setting is applied here too.
+        .appTextSize()
+    }
+
+    /// Book with two calculators (#168): Settings over the focused
+    /// calculator's display and keys, under its header, dimming the rest
+    /// like the other panes.
+    @ViewBuilder
+    func duoSettingsPanel(metrics: IOSLayoutMetrics, containerSize: CGSize) -> some View {
+        let leadingInset = focusedHalf == .left ? metrics.foldLeftCalculatorLeadingPadding : metrics.foldCalculatorMinX
+        // Under the header, or from the display's top where the rail has
+        // taken the header's row.
+        let topInset = metrics.topPadding + (metrics.usesTrailingRail ? metrics.contentTopPadding : metrics.headerHeight)
+        let shape = RoundedRectangle(cornerRadius: metrics.surfaceCornerRadius, style: .continuous)
+        settingsSheetContent(for: activeScreen, asCard: true)
+            .frame(width: metrics.foldKeypadWidth, height: max(0, containerSize.height - topInset - metrics.bottomPadding))
+            .clipShape(shape)
+            .shadow(color: Color.black.opacity(0.3), radius: 16, y: 8)
+            .padding(.leading, leadingInset)
+            .padding(.top, topInset)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .accessibilityPane(
+                title: localized(settingsTitleKey(for: activeScreen)),
+                closedAnnouncement: paneClosed(settingsTitleKey(for: activeScreen)),
+                onClose: { closeSettings() }
+            )
+    }
+
+    func themeBinding(for screen: CalculatorScreenSession) -> Binding<String> {
         Binding(
-            get: { activeScreen.settings.disablesSwipeDownToRound },
+            get: { screen.settings.themeRawValue },
             set: { newValue in
-                updateActiveScreenSettings { $0.disablesSwipeDownToRound = newValue }
+                updateSettings(of: screen) { $0.themeRawValue = newValue }
+            }
+        )
+    }
+
+    func languageBinding(for screen: CalculatorScreenSession) -> Binding<String> {
+        Binding(
+            get: { screen.settings.languageCode },
+            set: { newValue in
+                updateSettings(of: screen) { $0.languageCode = newValue }
+                applyLanguage(newValue, refreshing: screen.viewModel)
+            }
+        )
+    }
+
+    func scientificNotationBinding(for screen: CalculatorScreenSession) -> Binding<Bool> {
+        Binding(
+            get: { screen.settings.usesScientificNotation },
+            set: { newValue in
+                updateSettings(of: screen) { $0.usesScientificNotation = newValue }
+            }
+        )
+    }
+
+    func numberFormatBinding(for screen: CalculatorScreenSession) -> Binding<String> {
+        Binding(
+            get: { screen.settings.numberFormatStyleRawValue },
+            set: { newValue in
+                updateSettings(of: screen) { $0.numberFormatStyleRawValue = newValue }
+            }
+        )
+    }
+
+    func currencySymbolBinding(for screen: CalculatorScreenSession) -> Binding<String> {
+        Binding(
+            get: { screen.settings.currencySymbol },
+            set: { newValue in
+                updateSettings(of: screen) { $0.currencySymbol = newValue }
+                // Re-label a value already on screen so the change is visible
+                // immediately rather than only on the next entry.
+                if screen.viewModel.activeCurrencySymbol != nil {
+                    screen.viewModel.inputCurrencySymbol(newValue)
+                }
+            }
+        )
+    }
+
+    func disableSwipeDownToRoundBinding(for screen: CalculatorScreenSession) -> Binding<Bool> {
+        Binding(
+            get: { screen.settings.disablesSwipeDownToRound },
+            set: { newValue in
+                updateSettings(of: screen) { $0.disablesSwipeDownToRound = newValue }
             }
         )
     }
@@ -1125,12 +1340,24 @@ private extension EnterCalcIOSView {
         screen.isHomeScreen ? "settings.appearance.label" : "settings.appearance.screenLabel"
     }
 
-    func pageActionLabelKey(for screen: CalculatorScreenSession) -> String {
-        screen.isHomeScreen ? "screen.new" : "screen.close"
+    /// Book on the iPhone Duo (#168): the right half's button always opens a
+    /// new screen, which appears on the left half, and the left half's always
+    /// closes the screen it shows. Elsewhere the home screen's button opens
+    /// and every other screen's closes.
+    func pageActionOpensScreen(for screen: CalculatorScreenSession, half: DuoHalf?) -> Bool {
+        switch half {
+        case .left: return false
+        case .right: return true
+        case nil: return screen.isHomeScreen
+        }
     }
 
-    func pageActionImageName(for screen: CalculatorScreenSession) -> String {
-        screen.isHomeScreen ? "plus.square.on.square" : "xmark.square"
+    func pageActionLabelKey(for screen: CalculatorScreenSession, half: DuoHalf? = nil) -> String {
+        pageActionOpensScreen(for: screen, half: half) ? "screen.new" : "screen.close"
+    }
+
+    func pageActionImageName(for screen: CalculatorScreenSession, half: DuoHalf? = nil) -> String {
+        pageActionOpensScreen(for: screen, half: half) ? "plus.square.on.square" : "xmark.square"
     }
 
     /// A hardware key, then any result, error or "Cleared" it caused, as the
@@ -1246,7 +1473,14 @@ private extension EnterCalcIOSView {
             switch chars.lowercased() {
             case ",":
                 // ⌘, opens Settings, as on the Mac (#164).
-                showSettingsSheet = true
+                openSettings()
+                return true
+            case "`":
+                // ⌘` moves the keyboard to the other of two calculators side
+                // by side on the iPhone Duo (#168), the key that cycles
+                // windows on the Mac. With one calculator it is not handled.
+                guard showsSecondaryCalculator else { return false }
+                switchCalculatorHalf()
                 return true
             case "c":
                 // Handled here as well as in the menu, because this capture
@@ -1426,7 +1660,8 @@ private extension EnterCalcIOSView {
         screenStore.syncHomeScreenSettings(storedHomeScreenSettings)
     }
 
-    func startOperatorIntroAnimation() {
+    func startOperatorIntroAnimation(for screenID: UUID? = nil) {
+        operatorIntroScreenID = screenID
         guard !reduceMotionEnabled else {
             operatorRevealProgress = 4.0
             operatorAnimFadeOpacity = 0.0
@@ -1452,6 +1687,10 @@ private extension EnterCalcIOSView {
         startShimmerIntroAnimation()
     }
 
+    func introAnimationApplies(to screen: CalculatorScreenSession) -> Bool {
+        operatorIntroScreenID == nil || operatorIntroScreenID == screen.id
+    }
+
     func startShimmerIntroAnimation() {
         guard !reduceMotionEnabled else {
             displayShimmerIntroActive = false
@@ -1470,22 +1709,31 @@ private extension EnterCalcIOSView {
     }
 
     func updateActiveScreenSettings(_ update: (inout CalculatorScreenSettings) -> Void) {
-        var updated = activeScreen.settings
+        updateSettings(of: activeScreen, update)
+    }
+
+    func updateSettings(of screen: CalculatorScreenSession, _ update: (inout CalculatorScreenSettings) -> Void) {
+        var updated = screen.settings
         update(&updated)
 
-        if activeScreen.isHomeScreen {
-            preferredThemeRaw = updated.themeRawValue
-            preferredLanguage = updated.languageCode
-            preferredScientificNotation = updated.usesScientificNotation
-            preferredNumberFormatRaw = updated.numberFormatStyleRawValue
-            preferredDisablesSwipeDownToRound = updated.disablesSwipeDownToRound
-            preferredKeypadHeightMultiplier = updated.keypadHeightMultiplier
-            preferredCurrencySymbol = updated.currencySymbol
-            preferredFunctionKeyAssignmentsRaw = updated.functionKeyAssignments.serialized
-            screenStore.syncHomeScreenSettings(updated)
+        if screen.isHomeScreen {
+            storeHomeScreenSettings(updated)
         } else {
-            activeScreen.replaceSettings(updated)
+            screen.replaceSettings(updated)
         }
+    }
+
+    /// The home screen's settings are the app's stored settings.
+    func storeHomeScreenSettings(_ settings: CalculatorScreenSettings) {
+        preferredThemeRaw = settings.themeRawValue
+        preferredLanguage = settings.languageCode
+        preferredScientificNotation = settings.usesScientificNotation
+        preferredNumberFormatRaw = settings.numberFormatStyleRawValue
+        preferredDisablesSwipeDownToRound = settings.disablesSwipeDownToRound
+        preferredKeypadHeightMultiplier = settings.keypadHeightMultiplier
+        preferredCurrencySymbol = settings.currencySymbol
+        preferredFunctionKeyAssignmentsRaw = settings.functionKeyAssignments.serialized
+        screenStore.syncHomeScreenSettings(settings)
     }
 
     func applyActiveScreenConfiguration() {
@@ -1500,10 +1748,17 @@ private extension EnterCalcIOSView {
     func goToNextScreenFromKeyboard() {
         guard !isInteractionDisabled else { return }
 
-        if screenStore.activeIndex < screenStore.screenCount - 1 {
-            navigateToScreen(at: screenStore.activeIndex + 1)
+        let index = focusedScreenIndex
+        if index < screenStore.screenCount - 1 {
+            navigateToScreen(at: index + 1, half: focusedPagingHalf)
         } else if screenStore.canCreateScreen {
-            createScreenAfterActive()
+            // Two calculators: the new page belongs to the focused half's
+            // pager, as it does when that half swipes past its last page.
+            if showsSecondaryCalculator {
+                createScreenBySwipe(on: focusedPagingHalf)
+            } else {
+                createScreenAfterActive()
+            }
         }
     }
 
@@ -1511,40 +1766,123 @@ private extension EnterCalcIOSView {
     /// rather than wrapping.
     func goToPreviousScreenFromKeyboard() {
         guard !isInteractionDisabled else { return }
-        guard screenStore.activeIndex > 0 else { return }
 
-        navigateToScreen(at: screenStore.activeIndex - 1)
+        let index = focusedScreenIndex
+        guard index > 0 else { return }
+
+        navigateToScreen(at: index - 1, half: focusedPagingHalf)
     }
 
-    func announceActiveScreen(number: Int) {
-        let screen = activeScreen
+    func announceScreen(number: Int, half: DuoHalf) {
+        guard let screen = half == .left ? screenStore.secondaryScreen : screenStore.activeScreen else { return }
+        // Two calculators side by side say which half moved (#168):
+        // "Left, Screen 2, 0 shown".
+        let namesHalf = showsSecondaryCalculator
         // After the page has moved, so VoiceOver's own page-change speech
         // comes first; skipped if another swipe has moved on since.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            guard activeScreen === screen, screenStore.activeIndex + 1 == number else { return }
-            VoiceOver.announce(DisplaySpeech.instanceAnnouncement(
+            let current = half == .left ? screenStore.secondaryIndex : screenStore.activeIndex
+            guard current == number - 1 else { return }
+            var announcement = DisplaySpeech.instanceAnnouncement(
                 number: number,
                 isWindow: false,
                 state: screen.viewModel.displaySpeechState,
                 localize: localized
-            ))
+            )
+            if namesHalf {
+                announcement = String(
+                    format: localized("a11y.announce.halfScreen"),
+                    localized(half == .left ? "a11y.half.left" : "a11y.half.right"),
+                    announcement
+                )
+            }
+            VoiceOver.announce(announcement)
         }
     }
 
-    func navigateToScreen(at index: Int) {
+    func navigateToScreen(at index: Int, half: DuoHalf = .right) {
         guard screenStore.screens.indices.contains(index) else { return }
         animateIfAllowed(.interactiveSpring(response: 0.28, dampingFraction: 0.88, blendDuration: 0.2)) {
             activeOverlay = nil
             isResizingHistoryOverlay = false
             liveHistoryOverlayHeight = nil
             liveHistoryOverlayScreenID = nil
-            _ = screenStore.activateScreen(at: index)
+            if half == .left {
+                _ = screenStore.activateSecondaryScreen(at: index)
+            } else {
+                _ = screenStore.activateScreen(at: index)
+            }
         }
         applyActiveScreenConfiguration()
     }
 
+    /// ⌘`: the other calculator takes the keyboard, and VoiceOver hears which
+    /// one is active and what it shows (#168).
+    func switchCalculatorHalf() {
+        guard showsSecondaryCalculator else { return }
+        let half: DuoHalf = focusedHalf == .left ? .right : .left
+        focusedHalf = half
+        activeOverlay = nil
+        let screen = activeScreen
+        let number = focusedScreenIndex + 1
+        let shown = DisplaySpeech.instanceAnnouncement(
+            number: number,
+            isWindow: false,
+            state: screen.viewModel.displaySpeechState,
+            localize: localized
+        )
+        VoiceOver.announce(String(
+            format: localized("a11y.announce.halfActive"),
+            localized(half == .left ? "a11y.half.leftCalculator" : "a11y.half.rightCalculator"),
+            shown
+        ))
+    }
+
+    /// Touching a half makes it the one typed keys, the panes and the
+    /// settings sheet go to (#168).
+    func focusHalf(_ half: DuoHalf) {
+        guard focusedHalf != half, Date() >= focusLockedUntil else { return }
+        guard half == .right || showsSecondaryCalculator else { return }
+        focusedHalf = half
+    }
+
+    /// Book: the rail's dual-mode button opens the left half, on the screen
+    /// after the right's (or before it, when the right shows the last), or
+    /// on a new screen when there is only one (#168). The left half takes
+    /// the typing, as a new screen does.
+    func enterDualMode() {
+        guard foldPosture == .book, !showsSecondaryCalculator else { return }
+        if screenStore.screenCount > 1 {
+            let active = screenStore.activeIndex
+            let index = active + 1 < screenStore.screenCount ? active + 1 : active - 1
+            activeOverlay = nil
+            _ = screenStore.showSecondaryScreen(at: index)
+            focusedHalf = .left
+            focusLockedUntil = Date().addingTimeInterval(0.4)
+            applyActiveScreenConfiguration()
+        } else {
+            createScreenAfterActive()
+        }
+    }
+
     func createScreenAfterActive() {
         guard screenStore.canCreateScreen else { return }
+        // Book on the iPhone Duo: the new screen opens on the left half, which
+        // takes the typing (#168). Nothing slides, so no animation: the
+        // right half's pager grows by a page that stays off screen, and the
+        // settings button of a page added mid-animation was left with a
+        // stale frame (it is UIKit-hosted for its context menu).
+        if foldPosture == .book {
+            activeOverlay = nil
+            isResizingHistoryOverlay = false
+            liveHistoryOverlayHeight = nil
+            liveHistoryOverlayScreenID = nil
+            _ = screenStore.insertSecondaryScreenAfterActive(homeSettings: storedHomeScreenSettings)
+            focusedHalf = .left
+            focusLockedUntil = Date().addingTimeInterval(0.4)
+            applyActiveScreenConfiguration()
+            return
+        }
         animateIfAllowed(.interactiveSpring(response: 0.28, dampingFraction: 0.88, blendDuration: 0.2)) {
             activeOverlay = nil
             isResizingHistoryOverlay = false
@@ -1556,14 +1894,79 @@ private extension EnterCalcIOSView {
     }
 
     func closeActiveScreen() {
-        guard screenStore.canCloseActiveScreen else { return }
-        let closingScreenID = activeScreen.id
+        closeScreen(in: focusedPagingHalf)
+    }
+
+    /// Book: a swipe past the last page on a half opens a new screen on that
+    /// half, after the screen it showed, and that half takes the typing;
+    /// the other half keeps its screen and does not move (#168).
+    func createScreenBySwipe(on half: DuoHalf) {
+        guard screenStore.canCreateScreen else { return }
+        halvesHoldingStill = showsSecondaryCalculator ? [half == .left ? .right : .left] : []
+        DispatchQueue.main.async {
+            halvesHoldingStill = []
+        }
         animateIfAllowed(.interactiveSpring(response: 0.28, dampingFraction: 0.88, blendDuration: 0.2)) {
             activeOverlay = nil
             isResizingHistoryOverlay = false
             liveHistoryOverlayHeight = nil
             liveHistoryOverlayScreenID = nil
-            if screenStore.closeActiveScreen() {
+            if half == .left, let secondaryIndex = screenStore.secondaryIndex {
+                _ = screenStore.insertSecondaryScreen(after: secondaryIndex, homeSettings: storedHomeScreenSettings)
+            } else {
+                _ = screenStore.insertScreenAfterActive(homeSettings: storedHomeScreenSettings)
+            }
+        }
+        if half == .left, showsSecondaryCalculator {
+            focusedHalf = .left
+        } else {
+            focusedHalf = .right
+        }
+        focusLockedUntil = Date().addingTimeInterval(0.4)
+        applyActiveScreenConfiguration()
+    }
+
+    /// Closes the screen a half shows. The home screen closes from the left
+    /// half like any other, the next screen becoming the home screen, so
+    /// closing from there goes through every screen; with one screen left
+    /// the left half goes back to history (#168). On the right it stays.
+    func closeScreen(in half: DuoHalf) {
+        let index: Int
+        if half == .left, showsSecondaryCalculator, let secondaryIndex = screenStore.secondaryIndex {
+            index = secondaryIndex
+        } else {
+            index = screenStore.activeIndex
+        }
+        let closingScreen = screenStore.screens[index]
+        let closingScreenID = closingScreen.id
+        // Only a half that showed the closed screen moves; the other keeps
+        // its page in view, its index and the page count just renumbered.
+        var holdingStill: Set<DuoHalf> = []
+        if showsSecondaryCalculator {
+            if screenStore.activeScreen !== closingScreen { holdingStill.insert(.right) }
+            if screenStore.secondaryScreen !== closingScreen { holdingStill.insert(.left) }
+        }
+        halvesHoldingStill = holdingStill
+        DispatchQueue.main.async {
+            halvesHoldingStill = []
+        }
+        animateIfAllowed(.interactiveSpring(response: 0.28, dampingFraction: 0.88, blendDuration: 0.2)) {
+            activeOverlay = nil
+            isResizingHistoryOverlay = false
+            liveHistoryOverlayHeight = nil
+            liveHistoryOverlayScreenID = nil
+            if index == 0 {
+                if half == .left, screenStore.screenCount > 1,
+                   screenStore.closeHomeScreenPromotingNext() {
+                    // The new home screen's settings are now the app's.
+                    storeHomeScreenSettings(screenStore.homeScreen.settings)
+                    historyClearFeedbackVersionByScreen.removeValue(forKey: closingScreenID)
+                    operationTextHeightByScreen.removeValue(forKey: closingScreenID)
+                    portraitDisplayStackHeightByScreen.removeValue(forKey: closingScreenID)
+                } else if half == .left {
+                    screenStore.closeSecondary()
+                }
+            } else if screenStore.closeScreen(at: index) {
                 historyClearFeedbackVersionByScreen.removeValue(forKey: closingScreenID)
                 operationTextHeightByScreen.removeValue(forKey: closingScreenID)
                 portraitDisplayStackHeightByScreen.removeValue(forKey: closingScreenID)
@@ -1572,12 +1975,31 @@ private extension EnterCalcIOSView {
         applyActiveScreenConfiguration()
     }
 
-    func handlePageAction() {
-        if activeScreen.isHomeScreen {
+    func handlePageAction(half: DuoHalf? = nil) {
+        switch half {
+        case .left:
+            closeScreen(in: .left)
+        case .right:
             createScreenAfterActive()
-        } else {
-            closeActiveScreen()
+        case nil:
+            if activeScreen.isHomeScreen {
+                createScreenAfterActive()
+            } else {
+                closeActiveScreen()
+            }
         }
+    }
+
+    /// Book: the panes and the chooser stay on the focused half (#132, #168).
+    func foldPaneLeadingInset(metrics: IOSLayoutMetrics) -> CGFloat {
+        guard metrics.foldPosture == .book else { return 0 }
+        return focusedHalf == .left && showsSecondaryCalculator ? 0 : metrics.foldCalculatorMinX
+    }
+
+    func foldPaneTrailingInset(metrics: IOSLayoutMetrics) -> CGFloat {
+        guard metrics.foldPosture == .book, focusedHalf == .left, showsSecondaryCalculator else { return 0 }
+        // The left calculator's colour runs up to the divider.
+        return metrics.foldRightHalfWidth + metrics.foldCalculatorMinX - metrics.foldDividerX
     }
 
     /// The overlay panes' text scale (#152): the Text Size setting, or the
@@ -1599,7 +2021,15 @@ private extension EnterCalcIOSView {
 
     func overlayPanels(metrics: IOSLayoutMetrics, containerSize: CGSize, safeAreaInsets: EdgeInsets) -> some View {
         let paneMaxHeight = paneMaximumHeight(metrics: metrics, containerSize: containerSize)
+        // The stack keeps the whole container even with no pane in it.
+        // Empty, it had no size and sat at the top centre, and the pane
+        // that opened in it rode along as the stack grew to the final
+        // frame: a slide in from the side on top of its own slide up (#168).
         return ZStack(alignment: .top) {
+            if showsDuoSettings {
+                duoSettingsPanel(metrics: metrics, containerSize: containerSize)
+            }
+
             if metrics.usesOverlayHistory, activeOverlay == .history {
                 historyOverlayPanel(metrics: metrics, containerHeight: containerSize.height, screen: activeScreen) {
                     IOSHistoryPanel(
@@ -1748,6 +2178,7 @@ private extension EnterCalcIOSView {
             }
         }
         .paneTextScale(paneTextScale)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     // Width constraint for rounding panel in landscape mode
@@ -1774,8 +2205,9 @@ private extension EnterCalcIOSView {
                         palette.historyBackground
                             .ignoresSafeArea(edges: counterRotatesForUpsideDownPortrait ? .top : .bottom)
                     )
-                    // Book: over the calculator half only (#132).
-                    .padding(.leading, metrics.foldPosture == .book ? metrics.foldCalculatorMinX : 0)
+                    // Book: over the focused calculator half only (#132, #168).
+                    .padding(.leading, foldPaneLeadingInset(metrics: metrics))
+                    .padding(.trailing, foldPaneTrailingInset(metrics: metrics))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .ignoresSafeArea(edges: counterRotatesForUpsideDownPortrait ? .top : .bottom)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -1812,7 +2244,7 @@ private extension EnterCalcIOSView {
     }
 
     func showsOverlayScrim(metrics: IOSLayoutMetrics) -> Bool {
-        activeOverlay != nil && (activeOverlay != .history || metrics.usesOverlayHistory)
+        showsDuoSettings || (activeOverlay != nil && (activeOverlay != .history || metrics.usesOverlayHistory))
     }
 
     func startDeviceOrientationObservation() {
@@ -2179,7 +2611,9 @@ private extension EnterCalcIOSView {
         }
         .frame(maxWidth: .infinity, alignment: .top)
 
-        if usesLandscapeNavigationRail {
+        if metrics.foldPosture == .book {
+            bookLayout(metrics: metrics)
+        } else if usesLandscapeNavigationRail {
             HStack(spacing: metrics.sectionSpacing) {
                 landscapeNavigationRail(
                     metrics: metrics,
@@ -2200,7 +2634,13 @@ private extension EnterCalcIOSView {
                 // iPhone Duo front display's camera strip (#132).
                 .clipped()
                 .overlay(alignment: .bottom) {
-                    fixedPaginationOverlay(metrics: metrics)
+                    fixedPaginationOverlay(metrics: metrics, screen: activeScreen)
+                }
+                // The Duo's front display: the header buttons in its strip.
+                .overlay(alignment: .topTrailing) {
+                    if metrics.usesTrailingRail {
+                        trailingRail(metrics: metrics, screen: activeScreen, half: nil)
+                    }
                 }
         }
     }
@@ -2208,30 +2648,243 @@ private extension EnterCalcIOSView {
     /// One set of page dots over the pager, in the space every page reserves
     /// at its bottom, so the dots stay fixed while pages slide beneath them.
     @ViewBuilder
-    func fixedPaginationOverlay(metrics: IOSLayoutMetrics) -> some View {
-        fadingPaginationIndicator(metrics: metrics, isVisible: screenStore.screenCount > 1)
+    func fixedPaginationOverlay(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, activeIndex: Int? = nil) -> some View {
+        fadingPaginationIndicator(metrics: metrics, screen: screen, isVisible: screenStore.screenCount > 1, activeIndex: activeIndex)
             .frame(height: metrics.pageIndicatorHeight, alignment: .top)
             .frame(maxWidth: .infinity)
-            // Book: centred under the calculator, not across the fold.
-            .padding(.leading, metrics.foldPosture == .book ? metrics.historyPanelWidth + IOSLayoutMetrics.foldGap : 0)
             .padding(.bottom, metrics.bottomPadding)
     }
 
+    /// The iPhone Duo held like a book (#132, #168): the left half shows the
+    /// right calculator's history, or a second calculator paging through the
+    /// same screens. Each half has its own pager and page dots, and history
+    /// sits outside the right half's pager, so it stays put while pages slide.
+    /// The right half loses the camera's safe area, so the left calculator
+    /// is made the same width as the right one, centred in its own colour
+    /// before `foldDividerX`; history keeps the whole half.
     @ViewBuilder
-    func paginationIndicator(metrics: IOSLayoutMetrics) -> some View {
+    func bookLayout(metrics: IOSLayoutMetrics) -> some View {
+        let leftHalfWidth = metrics.foldCalculatorMinX - IOSLayoutMetrics.foldGap
+        HStack(spacing: 0) {
+            Group {
+                if let leftIndex = screenStore.secondaryIndex {
+                    bookHalfPager(metrics: metrics, half: .left, activeIndex: leftIndex)
+                        .frame(width: metrics.foldDividerX)
+                } else {
+                    bookHistoryColumn(metrics: metrics, screen: screenStore.activeScreen)
+                }
+            }
+            .frame(width: leftHalfWidth, alignment: .leading)
+            .frame(maxHeight: .infinity)
+
+            bookHalfPager(metrics: metrics, half: .right, activeIndex: screenStore.activeIndex)
+                .padding(.leading, IOSLayoutMetrics.foldGap)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    @ViewBuilder
+    func bookHalfPager(metrics: IOSLayoutMetrics, half: DuoHalf, activeIndex: Int) -> some View {
+        let screen = screenStore.screens[activeIndex]
+        let pager = CalculatorScreenPager(
+            pagingAxis: .horizontal,
+            pageSpacing: 0,
+            pageCount: screenStore.screenCount,
+            activeIndex: activeIndex,
+            canMoveBackward: activeIndex > 0,
+            canMoveForward: activeIndex < screenStore.screenCount - 1,
+            // A swipe past the last page opens a new screen on this half,
+            // as on the front display.
+            canCreateTrailingPage: screenStore.canCreateScreen && activeIndex == screenStore.screenCount - 1,
+            onMoveBackward: { navigateToScreen(at: activeIndex - 1, half: half) },
+            onMoveForward: { navigateToScreen(at: activeIndex + 1, half: half) },
+            onRequestCreateTrailingPage: { createScreenBySwipe(on: half) },
+            // Any screen closes from the left half, see `closeScreen(in:)`.
+            canCloseUpward: (half == .left || !screen.isHomeScreen) && activeOverlay == nil,
+            upwardCloseThreshold: max(90, metrics.displayHeight * 0.7),
+            onCloseUpward: { closeScreen(in: half) },
+            activationThresholdRatio: 0.4,
+            trailingPlaceholder: AnyView(trailingNewScreenPlaceholder(metrics: metrics, screen: screen)),
+            transitionOverlayColor: palette(for: screen).surface,
+            isGestureDisabled: isInteractionDisabled,
+            animatesPageChanges: !halvesHoldingStill.contains(half)
+        ) { index in
+            bookHalfPage(metrics: metrics, screen: screenStore.screens[index], half: half, isActivePage: index == activeIndex)
+        }
+        .clipped()
+        // Nothing in this half moves while the other half closes a screen
+        // this one was not showing (#168).
+        .transaction { transaction in
+            if halvesHoldingStill.contains(half) {
+                transaction.animation = nil
+            }
+        }
+        .overlay(alignment: .bottom) {
+            fixedPaginationOverlay(metrics: metrics, screen: screen, activeIndex: activeIndex)
+                .opacity(isInactiveCalculator(half) ? 0.5 : 1)
+        }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in focusHalf(half) }
+        )
+        // The rail in the strip past the safe area, for the selected
+        // calculator; it hangs off the right pager, which is always there,
+        // but outside its focus gesture above: a touch on the rail must not
+        // select the right calculator, or the 1 | 2 button would switch and
+        // switch straight back (#168).
+        .overlay(alignment: .topTrailing) {
+            if half == .right, metrics.usesTrailingRail {
+                trailingRail(metrics: metrics, screen: activeScreen, half: focusedPagingHalf)
+            }
+        }
+
+        // With two calculators, VoiceOver says which one it is in.
+        if showsSecondaryCalculator {
+            pager
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(Text(localized(half == .left ? "a11y.half.leftCalculator" : "a11y.half.rightCalculator")))
+                .accessibilityValue(Text(focusedHalf == half ? localized("a11y.half.active") : ""))
+        } else {
+            pager
+        }
+    }
+
+    /// The Duo's rail: the header buttons one above the other in the strip
+    /// beyond the trailing safe area, under the time and the status ring
+    /// that iOS draws around the camera, and lined up with them (#168).
+    /// Goes on the pager as an overlay, offset into the strip. In book
+    /// position it serves the selected calculator, with a dual-mode button
+    /// on top that becomes the 1 | 2 toggle once both halves show one.
+    func trailingRail(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, half: DuoHalf?) -> some View {
+        // The strip is the right calculator's, so the buttons take its
+        // colours even while they serve the left one (#168).
+        let colours = screenStore.activeScreen
+        return VStack(spacing: metrics.headerSpacing) {
+            if metrics.foldPosture == .book {
+                dualModeControl(metrics: metrics, screen: screen, colours: colours)
+            }
+
+            settingsButton(metrics: metrics, screen: screen, half: half, colours: colours)
+
+            if metrics.showsHistoryButton {
+                historyButton(metrics: metrics, screen: screen, half: half, colours: colours)
+            }
+
+            if screen.settings.disablesSwipeDownToRound {
+                roundingButton(metrics: metrics, screen: screen, half: half, colours: colours)
+            }
+
+            pageActionButton(metrics: metrics, screen: screen, half: half, colours: colours)
+        }
+        .frame(width: IOSLayoutMetrics.trailingRailCentreInset * 2)
+        .padding(.top, metrics.trailingRailTopInset)
+        .offset(x: IOSLayoutMetrics.trailingRailCentreInset * 2)
+    }
+
+    /// Book: one calculator, a button that opens the second; two, a button
+    /// showing the selected calculator's number, 1 for the left and 2 for
+    /// the right, that switches to the other: the rail, the keys and the
+    /// panes serve the selected one (#168).
+    @ViewBuilder
+    func dualModeControl(
+        metrics: IOSLayoutMetrics,
+        screen: CalculatorScreenSession,
+        colours: CalculatorScreenSession? = nil
+    ) -> some View {
+        let palette = self.palette(for: colours ?? screen)
+        let localized = self.localizer(for: screen)
+        if showsSecondaryCalculator {
+            let isLeft = focusedHalf == .left
+            Button {
+                switchCalculatorHalf()
+            } label: {
+                Image(systemName: isLeft ? "1.circle.fill" : "2.circle.fill")
+                    .font(EnterCalcFont.appFont(size: metrics.headerIconFontSize))
+                    .frame(width: metrics.headerButtonSize, height: metrics.headerButtonSize)
+                    .foregroundStyle(palette.textPrimary)
+            }
+            .buttonStyle(IOSPressedButtonStyle(cornerRadius: metrics.headerCornerRadius, overlayColor: palette.headerHover))
+            .accessibilityLabel(Text(localized(isLeft ? "a11y.half.leftCalculator" : "a11y.half.rightCalculator")))
+            .accessibilityHint(Text(localized(isLeft ? "a11y.half.rightCalculator" : "a11y.half.leftCalculator")))
+        } else {
+            Button {
+                enterDualMode()
+            } label: {
+                Image(systemName: "rectangle.split.2x1")
+                    .font(EnterCalcFont.appFont(size: metrics.headerIconFontSize))
+                    .frame(width: metrics.headerButtonSize, height: metrics.headerButtonSize)
+                    .foregroundStyle(palette.textPrimary)
+            }
+            .buttonStyle(IOSPressedButtonStyle(cornerRadius: metrics.headerCornerRadius, overlayColor: palette.headerHover))
+            .disabled(!screenStore.canCreateScreen && screenStore.screenCount < 2)
+            .accessibilityLabel(Text(localized("rail.dualMode")))
+        }
+    }
+
+    func bookHalfPage(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, half: DuoHalf, isActivePage: Bool) -> some View {
+        pageContentWithPagination(metrics: metrics) {
+            calculatorSurface(
+                metrics: metrics,
+                screen: screen,
+                paginationBottomInset: paginationBottomInset(metrics: metrics),
+                half: half,
+                isActivePage: isActivePage
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        .padding(.leading, half == .left ? metrics.foldLeftCalculatorLeadingPadding : 0)
+        .padding(.trailing, half == .right ? metrics.outerPadding : metrics.foldLeftCalculatorTrailingPadding)
+        .padding(.top, metrics.topPadding)
+        .padding(.bottom, metrics.bottomPadding)
+    }
+
+    /// History has no rail beside it here, so its trash sits in a header row
+    /// level with the calculator's, styled like the gear and New Screen
+    /// buttons.
+    func bookHistoryColumn(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession) -> some View {
+        pageContentWithPagination(metrics: metrics) {
+            VStack(spacing: metrics.sectionSpacing) {
+                HStack(alignment: .top, spacing: 0) {
+                    if !screen.viewModel.history.isEmpty {
+                        landscapeHistoryClearButton(
+                            metrics: metrics,
+                            screen: screen,
+                            buttonSize: metrics.headerButtonSize,
+                            iconSize: metrics.headerIconFontSize
+                        )
+                    }
+                    Spacer(minLength: 0)
+                }
+                .frame(height: metrics.headerHeight, alignment: .top)
+
+                landscapeHistoryPane(metrics: metrics, screen: screen)
+                    .frame(maxHeight: .infinity)
+            }
+            .padding(.top, metrics.contentTopPadding)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .padding(.leading, metrics.outerPadding)
+        .padding(.top, metrics.topPadding)
+        .padding(.bottom, metrics.bottomPadding)
+    }
+
+    @ViewBuilder
+    func paginationIndicator(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, activeIndex: Int? = nil) -> some View {
+        let palette = self.palette(for: screen)
         let usesLandscapeNavigationRail = metrics.usesLandscapeNavigationRail
         // A graphic, like a slider, so the same OS blue in light and dark (#137).
-        let activePaginationColor = activeTheme == .blue
+        let activePaginationColor = theme(for: screen) == .blue
             ? Color.white
             : palette.sliderTint
-        let inactivePaginationColor = colorScheme == .dark
+        let inactivePaginationColor = isDarkScheme(for: screen)
             ? palette.textSecondary.opacity(0.28)
             : palette.textPrimary.opacity(0.18)
 
         CalculatorScreenPageIndicator(
             axis: usesLandscapeNavigationRail ? .vertical : .horizontal,
             pageCount: screenStore.screenCount,
-            activeIndex: screenStore.activeIndex,
+            activeIndex: activeIndex ?? screenStore.activeIndex,
             activeColor: activePaginationColor,
             inactiveColor: inactivePaginationColor,
             dotSize: metrics.pageIndicatorDotSize,
@@ -2243,8 +2896,8 @@ private extension EnterCalcIOSView {
     /// one page. Hidden dots are not announced. The dots never take touches:
     /// they are display-only, and in portrait they sit over the pager, where
     /// they would otherwise swallow a swipe that starts on them.
-    func fadingPaginationIndicator(metrics: IOSLayoutMetrics, isVisible: Bool) -> some View {
-        paginationIndicator(metrics: metrics)
+    func fadingPaginationIndicator(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, isVisible: Bool, activeIndex: Int? = nil) -> some View {
+        paginationIndicator(metrics: metrics, screen: screen, activeIndex: activeIndex)
             .opacity(isVisible ? 1 : 0)
             .animation(reduceMotionEnabled ? nil : .easeInOut(duration: 0.25), value: isVisible)
             .allowsHitTesting(false)
@@ -2255,9 +2908,13 @@ private extension EnterCalcIOSView {
     func settingsButton(
         metrics: IOSLayoutMetrics,
         screen: CalculatorScreenSession,
+        half: DuoHalf? = nil,
         buttonSize: CGFloat? = nil,
-        iconSize: CGFloat? = nil
+        iconSize: CGFloat? = nil,
+        colours: CalculatorScreenSession? = nil
     ) -> some View {
+        let palette = self.palette(for: colours ?? screen)
+        let localized = self.localizer(for: screen)
         IOSContextMenuContainer(
             sections: clipboardContextMenuSections(
                 for: screen.viewModel,
@@ -2266,7 +2923,9 @@ private extension EnterCalcIOSView {
             )
         ) {
             Button {
-                showSettingsSheet = true
+                // The card is placed by the focused half (#168).
+                if let half { focusHalf(half) }
+                openSettings()
             } label: {
                 Image(systemName: "gearshape")
                     .font(EnterCalcFont.appFont(size: iconSize ?? metrics.headerIconFontSize))
@@ -2283,21 +2942,26 @@ private extension EnterCalcIOSView {
     func pageActionButton(
         metrics: IOSLayoutMetrics,
         screen: CalculatorScreenSession,
+        half: DuoHalf? = nil,
         buttonSize: CGFloat? = nil,
-        iconSize: CGFloat? = nil
+        iconSize: CGFloat? = nil,
+        colours: CalculatorScreenSession? = nil
     ) -> some View {
+        let palette = self.palette(for: colours ?? screen)
+        let localized = self.localizer(for: screen)
+        let isFull = pageActionOpensScreen(for: screen, half: half) && !screenStore.canCreateScreen
         Button {
-            handlePageAction()
+            handlePageAction(half: half)
         } label: {
-            Image(systemName: pageActionImageName(for: screen))
+            Image(systemName: pageActionImageName(for: screen, half: half))
                 .font(EnterCalcFont.appFont(size: iconSize ?? metrics.headerIconFontSize))
                 .frame(width: buttonSize ?? metrics.headerButtonSize, height: buttonSize ?? metrics.headerButtonSize)
                 .foregroundStyle(palette.textPrimary)
         }
         .buttonStyle(IOSPressedButtonStyle(cornerRadius: metrics.headerCornerRadius, overlayColor: palette.headerHover))
-        .disabled(screen.isHomeScreen && !screenStore.canCreateScreen)
-        .opacity(screen.isHomeScreen && !screenStore.canCreateScreen ? 0.5 : 1)
-        .accessibilityLabel(Text(localized(pageActionLabelKey(for: screen))))
+        .disabled(isFull)
+        .opacity(isFull ? 0.5 : 1)
+        .accessibilityLabel(Text(localized(pageActionLabelKey(for: screen, half: half))))
     }
 
     @ViewBuilder
@@ -2337,6 +3001,7 @@ private extension EnterCalcIOSView {
             if screen.settings.disablesSwipeDownToRound {
                 roundingButton(
                     metrics: metrics,
+                    screen: screen,
                     buttonSize: railButtonSize,
                     iconSize: metrics.headerIconFontSize + 2
                 )
@@ -2345,7 +3010,7 @@ private extension EnterCalcIOSView {
 
             Spacer(minLength: metrics.sectionSpacing)
 
-            fadingPaginationIndicator(metrics: metrics, isVisible: showsPaginationIndicator)
+            fadingPaginationIndicator(metrics: metrics, screen: screen, isVisible: showsPaginationIndicator)
                 .frame(maxWidth: .infinity, alignment: buttonAlignment)
 
             Spacer(minLength: metrics.sectionSpacing)
@@ -2370,6 +3035,8 @@ private extension EnterCalcIOSView {
         buttonSize: CGFloat? = nil,
         iconSize: CGFloat? = nil
     ) -> some View {
+        let palette = self.palette(for: screen)
+        let localized = self.localizer(for: screen)
         let buttonSize = buttonSize ?? (metrics.mode == .padWide ? metrics.headerButtonSize * 0.5 + 7 : metrics.headerButtonSize + 4)
         let iconSize = iconSize ?? metrics.headerIconFontSize + 2
 
@@ -2494,45 +3161,12 @@ private extension EnterCalcIOSView {
                 }
 
                 pageContentWithPagination(metrics: metrics) {
-                    if metrics.foldPosture == .book {
-                        // iPhone Duo held like a book (#132): history fills the
-                        // left half, and the right half is the calculator just
-                        // as on the folded front display.
-                        HStack(spacing: IOSLayoutMetrics.foldGap) {
-                            // History has no rail beside it here, so its trash
-                            // sits in a header row level with the calculator's,
-                            // styled like the gear and New Screen buttons.
-                            VStack(spacing: metrics.sectionSpacing) {
-                                HStack(alignment: .top, spacing: 0) {
-                                    if !screen.viewModel.history.isEmpty {
-                                        landscapeHistoryClearButton(
-                                            metrics: metrics,
-                                            screen: screen,
-                                            buttonSize: metrics.headerButtonSize,
-                                            iconSize: metrics.headerIconFontSize
-                                        )
-                                    }
-                                    Spacer(minLength: 0)
-                                }
-                                .frame(height: metrics.headerHeight, alignment: .top)
-
-                                landscapeHistoryPane(metrics: metrics, screen: screen)
-                                    .frame(maxHeight: .infinity)
-                            }
-                            .padding(.top, metrics.contentTopPadding)
-                            .frame(width: metrics.historyPanelWidth)
-                            .frame(maxHeight: .infinity)
-
-                            calculatorSurface(metrics: metrics, screen: screen, paginationBottomInset: paginationBottomInset)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                        }
-                    } else {
-                        calculatorSurface(metrics: metrics, screen: screen, paginationBottomInset: paginationBottomInset)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    }
+                    calculatorSurface(metrics: metrics, screen: screen, paginationBottomInset: paginationBottomInset)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
             }
-            .padding(.horizontal, metrics.outerPadding)
+            .padding(.leading, metrics.outerLeadingPadding)
+            .padding(.trailing, metrics.outerPadding)
             .padding(.top, metrics.topPadding)
             .padding(.bottom, metrics.bottomPadding)
         case .padWide:
@@ -2567,9 +3201,12 @@ private extension EnterCalcIOSView {
     func calculatorSurface(
         metrics: IOSLayoutMetrics,
         screen: CalculatorScreenSession,
-        paginationBottomInset: CGFloat = 0
+        paginationBottomInset: CGFloat = 0,
+        half: DuoHalf? = nil,
+        isActivePage: Bool = true
     ) -> some View {
-        GeometryReader { geometry in
+        let palette = self.palette(for: screen)
+        return GeometryReader { geometry in
             let scale = metrics.surfaceScaleFactor(for: geometry.size.height)
             let isLandscapeMode = metrics.mode == .phoneLandscape || metrics.mode == .padWide
             let fillsHeightWithoutScaling = metrics.mode == .padWide || (metrics.isPadWindow && metrics.mode == .phonePortrait)
@@ -2577,15 +3214,29 @@ private extension EnterCalcIOSView {
             // bottom, so the split is the fold and cannot be dragged (#132).
             let isTabletop = metrics.foldPosture == .tabletop
             let allowsKeypadResize = !isLandscapeMode && !isTabletop
-            let showsInlineLandscapeHeader = !metrics.usesTitlebarHeader && !metrics.usesLandscapeNavigationRail
+            // The Duo's rail takes the header's buttons and its row, for the
+            // selected calculator in book position and the only one on the
+            // front display (#168).
+            let usesTrailingRail = metrics.usesTrailingRail
+            let showsInlineLandscapeHeader = !metrics.usesTitlebarHeader && !metrics.usesLandscapeNavigationRail && !usesTrailingRail
             let keypadHeightMultiplier = allowsKeypadResize ? normalizedKeypadHeightMultiplier(for: screen) : 1.0
             let baseKeypadHeight = metrics.keypadHeight
             let baseButtonHeight = metrics.buttonHeight * keypadHeightMultiplier
-            // Five key rows plus the action row at a third of a key's height,
-            // with a gap between each.
+            // Five key rows plus the action row at a third of a key's height
+            // but never under 18 pt (`keypad`), with a gap between each. Keys
+            // shrunk by the resize handle would otherwise push the keypad past
+            // its room, over the page dots (#168).
             let baseRowUnits: CGFloat = 5 + (1.0 / 3.0)
             let keypadSpacingUnits: CGFloat = 6
-            let baseActualKeypadHeight = baseButtonHeight * baseRowUnits + metrics.gridSpacing * keypadSpacingUnits
+            let keypadHeightForButtons = { (buttonHeight: CGFloat) -> CGFloat in
+                buttonHeight * 5 + max(18, buttonHeight / 3) + metrics.gridSpacing * keypadSpacingUnits
+            }
+            let buttonHeightFitting = { (keypadHeight: CGFloat) -> CGFloat in
+                let rows = keypadHeight - metrics.gridSpacing * keypadSpacingUnits
+                let withActionRow = rows / baseRowUnits
+                return max(0, withActionRow >= 54 ? withActionRow : (rows - 18) / 5)
+            }
+            let baseActualKeypadHeight = keypadHeightForButtons(baseButtonHeight)
             let baseResultAreaHeight = metrics.displayHeight + metrics.memoryHeight + (baseKeypadHeight - baseActualKeypadHeight)
             let separatorHeight: CGFloat = 10
             let headerHeightContribution = showsInlineLandscapeHeader ? metrics.headerHeight : 0
@@ -2602,13 +3253,13 @@ private extension EnterCalcIOSView {
             )
             let initialResultAreaHeight = max(0, min(baseResultAreaHeight, availableSurfaceHeight - baseActualKeypadHeight))
             let availableKeypadHeight = max(0, availableSurfaceHeight - initialResultAreaHeight)
-            let fittedButtonHeight = max(0, (availableKeypadHeight - metrics.gridSpacing * keypadSpacingUnits) / baseRowUnits)
+            let fittedButtonHeight = buttonHeightFitting(availableKeypadHeight)
             let actualButtonHeight = fillsHeightWithoutScaling
                 ? fittedButtonHeight
                 : (isLandscapeMode
                     ? min(baseButtonHeight, fittedButtonHeight)
                     : min(baseButtonHeight, fittedButtonHeight))
-            let proposedKeypadHeight = actualButtonHeight * baseRowUnits + metrics.gridSpacing * keypadSpacingUnits
+            let proposedKeypadHeight = keypadHeightForButtons(actualButtonHeight)
             let actualKeypadHeight = min(availableKeypadHeight, proposedKeypadHeight)
             let landscapeDisplayTrim: CGFloat = isLandscapeMode ? 6 : 0
             // The result area takes whatever height the keypad leaves, so capped keys
@@ -2624,17 +3275,18 @@ private extension EnterCalcIOSView {
             let resultAreaHeight = isTabletop ? tabletopResultAreaHeight : fittedResultAreaHeight
             let tabletopKeypadHeight = max(0, availableSurfaceHeight - tabletopResultAreaHeight)
             let keypadButtonHeight = isTabletop
-                ? max(0, (tabletopKeypadHeight - metrics.gridSpacing * keypadSpacingUnits) / baseRowUnits)
+                ? buttonHeightFitting(tabletopKeypadHeight)
                 : actualButtonHeight
             let keypadHeight = isTabletop ? tabletopKeypadHeight : actualKeypadHeight
 
             VStack(spacing: metrics.sectionSpacing) {
                 if showsInlineLandscapeHeader {
-                    header(metrics: metrics, screen: screen)
+                    header(metrics: metrics, screen: screen, half: half, isActivePage: isActivePage)
                 }
                 display(
                     metrics: metrics,
                     screen: screen,
+                    half: half,
                     resultAreaHeight: resultAreaHeight,
                     resultAreaWidth: geometry.size.width - metrics.innerHorizontalPadding * 2,
                     showsMemoryLabel: !isLandscapeMode
@@ -2657,7 +3309,7 @@ private extension EnterCalcIOSView {
                             .frame(height: separatorHeight)
                     }
 
-                    keypad(metrics: metrics, screen: screen, buttonHeight: keypadButtonHeight)
+                    keypad(metrics: metrics, screen: screen, buttonHeight: keypadButtonHeight, half: half)
                         .frame(maxWidth: .infinity, minHeight: keypadHeight, maxHeight: keypadHeight, alignment: .bottom)
                 }
                 .overlay {
@@ -2717,10 +3369,19 @@ private extension EnterCalcIOSView {
 
     func historyButton(
         metrics: IOSLayoutMetrics,
+        screen: CalculatorScreenSession,
+        half: DuoHalf? = nil,
         buttonSize: CGFloat? = nil,
-        iconSize: CGFloat? = nil
+        iconSize: CGFloat? = nil,
+        colours: CalculatorScreenSession? = nil
     ) -> some View {
-        Button {
+        let palette = self.palette(for: colours ?? screen)
+        let localized = self.localizer(for: screen)
+        return Button {
+            // Two calculators: the pane is placed by the focused half, so
+            // focus this one in the same update, or the pane is laid out
+            // over the other half first and slides across (#168).
+            if let half { focusHalf(half) }
             toggleOverlay(.history)
         } label: {
             Image(systemName: "clock.arrow.circlepath")
@@ -2734,10 +3395,16 @@ private extension EnterCalcIOSView {
 
     func roundingButton(
         metrics: IOSLayoutMetrics,
+        screen: CalculatorScreenSession,
+        half: DuoHalf? = nil,
         buttonSize: CGFloat? = nil,
-        iconSize: CGFloat? = nil
+        iconSize: CGFloat? = nil,
+        colours: CalculatorScreenSession? = nil
     ) -> some View {
-        Button {
+        let palette = self.palette(for: colours ?? screen)
+        let localized = self.localizer(for: screen)
+        return Button {
+            if let half { focusHalf(half) }
             toggleOverlay(.rounding)
         } label: {
             Image(systemName: "slider.horizontal.below.rectangle")
@@ -2756,18 +3423,19 @@ private extension EnterCalcIOSView {
         settingsButton(metrics: metrics, screen: screen)
 
         if metrics.showsHistoryButton {
-            historyButton(metrics: metrics)
+            historyButton(metrics: metrics, screen: screen)
         }
 
         if screen.settings.disablesSwipeDownToRound {
-            roundingButton(metrics: metrics)
+            roundingButton(metrics: metrics, screen: screen)
         }
 
         pageActionButton(metrics: metrics, screen: screen)
     }
 
     func titlebarHeader(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession) -> some View {
-        HStack(alignment: .top, spacing: metrics.headerSpacing) {
+        let palette = self.palette(for: screen)
+        return HStack(alignment: .top, spacing: metrics.headerSpacing) {
             if metrics.isPadWindow {
                 trailingHeaderButtons(metrics: metrics, screen: screen)
             } else {
@@ -2777,11 +3445,11 @@ private extension EnterCalcIOSView {
                 Spacer(minLength: 0)
 
                 if metrics.showsHistoryButton {
-                    historyButton(metrics: metrics)
+                    historyButton(metrics: metrics, screen: screen)
                 }
 
                 if screen.settings.disablesSwipeDownToRound {
-                    roundingButton(metrics: metrics)
+                    roundingButton(metrics: metrics, screen: screen)
                 }
 
                 pageActionButton(metrics: metrics, screen: screen)
@@ -2793,12 +3461,13 @@ private extension EnterCalcIOSView {
     }
 
     func landscapeHistoryPane(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession) -> some View {
-        IOSHistoryPanel(
+        let palette = self.palette(for: screen)
+        return IOSHistoryPanel(
             entries: screen.viewModel.history,
             palette: palette,
             metrics: metrics,
             clearFeedbackVersion: historyClearFeedbackVersion(for: screen),
-            usesSurfaceBackground: activeTheme == .blue && metrics.usesInlineLandscapeHistory,
+            usesSurfaceBackground: theme(for: screen) == .blue && metrics.usesInlineLandscapeHistory,
             onSelect: { entry in screen.viewModel.reuse(entry) },
             onClear: {
                 triggerHistoryClearFeedback(for: screen)
@@ -2811,8 +3480,9 @@ private extension EnterCalcIOSView {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    func trailingNewScreenPlaceholder(metrics: IOSLayoutMetrics) -> some View {
-        GeometryReader { geometry in
+    func trailingNewScreenPlaceholder(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession? = nil) -> some View {
+        let palette = screen.map { self.palette(for: $0) } ?? self.palette
+        return GeometryReader { geometry in
             ZStack {
                 palette.surface
 
@@ -2826,29 +3496,38 @@ private extension EnterCalcIOSView {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    func header(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession) -> some View {
+    func header(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, half: DuoHalf? = nil, isActivePage: Bool = true) -> some View {
+        let palette = self.palette(for: screen)
         let showsLandscapeRailControls = metrics.usesLandscapeNavigationRail
-
         return HStack(alignment: .top, spacing: metrics.headerSpacing) {
             if metrics.isPadWindow {
                 trailingHeaderButtons(metrics: metrics, screen: screen)
             } else {
                 if !showsLandscapeRailControls {
-                    settingsButton(metrics: metrics, screen: screen)
+                    // The gear is UIKit-hosted for its context menu, and one
+                    // made for a page outside the Duo's half-width pager was
+                    // placed half the safe-area inset off (#168). A page off
+                    // screen keeps the gear's space and gets it on arrival.
+                    if isActivePage {
+                        settingsButton(metrics: metrics, screen: screen, half: half)
+                    } else {
+                        Color.clear
+                            .frame(width: metrics.headerButtonSize, height: metrics.headerButtonSize)
+                    }
                 }
 
                 Spacer(minLength: 0)
 
                 if metrics.showsHistoryButton {
-                    historyButton(metrics: metrics)
+                    historyButton(metrics: metrics, screen: screen, half: half)
                 }
 
                 if screen.settings.disablesSwipeDownToRound {
-                    roundingButton(metrics: metrics)
+                    roundingButton(metrics: metrics, screen: screen, half: half)
                 }
 
                 if !showsLandscapeRailControls {
-                    pageActionButton(metrics: metrics, screen: screen)
+                    pageActionButton(metrics: metrics, screen: screen, half: half)
                 }
             }
         }
@@ -2859,11 +3538,19 @@ private extension EnterCalcIOSView {
     func display(
         metrics: IOSLayoutMetrics,
         screen: CalculatorScreenSession,
+        half: DuoHalf? = nil,
         resultAreaHeight expandedResultAreaHeight: CGFloat,
         resultAreaWidth: CGFloat,
         showsMemoryLabel: Bool
     ) -> some View {
-        let isBlueTheme = activeTheme == .blue
+        let palette = self.palette(for: screen)
+        let localized = self.localizer(for: screen)
+        let isBlueTheme = theme(for: screen) == .blue
+        let isDark = isDarkScheme(for: screen)
+        // The inactive calculator shows its result in the
+        // secondary colour and without the shimmer (#168).
+        let isInactive = isInactiveCalculator(half)
+        let resultColor = isInactive ? palette.textSecondary : palette.textPrimary
         let parallaxX = max(-8, min(8, displayShimmerParallaxOffset.width * 1.8))
         let parallaxY = max(-8, min(8, displayShimmerParallaxOffset.height * 1.8))
         let displayShape = RoundedRectangle(cornerRadius: metrics.surfaceCornerRadius, style: .continuous)
@@ -2873,14 +3560,14 @@ private extension EnterCalcIOSView {
             : palette.buttonOperation
         let shimmerEdgeColor = isBlueTheme
             ? Color(red: 0.900, green: 0.790, blue: 1.0).opacity(0.28)
-            : (colorScheme == .dark ? Color.white.opacity(0.22) : Color.black.opacity(0.07))
+            : (isDark ? Color.white.opacity(0.22) : Color.black.opacity(0.07))
         let shimmerTailColor = isBlueTheme
             ? Color(red: 0.610, green: 0.545, blue: 1.0).opacity(0.18)
-            : (colorScheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.035))
+            : (isDark ? Color.white.opacity(0.10) : Color.black.opacity(0.035))
         let shimmerBandColor = isBlueTheme
             ? Color(red: 0.760, green: 0.710, blue: 1.0).opacity(0.21)
-            : (colorScheme == .dark ? Color.white.opacity(0.16) : Color.black.opacity(0.06))
-        let leadingShimmerStops: [Gradient.Stop] = colorScheme == .dark
+            : (isDark ? Color.white.opacity(0.16) : Color.black.opacity(0.06))
+        let leadingShimmerStops: [Gradient.Stop] = isDark
             ? [
                 .init(color: shimmerEdgeColor, location: 0.0),
                 .init(color: shimmerEdgeColor, location: 0.06),
@@ -3011,20 +3698,22 @@ private extension EnterCalcIOSView {
                             )
                         )
                             .scaleEffect(1.04)
-                        .rotationEffect(.degrees(displayShimmerAngleDegrees))
+                        // The intro sweep plays on the new screen alone (#168).
+                        .rotationEffect(.degrees(displayShimmerIntroActive && !introAnimationApplies(to: screen) ? displayShimmerBaseAngle() : displayShimmerAngleDegrees))
                             .offset(x: parallaxX * 1.5, y: parallaxY * 0.55)
                 }
                 .compositingGroup()
                 .mask { shimmerHardMask }
                 .clipShape(shimmerHardMask, style: FillStyle(eoFill: false, antialiased: false))
+                .opacity(isInactive ? 0 : 1)
                 .allowsHitTesting(false)
 
-                if flashCopy || copyStreakActive {
+                if (flashCopy || copyStreakActive) && copyFlashScreenID == screen.id {
                     GeometryReader { layerGeometry in
                         let streakWidth = max(56, layerGeometry.size.width * 0.22)
                         let copyFlashColor = Color.white
-                        let copyFlashOpacity = colorScheme == .dark ? 0.18 : 0.24
-                        let copyStreakOpacity = colorScheme == .dark ? 0.45 : 0.62
+                        let copyFlashOpacity = isDark ? 0.18 : 0.24
+                        let copyStreakOpacity = isDark ? 0.45 : 0.62
 
                         ZStack {
                             if flashCopy {
@@ -3089,10 +3778,10 @@ private extension EnterCalcIOSView {
                                         EditableDisplayResultText(
                                             text: screen.viewModel.display,
                                             fontSize: resultFontSize,
-                                            foregroundColor: palette.textPrimary,
+                                            foregroundColor: resultColor,
                                             minScaleFactor: 0.22,
                                             caretBoundaryIndex: screen.viewModel.displayEditCaretBoundaryIndex,
-                                            caretColor: palette.textPrimary,
+                                            caretColor: resultColor,
                                             onTapBoundary: { boundaryIndex in
                                                 screen.viewModel.setDisplayEditCursor(displayBoundaryIndex: boundaryIndex)
                                             }
@@ -3102,7 +3791,7 @@ private extension EnterCalcIOSView {
                                     } else {
                                         Text(screen.viewModel.display)
                                             .font(EnterCalcFont.appFont(size: resultFontSize))
-                                            .foregroundStyle(palette.textPrimary)
+                                            .foregroundStyle(resultColor)
                                             .frame(maxWidth: .infinity, minHeight: resultLineHeight, maxHeight: resultLineHeight, alignment: .trailing)
                                             .lineLimit(1)
                                             .allowsTightening(true)
@@ -3151,10 +3840,10 @@ private extension EnterCalcIOSView {
                                     EditableDisplayResultText(
                                         text: screen.viewModel.display,
                                         fontSize: resultFontSize,
-                                        foregroundColor: palette.textPrimary,
+                                        foregroundColor: resultColor,
                                         minScaleFactor: 0.22,
                                         caretBoundaryIndex: screen.viewModel.displayEditCaretBoundaryIndex,
-                                        caretColor: palette.textPrimary,
+                                        caretColor: resultColor,
                                         onTapBoundary: { boundaryIndex in
                                             screen.viewModel.setDisplayEditCursor(displayBoundaryIndex: boundaryIndex)
                                         }
@@ -3163,7 +3852,7 @@ private extension EnterCalcIOSView {
                                 } else {
                                     Text(screen.viewModel.display)
                                         .font(EnterCalcFont.appFont(size: resultFontSize))
-                                        .foregroundStyle(palette.textPrimary)
+                                        .foregroundStyle(resultColor)
                                         .frame(maxWidth: .infinity, minHeight: resultLineHeight, maxHeight: resultLineHeight, alignment: .trailing)
                                         .lineLimit(1)
                                         .allowsTightening(true)
@@ -3224,6 +3913,7 @@ private extension EnterCalcIOSView {
                 if showsMemoryLabel {
                     memoryControls(
                         metrics: metrics,
+                        screen: screen,
                         opacity: basicOpacity
                     )
                     .opacity(isBasicSpaceInUse ? 0 : 1)
@@ -3257,7 +3947,9 @@ private extension EnterCalcIOSView {
 
     /// Compact outlined pill, deliberately unlike a keypad key: it opens a tool
     /// rather than entering anything.
-    func currencyToolButton(metrics: IOSLayoutMetrics, titleKey: String, pane: IOSOverlayPane, opacity: Double) -> some View {
+    func currencyToolButton(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, titleKey: String, pane: IOSOverlayPane, opacity: Double) -> some View {
+        let palette = self.palette(for: screen)
+        let localized = self.localizer(for: screen)
         let isActive = activeOverlay == pane
         return Button {
             toggleOverlay(pane)
@@ -3325,14 +4017,16 @@ private extension EnterCalcIOSView {
     /// The mode name, as a native menu of every mode with the current one
     /// checked (#142). It is the only part of its row that takes a tap, so
     /// tapping the rest of the display still copies the result.
-    func modePicker(metrics: IOSLayoutMetrics, opacity: Double) -> some View {
-        let current = CalculatorMode.current(for: activeScreen.viewModel)
+    func modePicker(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, opacity: Double) -> some View {
+        let palette = self.palette(for: screen)
+        let localized = self.localizer(for: screen)
+        let current = CalculatorMode.current(for: screen.viewModel)
         let fontSize = modeLabelFontSize(metrics: metrics)
         return Menu {
             // One checkmark item per mode. (An inline Picker's title is an
             // extra menu item, so VoiceOver counted three options, #145.)
             ForEach(CalculatorMode.allCases) { mode in
-                Toggle(isOn: Binding(get: { current == mode }, set: { _ in selectMode(mode) })) {
+                Toggle(isOn: Binding(get: { current == mode }, set: { _ in selectMode(mode, on: screen) })) {
                     Label(localized(mode.localizationKey), systemImage: mode.systemImage)
                 }
             }
@@ -3357,8 +4051,7 @@ private extension EnterCalcIOSView {
         .accessibilityHint(Text(localized("calculator.mode.picker.hint")))
     }
 
-    func selectMode(_ mode: CalculatorMode) {
-        let screen = activeScreen
+    func selectMode(_ mode: CalculatorMode, on screen: CalculatorScreenSession) {
         guard CalculatorMode.current(for: screen.viewModel) != mode else { return }
         triggerActionFeedback()
         withAnimation(ModeControlsTransition.animation) {
@@ -3369,9 +4062,13 @@ private extension EnterCalcIOSView {
     }
 
     /// Whether a pane or the function-key chooser is over the calculator with
-    /// its dimmed background, so nothing behind can be pressed.
+    /// its dimmed background, so nothing behind can be pressed. A chooser
+    /// opened by a hold counts only once the finger has lifted: disabling the
+    /// calculator under the finger cancelled the key's gesture, so the lift
+    /// never reached the chooser, which stayed waiting for a drag and took no
+    /// taps (#168).
     func isCalculatorCovered(metrics: IOSLayoutMetrics) -> Bool {
-        functionChooser != nil || showsOverlayScrim(metrics: metrics)
+        (functionChooser != nil && functionChooser?.dragLocation == nil) || showsOverlayScrim(metrics: metrics)
     }
 
     /// "Round Result closed", for VoiceOver when a pane closes.
@@ -3379,16 +4076,16 @@ private extension EnterCalcIOSView {
         String(format: localized("a11y.pane.closed"), localized(titleKey))
     }
 
-    func memoryControls(metrics: IOSLayoutMetrics, opacity: Double) -> some View {
-        let showsCurrencyTools = activeScreen.viewModel.activeCurrencySymbol != nil
+    func memoryControls(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, opacity: Double) -> some View {
+        let showsCurrencyTools = screen.viewModel.activeCurrencySymbol != nil
         return HStack(spacing: 8) {
-            modePicker(metrics: metrics, opacity: opacity)
+            modePicker(metrics: metrics, screen: screen, opacity: opacity)
 
             Spacer(minLength: 4)
 
             HStack(spacing: 8) {
-                currencyToolButton(metrics: metrics, titleKey: "currency.vat.short", pane: .vat, opacity: opacity)
-                currencyToolButton(metrics: metrics, titleKey: "currency.tip.short", pane: .tip, opacity: opacity)
+                currencyToolButton(metrics: metrics, screen: screen, titleKey: "currency.vat.short", pane: .vat, opacity: opacity)
+                currencyToolButton(metrics: metrics, screen: screen, titleKey: "currency.tip.short", pane: .tip, opacity: opacity)
             }
             .modeControl(visible: showsCurrencyTools)
         }
@@ -3419,6 +4116,7 @@ private extension EnterCalcIOSView {
     }
 
     func copyDisplayToPasteboardWithFlash(from viewModel: CalculatorViewModel) {
+        copyFlashScreenID = screenStore.screens.first { $0.viewModel === viewModel }?.id
         viewModel.clearDisplayEditCursor()
         viewModel.copyToPasteboard()
         triggerActionFeedback(emphasized: true)
@@ -3702,7 +4400,7 @@ private extension EnterCalcIOSView {
                     IOSContextMenuAction(
                         title: localized(settingsTitleKey),
                         systemImage: "gearshape",
-                        handler: { showSettingsSheet = true }
+                        handler: { openSettings() }
                     )
                 ])
             )
@@ -3711,7 +4409,9 @@ private extension EnterCalcIOSView {
         return sections
     }
 
-    func keypad(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, buttonHeight: CGFloat) -> some View {
+    func keypad(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, buttonHeight: CGFloat, half: DuoHalf? = nil) -> some View {
+        let palette = self.palette(for: screen)
+        let localized = self.localizer(for: screen)
         let slots = CalculatorFunctionSlot.actionRowSlots
         let actionColumns = Array(repeating: GridItem(.flexible(), spacing: metrics.gridSpacing), count: max(slots.count, 1))
         let isLandscapeMode = metrics.mode == .phoneLandscape || metrics.mode == .padWide
@@ -3735,6 +4435,7 @@ private extension EnterCalcIOSView {
                         isHighlighted: function == .currency && screen.viewModel.activeCurrencySymbol != nil,
                         pressFeedback: triggerActionFeedback,
                         action: {
+                            if let half { focusHalf(half) }
                             performFunction(function, on: screen)
                             if isLandscapeMode {
                                 resetLandscapeDisplayScroll(for: screen)
@@ -3768,6 +4469,11 @@ private extension EnterCalcIOSView {
                                     buttonHeight: buttonHeight,
                                     pressFeedback: triggerKeyPressFeedback,
                                     action: {
+                                        // A key pressed through VoiceOver
+                                        // never passed the half's touch
+                                        // gesture, so select the half here
+                                        // before the panes it may open (#168).
+                                        if let half { focusHalf(half) }
                                         ReviewPromptIdleWait.shared.noteInput()
                                         let speechBefore = screen.viewModel.displaySpeechState
                                         // Only the calculation is timed, so the
@@ -3798,8 +4504,8 @@ private extension EnterCalcIOSView {
                                     },
                                     onChooserDrag: { updateFunctionChooserDrag($0) },
                                     onChooserRelease: { releaseFunctionChooser() },
-                                    operatorRevealProgress: operatorRevealProgress,
-                                    operatorAnimFadeOpacity: operatorAnimFadeOpacity,
+                                    operatorRevealProgress: introAnimationApplies(to: screen) ? operatorRevealProgress : 4.0,
+                                    operatorAnimFadeOpacity: introAnimationApplies(to: screen) ? operatorAnimFadeOpacity : 0.0,
                                     isHighlighted: button.function == .currency && screen.viewModel.activeCurrencySymbol != nil
                                 )
                                 .frame(width: cellWidth * CGFloat(button.columnSpan) + spacing * CGFloat(button.columnSpan - 1))
@@ -3819,8 +4525,10 @@ private extension EnterCalcIOSView {
     }
 
     func keypadResizeHandle(metrics: IOSLayoutMetrics, screen: CalculatorScreenSession, height: CGFloat) -> some View {
+        let palette = self.palette(for: screen)
+        let localized = self.localizer(for: screen)
         let isActive = isResizingKeypadHeight
-        let handleColor = palette.textSecondary.opacity(colorScheme == .dark ? 0.31 : 0.225)
+        let handleColor = palette.textSecondary.opacity(isDarkScheme(for: screen) ? 0.31 : 0.225)
         let lineColor = handleColor
         let handleBackground = palette.surface
         let verticalCenterOffset = -metrics.sectionSpacing / 2
@@ -3938,6 +4646,9 @@ private extension EnterCalcIOSView {
     }
 
     func dismissActiveOverlay() {
+        if showsDuoSettings {
+            closeSettings()
+        }
         if activeOverlay == .rounding {
             activeScreen.viewModel.commitResultRoundingInteraction()
         }
@@ -4154,6 +4865,9 @@ private extension EnterCalcIOSView {
                 content()
                     .frame(maxWidth: .infinity)
                     .frame(height: panelHeight)
+                    // Book: over the focused calculator half only (#168).
+                    .padding(.leading, foldPaneLeadingInset(metrics: metrics))
+                    .padding(.trailing, foldPaneTrailingInset(metrics: metrics))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .ignoresSafeArea(edges: .bottom)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -4292,6 +5006,8 @@ private struct IOSSettingsSheet: View {
     @Binding var disablesSwipeDownToRound: Bool
     let availableLanguages: [LanguageOption]
     let counterRotatesForUpsideDownPortrait: Bool
+    /// Set when shown in place rather than presented (#168): closes it.
+    let onClose: (() -> Void)?
     @State private var draftTheme: AppTheme
     @State private var draftLanguage: String
     @State private var draftScientificNotation: Bool
@@ -4316,7 +5032,8 @@ private struct IOSSettingsSheet: View {
         selectedCurrencySymbol: Binding<String>,
         disablesSwipeDownToRound: Binding<Bool>,
         availableLanguages: [LanguageOption],
-        counterRotatesForUpsideDownPortrait: Bool
+        counterRotatesForUpsideDownPortrait: Bool,
+        onClose: (() -> Void)? = nil
     ) {
         self.titleKey = titleKey
         self.appearanceLabelKey = appearanceLabelKey
@@ -4328,6 +5045,7 @@ private struct IOSSettingsSheet: View {
         self._disablesSwipeDownToRound = disablesSwipeDownToRound
         self.availableLanguages = availableLanguages
         self.counterRotatesForUpsideDownPortrait = counterRotatesForUpsideDownPortrait
+        self.onClose = onClose
         _draftTheme = State(initialValue: AppTheme(rawValue: selectedTheme.wrappedValue) ?? .system)
         _draftLanguage = State(initialValue: selectedLanguage.wrappedValue)
         _draftScientificNotation = State(initialValue: usesScientificNotation.wrappedValue)
@@ -4509,7 +5227,11 @@ private struct IOSSettingsSheet: View {
                     ToolbarItem(placement: .confirmationAction) {
                         Button {
                             commitDraftSettings()
-                            dismiss()
+                            if let onClose {
+                                onClose()
+                            } else {
+                                dismiss()
+                            }
                         } label: {
                             Image(systemName: "xmark")
                         }
@@ -5203,6 +5925,11 @@ private final class IOSContextMenuHostingViewController: UIViewController, UICon
         super.viewDidLoad()
 
         view.backgroundColor = .clear
+        // The host sits inside a laid-out SwiftUI view, so the window's safe
+        // area must not inset its content again: a page made outside the
+        // Duo's half-width pager, in or past the trailing safe area, had its
+        // display narrowed and its gear shifted by that inset (#168).
+        hostingController.safeAreaRegions = []
         addChild(hostingController)
         hostingController.view.translatesAutoresizingMaskIntoConstraints = false
         hostingController.view.backgroundColor = .clear
@@ -5428,6 +6155,12 @@ private enum IOSFoldPosture {
     case tabletop
 }
 
+/// The halves of a display that shows two calculators side by side, the
+/// iPhone Duo's inner display in book position (#168).
+private enum DuoHalf {
+    case left, right
+}
+
 private enum IOSDeviceFamily {
     case phone
     case pad
@@ -5463,12 +6196,18 @@ private extension View {
 private struct IOSLayoutMetrics {
     static let minimumPadWindowSize = CGSize(width: 340, height: 440)
     /// Left clear over the iPhone Duo's fold, so nothing sits on the crease.
-    static let foldGap: CGFloat = 24
+    /// Book: the room kept either side of the fold, 20 pt each, the same
+    /// margin the calculators keep from the display's edges (#168).
+    static let foldGap: CGFloat = 40
     static let defaultPadWindowSize = minimumPadWindowSize
 
     let isPadWindow: Bool
     let mode: IOSLayoutMode
     let outerPadding: CGFloat
+    /// The leading margin of a page: on the iPhone Duo's front display it
+    /// matches the 20 pt the top and the bottom keep, while the trailing
+    /// side keeps `outerPadding` to the rail's strip (#168).
+    let outerLeadingPadding: CGFloat
     let innerHorizontalPadding: CGFloat
     let topPadding: CGFloat
     let bottomPadding: CGFloat
@@ -5523,6 +6262,12 @@ private struct IOSLayoutMetrics {
     /// tall the bottom half is, for the panes that must stay below it.
     let foldLayoutY: CGFloat
     let foldBottomHalfHeight: CGFloat
+    /// Book: how wide the calculator half is, from `foldCalculatorMinX`.
+    let foldRightHalfWidth: CGFloat
+    /// Book: the safe areas either side of the layout, for the second
+    /// calculator's geometry below.
+    let foldLeadingInset: CGFloat
+    let foldTrailingInset: CGFloat
     let titlebarLeadingInset: CGFloat
     let usesAdaptiveScaling: Bool
 
@@ -5532,7 +6277,8 @@ private struct IOSLayoutMetrics {
         horizontalSizeClass: UserInterfaceSizeClass?,
         deviceFamily: IOSDeviceFamily,
         isLandscapePresentation: Bool,
-        screenReferenceSize: CGSize
+        screenReferenceSize: CGSize,
+        showsTwoCalculators: Bool = false
     ) {
         let isGeometryLandscape = size.width > size.height
         let landscapeScreenWidth = max(screenReferenceSize.width, screenReferenceSize.height)
@@ -5563,6 +6309,9 @@ private struct IOSLayoutMetrics {
         foldCalculatorMinX = fullWidth / 2 - safeAreaInsets.leading + Self.foldGap / 2
         foldLayoutY = fullHeight / 2 - safeAreaInsets.top
         foldBottomHalfHeight = fullHeight / 2 - Self.foldGap / 2
+        foldRightHalfWidth = size.width - foldCalculatorMinX
+        foldLeadingInset = safeAreaInsets.leading
+        foldTrailingInset = safeAreaInsets.trailing
 
         if deviceFamily == .phone && isGeometryLandscape && min(safeAreaInsets.leading, safeAreaInsets.trailing) < 12 {
             landscapeCornerInsets = EdgeInsets(
@@ -5587,13 +6336,19 @@ private struct IOSLayoutMetrics {
 
         switch mode {
         case .phonePortrait:
-            // Book: clear of the inner display's rounded corners (#132).
-            outerPadding = isPadWindow ? max(14, safeAreaInsets.leading + 14) : (foldPosture == .book ? 20 : 12)
+            // The iPhone Duo's displays keep a strip past the trailing safe
+            // area for the status ring and the rail, see `usesTrailingRail`.
+            let hasTrailingStrip = !isPadWindow && foldPosture != .tabletop && safeAreaInsets.trailing >= 58
+            // The keypad stops short of the Duo's strip by the margin the
+            // buttons keep anyway; the body keeps 20 pt from the top, the
+            // bottom and the leading edge or the fold (#132, #168).
+            outerPadding = isPadWindow ? max(14, safeAreaInsets.leading + 14) : 12
+            outerLeadingPadding = hasTrailingStrip && foldPosture == .none ? 20 : outerPadding
             innerHorizontalPadding = 0
             // Book: no status bar runs along the top of the Duo's inner display,
             // so leave room for its rounded corners (#132).
-            topPadding = isPadWindow ? 8 : (foldPosture == .book ? max(16, 24 - safeAreaInsets.top) : 0)
-            bottomPadding = isPadWindow ? max(8, safeAreaInsets.bottom + 2) : 8
+            topPadding = isPadWindow ? 8 : (hasTrailingStrip ? 14 : (foldPosture == .book ? max(16, 24 - safeAreaInsets.top) : 0))
+            bottomPadding = isPadWindow ? max(8, safeAreaInsets.bottom + 2) : (hasTrailingStrip ? 14 : 8)
             contentTopPadding = 6
             contentBottomPadding = 6
             sectionSpacing = 12
@@ -5638,11 +6393,14 @@ private struct IOSLayoutMetrics {
             pageIndicatorSpacing = 8
             pageIndicatorVerticalSpacing = isPadWindow ? 10 : sectionSpacing
             usesTitlebarHeader = isPadWindow
-            usesInlineLandscapeHistory = foldPosture == .book
+            // Two calculators side by side each get the history button and
+            // the overlay instead, as on a single portrait calculator (#168).
+            usesInlineLandscapeHistory = foldPosture == .book && !showsTwoCalculators
             titlebarLeadingInset = isPadWindow ? 84 : 0
             usesAdaptiveScaling = isPadWindow
         case .phoneLandscape:
             outerPadding = isPadWindow ? max(14, safeAreaInsets.leading + 14) : 10
+            outerLeadingPadding = outerPadding
             innerHorizontalPadding = 0
             topPadding = isPadWindow ? 6 : 8
             bottomPadding = isPadWindow ? max(8, safeAreaInsets.bottom + 8) : 8
@@ -5693,6 +6451,7 @@ private struct IOSLayoutMetrics {
             usesAdaptiveScaling = isPadWindow
         case .padWide:
             outerPadding = max(18, safeAreaInsets.leading + 12)
+            outerLeadingPadding = outerPadding
             innerHorizontalPadding = 0
             topPadding = safeAreaInsets.top + (isFullScreenWidePadLayout ? 10 : 0)
             bottomPadding = max(14, safeAreaInsets.bottom + 14)
@@ -5812,6 +6571,54 @@ private struct IOSLayoutMetrics {
     var showsHistoryButton: Bool {
         !usesInlineLandscapeHistory
     }
+
+    /// Book with two calculators (#168): the keypad width both share, the
+    /// right calculator's less its outer padding.
+    var foldKeypadWidth: CGFloat {
+        max(0, min(foldRightHalfWidth, foldCalculatorMinX - Self.foldGap) - outerPadding)
+    }
+
+    /// Book with two calculators (#168): where the right calculator's colour
+    /// starts. The right calculator keeps its place by the fold and its keys
+    /// get the same room on the left as on the right, where the outer padding
+    /// and the safe area reserved at the display's edge lie, so the divider is
+    /// left of the fold rather than on it.
+    var foldDividerX: CGFloat {
+        max(foldCalculatorMinX - outerPadding - foldTrailingInset, foldKeypadWidth)
+    }
+
+    /// Book with two calculators (#168): the left calculator's keys sit
+    /// centred between the display's leading edge and the divider.
+    var foldLeftCalculatorLeadingPadding: CGFloat {
+        max(0, (foldDividerX - foldLeadingInset - foldKeypadWidth) / 2)
+    }
+
+    var foldLeftCalculatorTrailingPadding: CGFloat {
+        max(0, foldDividerX - foldKeypadWidth - foldLeftCalculatorLeadingPadding)
+    }
+
+    /// The iPhone Duo keeps a strip beyond the trailing safe area on both
+    /// its displays, with the time and the status ring around the camera at
+    /// its top. The header buttons go there, in a rail under the ring, and
+    /// the header row goes, giving the display its height: on the inner
+    /// display's right calculator in book position, and on the front
+    /// display. Other iPhones have no such strip, and the iPad and the
+    /// landscape layouts keep their own controls (#168).
+    var usesTrailingRail: Bool {
+        mode == .phonePortrait && !isPadWindow && foldPosture != .tabletop
+            && foldTrailingInset >= headerButtonSize + 8
+    }
+
+    /// Where the rail starts: below the time and the status ring, which
+    /// sit lower on the front display than on the inner one (measured on
+    /// the iOS 27 simulator).
+    var trailingRailTopInset: CGFloat {
+        foldPosture == .book ? 112 : 168
+    }
+
+    /// The ring's centre, from the safe area's trailing edge; the rail's
+    /// buttons line up under it.
+    static let trailingRailCentreInset: CGFloat = 36
 
     var usesOverlayHistory: Bool {
         !usesInlineLandscapeHistory
