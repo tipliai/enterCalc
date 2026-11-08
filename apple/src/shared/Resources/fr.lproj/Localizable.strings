@@ -153,6 +153,14 @@
 "a11y.announce.mode" = "Mode %@ activé";
 "a11y.announce.screen" = "Écran %1$@, %2$@ affiché";
 "a11y.announce.window" = "Fenêtre %1$@, %2$@ affiché";
+"a11y.announce.halfScreen" = "%1$@, %2$@";
+"a11y.half.left" = "Gauche";
+"a11y.half.right" = "Droite";
+"a11y.half.leftCalculator" = "Calculatrice gauche";
+"a11y.half.rightCalculator" = "Calculatrice droite";
+"a11y.half.active" = "active";
+"rail.dualMode" = "Deux calculatrices";
+"a11y.announce.halfActive" = "%1$@ active, %2$@";
 "a11y.resize.keypad" = "Redimensionner le pavé";
 "a11y.resize.keypad.hint" = "Faites glisser vers le haut ou le bas pour redimensionner le pavé";
 "a11y.resize.history" = "Redimensionner l’historique";

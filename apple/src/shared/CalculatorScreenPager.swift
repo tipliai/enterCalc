@@ -76,6 +76,11 @@ public struct CalculatorScreenPager<Content: View>: View {
     public let trailingPlaceholder: AnyView?
     public let transitionOverlayColor: Color?
     public let isGestureDisabled: Bool
+    /// False while this pager must not move: a page before the shown one
+    /// was removed, so the index and count change but the page in view
+    /// does not, as on the iPhone Duo when the other half closes a screen
+    /// (#168).
+    public let animatesPageChanges: Bool
     public let content: (Int) -> Content
 
     // A swipe that falls short resets this to zero without changing the page,
@@ -106,6 +111,7 @@ public struct CalculatorScreenPager<Content: View>: View {
         trailingPlaceholder: AnyView? = nil,
         transitionOverlayColor: Color? = nil,
         isGestureDisabled: Bool = false,
+        animatesPageChanges: Bool = true,
         @ViewBuilder content: @escaping (Int) -> Content
     ) {
         self.pagingAxis = pagingAxis
@@ -125,6 +131,7 @@ public struct CalculatorScreenPager<Content: View>: View {
         self.trailingPlaceholder = trailingPlaceholder
         self.transitionOverlayColor = transitionOverlayColor
         self.isGestureDisabled = isGestureDisabled
+        self.animatesPageChanges = animatesPageChanges
         self.content = content
     }
 
@@ -133,8 +140,8 @@ public struct CalculatorScreenPager<Content: View>: View {
             pagerStack(in: geometry.size)
             .contentShape(Rectangle())
             .clipped()
-            .animation(pageSnapAnimation, value: activeIndex)
-            .animation(pageSnapAnimation, value: pageCount)
+            .animation(animatesPageChanges ? pageSnapAnimation : nil, value: activeIndex)
+            .animation(animatesPageChanges ? pageSnapAnimation : nil, value: pageCount)
             .animation(.easeOut(duration: 0.12), value: isTransitionSettling)
             .animation(.easeOut(duration: 0.12), value: settlingDisplayIndex)
             .simultaneousGesture(

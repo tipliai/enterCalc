@@ -28,6 +28,7 @@ Sources:
 | Shift + Up Arrow | Decrease display size (20pt) | Decrease display size | Decrease display size | Decrease display size |
 | Shift + Left Arrow | iPad: go to the page on the **left** | Same | Same | Same |
 | Shift + Right Arrow | iPad: go to the page on the **right** | Same | Same | Same |
+| Command + ` | iPhone Duo: switch between the two calculators shown side by side | Same | Same | Same |
 | Escape | Clear all | Exit direct edit | Close overlay (rounding stays) | Close overlay |
 | End | Clear all | Exit direct edit | Close overlay | Close overlay |
 | Backspace | Delete one char/digit via model backspace | Delete one char/digit before caret | Remove rounding and close overlay | Clear history and close overlay |
@@ -82,6 +83,8 @@ Changing mode keeps the value on the display and can be undone, the same as the 
 **Shift + Left/Right Arrow** moves between calculator pages, as menu commands so they are discoverable and reachable by VoiceOver.
 
 The arrow names the page to go to: Shift + Right shows the page on the right, the same convention as Ctrl + Right for Spaces and the side the page dots grow on. #83 originally had it follow the swipe's finger direction — dragging left reveals the page on the right, so Shift + Left did too — but that read as inverted on a keyboard in 1.1.0 QA, where an arrow is taken as "go this way" rather than "push the content this way".
+
+On the iPhone Duo with two calculators side by side (#168), **Command + `** moves the keyboard to the other calculator, the same key that cycles windows on the Mac: typed keys, Shift + Left/Right and the panes then go to that one, its display keeps full contrast while the other's dims, Settings (⌘,) opens as a card over that calculator, and VoiceOver says which calculator is active and what it shows.
 
 Shift + Right past the last page **opens a new page**, the same as swiping onward from it, so the shortcut is not a more limited way to get around than the gesture. Shift + Left stops at the first page rather than wrapping.
 

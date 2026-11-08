@@ -153,6 +153,14 @@
 "a11y.announce.mode" = "Jetzt im Modus %@";
 "a11y.announce.screen" = "Bildschirm %1$@, %2$@ angezeigt";
 "a11y.announce.window" = "Fenster %1$@, %2$@ angezeigt";
+"a11y.announce.halfScreen" = "%1$@, %2$@";
+"a11y.half.left" = "Links";
+"a11y.half.right" = "Rechts";
+"a11y.half.leftCalculator" = "Linker Rechner";
+"a11y.half.rightCalculator" = "Rechter Rechner";
+"a11y.half.active" = "aktiv";
+"rail.dualMode" = "Zwei Rechner";
+"a11y.announce.halfActive" = "%1$@ aktiv, %2$@";
 "a11y.resize.keypad" = "Tastenfeldgröße ändern";
 "a11y.resize.keypad.hint" = "Nach oben oder unten ziehen, um die Größe des Tastenfelds zu ändern";
 "a11y.resize.history" = "Verlaufsgröße ändern";

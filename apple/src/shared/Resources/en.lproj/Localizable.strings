@@ -153,6 +153,14 @@
 "a11y.announce.mode" = "Now in %@ mode";
 "a11y.announce.screen" = "Screen %1$@, %2$@ shown";
 "a11y.announce.window" = "Window %1$@, %2$@ shown";
+"a11y.announce.halfScreen" = "%1$@, %2$@";
+"a11y.half.left" = "Left";
+"a11y.half.right" = "Right";
+"a11y.half.leftCalculator" = "Left calculator";
+"a11y.half.rightCalculator" = "Right calculator";
+"a11y.half.active" = "active";
+"rail.dualMode" = "Two calculators";
+"a11y.announce.halfActive" = "%1$@ active, %2$@";
 "a11y.resize.keypad" = "Resize keypad";
 "a11y.resize.keypad.hint" = "Drag up or down to resize the keypad";
 "a11y.resize.history" = "Resize history";

@@ -153,6 +153,14 @@
 "a11y.announce.mode" = "Ahora en modo %@";
 "a11y.announce.screen" = "Pantalla %1$@, se muestra %2$@";
 "a11y.announce.window" = "Ventana %1$@, se muestra %2$@";
+"a11y.announce.halfScreen" = "%1$@, %2$@";
+"a11y.half.left" = "Izquierda";
+"a11y.half.right" = "Derecha";
+"a11y.half.leftCalculator" = "Calculadora izquierda";
+"a11y.half.rightCalculator" = "Calculadora derecha";
+"a11y.half.active" = "activa";
+"rail.dualMode" = "Dos calculadoras";
+"a11y.announce.halfActive" = "%1$@ activa, %2$@";
 "a11y.resize.keypad" = "Cambiar tamaño del teclado";
 "a11y.resize.keypad.hint" = "Arrastra hacia arriba o hacia abajo para cambiar el tamaño del teclado";
 "a11y.resize.history" = "Cambiar tamaño del historial";
