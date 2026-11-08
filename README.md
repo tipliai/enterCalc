@@ -15,6 +15,8 @@ Download on the Apple App Store: [apps.apple.com/app/id6777242723](https://apps.
 ## Features
 
 - Open multiple calculator panels with independent calculations and settings
+- Two calculators side by side on iPad in landscape and on iPhone Duo
+- iPhone Duo support on the inner and front displays
 - Calculation history with quick reuse of previous results
 - Customizable function keys for your preferred actions
 - Advanced copy, paste, undo, and redo support
@@ -28,10 +30,10 @@ Download on the Apple App Store: [apps.apple.com/app/id6777242723](https://apps.
 - Configurable rounding behavior
 - Multiple number formatting styles
 - Multiple language and localization options
-- Support for alternative keyboard layouts
 - Light and Dark Mode support
+- Text Size setting, separate from the system text size
 - Optional tactile and audio feedback on supported devices
-- Accessibility-focused design
+- Accessibility-focused design, with VoiceOver and full keyboard navigation
 - Lightweight and distraction-free
 - Privacy-focused, operates entirely on your device with no tracking or analytics
 - Open source under the MIT License
