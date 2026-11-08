@@ -87,4 +87,20 @@ final class FunctionKeyEditingTests: XCTestCase {
         XCTAssertLessThanOrEqual(origin.y + panel.height, tiny.maxY - 16 + 0.5)
     }
     #endif
+
+    // The panel stays inside `bounds` (the safe area on touch) while the
+    // origin is still returned in the container's space, so a key too near
+    // the top no longer pushes it under the status bar (iPhone SE).
+    func testChooserStaysInsideTheSafeBounds() {
+        let screen = CGRect(x: 0, y: 0, width: 375, height: 667)
+        let safe = CGRect(x: 0, y: 20, width: 375, height: 647)
+        let panel = CGSize(width: 272, height: 252)
+        let undo = CGRect(x: 12, y: 276, width: 52, height: 20)
+        let origin = CalculatorFunctionKeyChooser.panelOrigin(anchor: undo, panelSize: panel, container: screen, bounds: safe)
+        XCTAssertGreaterThanOrEqual(origin.y, safe.minY, "never under the status bar")
+        XCTAssertLessThanOrEqual(origin.y + panel.height, safe.maxY)
+        #if !os(macOS)
+        XCTAssertGreaterThanOrEqual(origin.y, undo.maxY, "below the key, which stays in view")
+        #endif
+    }
 }

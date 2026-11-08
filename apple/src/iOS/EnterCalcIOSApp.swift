@@ -413,9 +413,17 @@ struct EnterCalcIOSView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.requestReview) private var requestReview
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotionEnabled
-    @ScaledMetric(relativeTo: .largeTitle) private var displayDynamicTypeScale: CGFloat = 1.0
-    @ScaledMetric(relativeTo: .body) private var modeLabelDynamicTypeScale: CGFloat = 1.0
-    @ScaledMetric(relativeTo: .body) private var paneDynamicTypeScale: CGFloat = 1.0
+    // @ScaledMetric snaps its value to the pixel grid (0.5 pt on a 2x iPhone
+    // SE), so a base of 1.0 rounded every size below Large back to 1 and moved
+    // in coarse steps above it. Scaling the text style's own default point
+    // size, a whole number at every Dynamic Type size, and dividing gives exact
+    // ratios, as TextSizePreference.relativeScale does (14/17 at Extra Small),
+    // and exactly 1 at the default size.
+    @ScaledMetric(relativeTo: .largeTitle) private var displayDynamicTypePointSize: CGFloat = 34
+    @ScaledMetric(relativeTo: .body) private var bodyDynamicTypePointSize: CGFloat = 17
+    private var displayDynamicTypeScale: CGFloat { displayDynamicTypePointSize / 34 }
+    private var modeLabelDynamicTypeScale: CGFloat { bodyDynamicTypePointSize / 17 }
+    private var paneDynamicTypeScale: CGFloat { bodyDynamicTypePointSize / 17 }
     @AppStorage(TextSizePreference.storageKey) private var storedTextSize = TextSizePreference.system.rawValue
     @State private var activeOverlay: IOSOverlayPane? = nil
     @State private var showSettingsSheet: Bool = false
@@ -3751,13 +3759,32 @@ private extension EnterCalcIOSView {
         // Sized from the room the display has before the Basic label's space is
         // borrowed, which depends on the text, so the size can't feed back on itself.
         let textSizingHeight = expandedResultAreaHeight - (showsMemoryLabel ? metrics.memoryHeight : 0) - verticalPaddingTotal
+        let displayTextScale = TextSizePreference(storedValue: storedTextSize).relativeScale ?? displayDynamicTypeScale
+        // Above the default text size the result plus one operation line take
+        // most of the display, so a wrapped operation would borrow the mode row
+        // and hide the mode picker and the VAT and TIP buttons until the user
+        // clears. There the operation keeps to the lines that fit and truncates
+        // its head instead, and the row is never borrowed.
+        let keepsBasicRowReachable = showsMemoryLabel && displayTextScale > 1.01
         let displayFontSizes = metrics.displayFontSizes(
             contentHeight: textSizingHeight,
             contentWidth: resultAreaWidth - metrics.displayHorizontalPadding * 2,
-            textScale: TextSizePreference(storedValue: storedTextSize).relativeScale ?? displayDynamicTypeScale
+            textScale: displayTextScale
         )
         let resultFontSize = displayFontSizes.result
-        let expressionFontSize = displayFontSizes.operation
+        let operationLineText = DisplayTextSizing.operationLineText(screen.viewModel.expressionDisplay)
+        let operationMeasuringFont = EnterCalcFont.platformFont(size: displayFontSizes.operation)
+        // Shrinks only when one number would not fit on a line (large text,
+        // narrow display), so the line wraps between terms instead of inside a
+        // number.
+        let expressionFontSize = DisplayTextSizing.operationFontSize(
+            displayFontSizes.operation,
+            fitting: operationLineText,
+            width: DisplayTextSizing.operationFitWidth(resultAreaWidth - metrics.displayHorizontalPadding * 2),
+            measure: { run in
+                ceil((run as NSString).size(withAttributes: [.font: operationMeasuringFont]).width)
+            }
+        )
         let resultLineHeight = resultFontSize * 1.12
         let measuredOperationHeight = max(
             operationTextHeightByScreen[screen.id] ?? (expressionFontSize * 1.3),
@@ -3770,11 +3797,35 @@ private extension EnterCalcIOSView {
         )
         let basePortraitDisplayAreaHeight = expandedResultAreaHeight - (showsMemoryLabel ? metrics.memoryHeight : 0)
         let baseContentHeight = max(1, basePortraitDisplayAreaHeight - verticalPaddingTotal)
+        // Whole operation lines that fit above the mode row beside the result,
+        // from sizes that don't depend on the text, so it holds still while
+        // typing. No limit at the default and smaller text sizes.
+        let operationLineLimit: Int? = keepsBasicRowReachable
+            ? max(1, Int(((baseContentHeight - metrics.displaySpacing - resultLineHeight)
+                / (displayFontSizes.operation * 1.3)).rounded(.down)))
+            : nil
+        // The portrait text area is centred in the whole display, so it sits
+        // half the mode row lower than its own height and its bottom runs over
+        // the row. At the default size the result's glyphs clear the row
+        // anyway. Larger text fills nearly all of the area and the mode name
+        // grows with it, so the result's descenders touched the mode name.
+        // There the area moves up just enough that the tallest stack the line
+        // limit allows ends at the top of the row. Built from sizes that don't
+        // depend on the text, so it holds still while typing.
+        let portraitRowClearance: CGFloat = {
+            guard keepsBasicRowReachable, !isLandscapeMode, let operationLineLimit else { return 0 }
+            let centringShift = metrics.memoryHeight / 2
+            let tallestStack = CGFloat(operationLineLimit) * displayFontSizes.operation * 1.3
+                + metrics.displaySpacing + resultLineHeight
+            return min(centringShift, max(0, centringShift - (baseContentHeight - tallestStack)))
+        }()
         let baseOperationOffsetY = operationContentOffsetY(
             totalContentHeight: measuredPortraitStackHeight,
             availableHeight: baseContentHeight
         )
-        let basicSpaceBorrowed = min(
+        // At the default size a long expression may still borrow the row while
+        // typing; at larger sizes it never does (see above).
+        let basicSpaceBorrowed = keepsBasicRowReachable ? 0 : min(
             max(0, -baseOperationOffsetY),
             showsMemoryLabel ? metrics.memoryHeight : 0
         )
@@ -3921,7 +3972,7 @@ private extension EnterCalcIOSView {
                         ScrollViewReader { scrollProxy in
                             ScrollView(.vertical, showsIndicators: false) {
                                 VStack(alignment: .trailing, spacing: metrics.displaySpacing) {
-                                    Text(screen.viewModel.expressionDisplay)
+                                    Text(verbatim: operationLineText)
                                         .font(EnterCalcFont.appFont(size: expressionFontSize))
                                         .foregroundStyle(palette.textSecondary)
                                         .frame(maxWidth: .infinity, alignment: .trailing)
@@ -3983,12 +4034,14 @@ private extension EnterCalcIOSView {
                     } else {
                         ZStack(alignment: .bottomLeading) {
                             VStack(alignment: .trailing, spacing: metrics.displaySpacing) {
-                                Text(screen.viewModel.expressionDisplay)
+                                Text(verbatim: operationLineText)
                                     .font(EnterCalcFont.appFont(size: expressionFontSize))
                                     .foregroundStyle(palette.textSecondary)
                                     .frame(maxWidth: .infinity, alignment: .trailing)
                                     .multilineTextAlignment(.trailing)
-                                    .lineLimit(nil)
+                                    .lineLimit(operationLineLimit)
+                                    // Keeps the newest part of the operation in view.
+                                    .truncationMode(operationLineLimit == nil ? .tail : .head)
                                     .fixedSize(horizontal: false, vertical: true)
                                     .background(
                                         GeometryReader { operationGeometry in
@@ -4053,6 +4106,9 @@ private extension EnterCalcIOSView {
                             )
                             .clipped()
                         }
+                        // Moves the clipped area as well, so the text is not
+                        // cut. 0 at the default and smaller text sizes.
+                        .offset(y: -portraitRowClearance)
                     }
 
                 }
@@ -5185,7 +5241,9 @@ private struct IOSSettingsSheet: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.dismiss) private var dismiss
-    @ScaledMetric(relativeTo: .body) private var settingsDynamicTypeScale: CGFloat = 1.0
+    // Body's default point size, not 1.0: see displayDynamicTypePointSize.
+    @ScaledMetric(relativeTo: .body) private var settingsDynamicTypePointSize: CGFloat = 17
+    private var settingsDynamicTypeScale: CGFloat { settingsDynamicTypePointSize / 17 }
     // Global and live, unlike the per-page drafts below: the sheet resizes as the
     // slider moves, which is the preview.
     @AppStorage(TextSizePreference.storageKey) private var storedTextSize = TextSizePreference.system.rawValue
@@ -5331,7 +5389,7 @@ private struct IOSSettingsSheet: View {
             NavigationStack {
                 Form {
                     Section(localized("settings.appearance")) {
-                        Picker(localized(appearanceLabelKey), selection: themeSelection) {
+                        IOSSettingsPicker(title: localized(appearanceLabelKey), valueTitle: draftTheme.label, selection: themeSelection) {
                             ForEach(AppTheme.allCases, id: \.self) { theme in
                                 Text(theme.label).tag(theme)
                             }
@@ -5339,12 +5397,16 @@ private struct IOSSettingsSheet: View {
                     }
 
                     Section(localized("settings.language")) {
-                        Picker(localized("settings.language.label"), selection: $draftLanguage) {
+                        IOSSettingsPicker(
+                            title: localized("settings.language.label"),
+                            valueTitle: availableLanguages.first { $0.code == draftLanguage }?.displayName ?? draftLanguage,
+                            selection: $draftLanguage
+                        ) {
                             ForEach(availableLanguages, id: \.code) { language in
                                 Text(language.displayName).tag(language.code)
                             }
                         }
-                        Picker(localized("settings.currency.symbol"), selection: $draftCurrencySymbol) {
+                        IOSSettingsPicker(title: localized("settings.currency.symbol"), valueTitle: draftCurrencySymbol, keepsValueOnOneLine: true, selection: $draftCurrencySymbol) {
                             ForEach(CurrencyCatalog.all) { option in
                                 Text(option.symbol).tag(option.symbol)
                             }
@@ -5352,7 +5414,7 @@ private struct IOSSettingsSheet: View {
                     }
 
                     Section(localized("settings.userInterface")) {
-                        Picker(localized("settings.numberFormat.style"), selection: numberFormatSelection) {
+                        IOSSettingsPicker(title: localized("settings.numberFormat.style"), valueTitle: draftNumberFormat.example, keepsValueOnOneLine: true, selection: numberFormatSelection) {
                             ForEach(NumberFormatStyle.allCases, id: \.self) { style in
                                 Text(style.example).tag(style)
                             }
@@ -5415,6 +5477,59 @@ private struct IOSSettingsSheet: View {
             commitDraftSettings()
         }
         .rotationEffect(.degrees(counterRotatesForUpsideDownPortrait ? 180 : 0))
+    }
+}
+
+/// A Settings picker whose chosen value stays readable at accessibility text
+/// sizes. A menu-style Picker draws its value in a one-line pop-up button, so
+/// on a narrow screen at those sizes it truncates in the middle
+/// ("Defa…lish)"). There the row becomes the label over a Menu whose label
+/// wraps; the menu holds the same Picker, so the choices and the checkmark are
+/// unchanged. Below accessibility sizes it is the plain Picker, as before.
+private struct IOSSettingsPicker<SelectionValue: Hashable, Content: View>: View {
+    let title: String
+    let valueTitle: String
+    /// A value that is one number (the Number style sample, a currency symbol)
+    /// stays on one line and shrinks to fit rather than breaking inside it.
+    var keepsValueOnOneLine = false
+    @Binding var selection: SelectionValue
+    @ViewBuilder let content: () -> Content
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .accessibilityHidden(true)
+                Menu {
+                    Picker(title, selection: $selection, content: content)
+                        .pickerStyle(.inline)
+                        .labelsHidden()
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(verbatim: valueTitle)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(keepsValueOnOneLine ? 1 : nil)
+                            .minimumScaleFactor(keepsValueOnOneLine ? 0.4 : 1)
+                            .fixedSize(horizontal: false, vertical: !keepsValueOnOneLine)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .imageScale(.small)
+                            .accessibilityHidden(true)
+                    }
+                    // A concrete gray, not hierarchical .secondary, which a
+                    // Form Menu would resolve against its tint.
+                    .foregroundStyle(Color.secondary)
+                    // The system pop-up button insets its value by about this much.
+                    .padding(.leading, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .accessibilityLabel(Text(title))
+                .accessibilityValue(Text(verbatim: valueTitle))
+            }
+        } else {
+            Picker(title, selection: $selection, content: content)
+        }
     }
 }
 
@@ -5719,9 +5834,14 @@ private struct IOSHistoryPanel: View {
     let onCopyEntry: (HistoryEntry) -> Void
     let onCopyOperationEntry: (HistoryEntry) -> Void
     @Environment(\.colorScheme) private var colorScheme
-    @ScaledMetric(relativeTo: .body) private var historyDynamicTypeScale: CGFloat = 1.0
+    // Body's default point size, not 1.0: see displayDynamicTypePointSize.
+    @ScaledMetric(relativeTo: .body) private var historyDynamicTypePointSize: CGFloat = 17
+    private var historyDynamicTypeScale: CGFloat { historyDynamicTypePointSize / 17 }
     @State private var didClearHistoryInOverlay: Bool = false
     @State private var hadEntriesWhilePresented: Bool = false
+    /// The list's width, which doesn't depend on the text, for fitting each
+    /// entry's longest number on one line.
+    @State private var historyListWidth: CGFloat = 0
 
     private var showsCloseButton: Bool {
         // Book: history is part of the page, not a pane to close (#132).
@@ -5791,6 +5911,42 @@ private struct IOSHistoryPanel: View {
         min(base * boundedHistoryTextScale, base * maxMultiplier)
     }
 
+    /// An entry's operation size: the usual history size, made smaller only
+    /// when its longest number would not fit on one line of the tile (large
+    /// text in the narrow landscape column), so it wraps between terms.
+    private func historyExpressionFontSize(_ lineText: String) -> CGFloat {
+        let base = scaledHistoryFontSize(metrics.panelSecondaryFontSize)
+        let textWidth = historyTextWidth
+        guard textWidth > 0 else { return base }
+        let font = EnterCalcFont.platformFont(size: base)
+        return DisplayTextSizing.operationFontSize(base, fitting: lineText, width: DisplayTextSizing.operationFitWidth(textWidth)) { run in
+            ceil((run as NSString).size(withAttributes: [.font: font]).width)
+        }
+    }
+
+    /// The width a tile's text has: the list less its own inset and the
+    /// tile's padding, on both sides. Zero until the list is measured.
+    private var historyTextWidth: CGFloat {
+        historyListWidth - 2 * (metrics.panelTilePadding + 6) - 2 * metrics.panelTilePadding
+    }
+
+    private static let historyResultMinimumScale: CGFloat = 0.3
+
+    /// Whether an entry's result fits one line once shrunk as far as allowed.
+    /// A longer one (an expanded result with scientific notation off) wraps
+    /// instead, so no digit is ever cut off.
+    private func historyResultFitsOnOneLine(_ result: String) -> Bool {
+        let textWidth = historyTextWidth
+        guard textWidth > 0 else { return true }
+        let font = EnterCalcFont.platformFont(size: scaledHistoryFontSize(metrics.panelPrimaryFontSize))
+        let resultWidth = ceil((result as NSString).size(withAttributes: [.font: font]).width)
+        return DisplayTextSizing.fitsOnOneLine(
+            textWidth: resultWidth,
+            in: textWidth,
+            minimumScale: Self.historyResultMinimumScale
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: metrics.panelSpacing) {
             if let onResizeChanged {
@@ -5834,13 +5990,27 @@ private struct IOSHistoryPanel: View {
                                     onSelect(entry)
                                 } label: {
                                     VStack(alignment: .trailing, spacing: 4) {
-                                        Text("\(entry.displayExpression)\(entry.displayExpression.contains("≈") ? "" : " =")")
-                                            .font(EnterCalcFont.appFont(size: scaledHistoryFontSize(metrics.panelSecondaryFontSize)))
+                                        let expression = entry.displayExpression.contains("≈")
+                                            ? entry.displayExpression
+                                            : entry.displayExpression + " ="
+                                        // Wraps only between terms, as the display does:
+                                        // never inside a number or before a lone "=".
+                                        let lineText = DisplayTextSizing.operationLineText(expression)
+                                        Text(verbatim: lineText)
+                                            .font(EnterCalcFont.appFont(size: historyExpressionFontSize(lineText)))
                                             .foregroundColor(palette.textSecondary)
+                                            .multilineTextAlignment(.trailing)
                                             .frame(maxWidth: .infinity, alignment: .trailing)
+                                            .accessibilityLabel(Text(verbatim: expression))
+                                        let resultFitsOnOneLine = historyResultFitsOnOneLine(entry.displayResult)
                                         Text(entry.displayResult)
                                             .font(EnterCalcFont.appFont(size: scaledHistoryFontSize(metrics.panelPrimaryFontSize)))
                                             .foregroundColor(palette.textPrimary)
+                                            // One number: shrink it to fit rather than break
+                                            // it, unless even the smallest size is too wide;
+                                            // then it wraps, so no digit is cut off.
+                                            .lineLimit(resultFitsOnOneLine ? 1 : nil)
+                                            .minimumScaleFactor(resultFitsOnOneLine ? Self.historyResultMinimumScale : 1)
                                             .frame(maxWidth: .infinity, alignment: .trailing)
                                     }
                                     .padding(metrics.panelTilePadding)
@@ -5860,6 +6030,13 @@ private struct IOSHistoryPanel: View {
                     .padding(.bottom, metrics.panelVerticalPadding)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .background(
+                    GeometryReader { geometry in
+                        Color.clear
+                            .onAppear { historyListWidth = geometry.size.width }
+                            .onChange(of: geometry.size.width) { _, width in historyListWidth = width }
+                    }
+                )
             }
         }
         .padding(.horizontal, metrics.panelHorizontalPadding)
@@ -7118,7 +7295,9 @@ private struct IOSCompactActionButton: View {
     let onChooserOpen: (CalculatorFunctionSlot, CGRect, Bool) -> Void
     let onChooserDrag: (CGPoint) -> Void
     let onChooserRelease: () -> Void
-    @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
+    // Title 2's default point size, not 1.0: see displayDynamicTypePointSize.
+    @ScaledMetric(relativeTo: .title2) private var controlDynamicTypePointSize: CGFloat = 22
+    private var controlDynamicTypeScale: CGFloat { controlDynamicTypePointSize / 22 }
     @State private var suppressesTap: Bool = false
     @State private var globalFrame: CGRect = .zero
     @State private var pressPopScale: CGFloat = 1.0
@@ -7251,7 +7430,9 @@ private struct IOSKeypadButton: View {
     var onChooserOpen: ((CalculatorFunctionSlot, CGRect, Bool) -> Void)? = nil
     var onChooserDrag: ((CGPoint) -> Void)? = nil
     var onChooserRelease: (() -> Void)? = nil
-    @ScaledMetric(relativeTo: .title2) private var controlDynamicTypeScale: CGFloat = 1.0
+    // Title 2's default point size, not 1.0: see displayDynamicTypePointSize.
+    @ScaledMetric(relativeTo: .title2) private var controlDynamicTypePointSize: CGFloat = 22
+    private var controlDynamicTypeScale: CGFloat { controlDynamicTypePointSize / 22 }
     var operatorRevealProgress: Double = 0.0
     var operatorAnimFadeOpacity: Double = 1.0
     /// Accent fill while the mode this key toggles is on (the currency key in

@@ -13,6 +13,9 @@ final class AccessibilityAuditTests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = true
         QuiescenceBypass.install()
+        // The VAT pane is reached from the portrait mode row, which a phone in
+        // landscape doesn't show; another test may have left the device turned.
+        XCUIDevice.shared.orientation = .portrait
         app = XCUIApplication()
         app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
@@ -65,3 +68,4 @@ enum QuiescenceBypass {
         }
     }
 }
+

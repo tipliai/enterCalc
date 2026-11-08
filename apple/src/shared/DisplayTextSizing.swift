@@ -44,6 +44,73 @@ public enum DisplayTextSizing {
         public let operation: CGFloat
     }
 
+    /// The operation line as drawn. A space between two digits (French-style
+    /// grouping) and the space before a closing "=" or "≈" become no-break
+    /// spaces, which have the same advance, so a wrap falls only at the spaces
+    /// around an operator: never inside a number, and the sign never sits alone
+    /// on a line. Copy, speech and history keep the plain `expressionDisplay`.
+    public static func operationLineText(_ operation: String) -> String {
+        var characters = Array(operation)
+        if characters.count > 2 {
+            for index in 1..<(characters.count - 1)
+            where characters[index] == " "
+                && characters[index - 1].isNumber
+                && characters[index + 1].isNumber {
+                characters[index] = "\u{00A0}"
+            }
+        }
+        var text = String(characters)
+        for sign in [" =", " ≈"] where text.hasSuffix(sign) {
+            text = String(text.dropLast(sign.count)) + "\u{00A0}" + String(sign.dropFirst())
+            break
+        }
+        return text
+    }
+
+    /// The width to fit an operation's longest number into. Measuring a run
+    /// with the font comes out a few percent narrower than SwiftUI's own line
+    /// layout of it (in the landscape history column at AX3 a run that measured
+    /// as fitting still broke before its last digit), so the fit leaves that
+    /// much room.
+    public static func operationFitWidth(_ width: CGFloat) -> CGFloat {
+        width * 0.92 - 1
+    }
+
+    /// The operation font size, made smaller only as far as needed for the
+    /// widest unbreakable run (a grouped number, or the last number with its
+    /// "=") to fit on one line, so a wrap falls between terms. `measure` gives
+    /// a run's width at `fontSize`. Never grows; never below `minimumScale`.
+    /// Where every run already fits it returns `fontSize` unchanged. A run
+    /// still too wide at `minimumScale` (an expanded result reused as an
+    /// operand, in a narrow column) breaks across lines, since the line is
+    /// never limited for it: smaller than that would not be readable, and
+    /// breaking keeps every digit in view rather than cutting any off.
+    public static func operationFontSize(
+        _ fontSize: CGFloat,
+        fitting text: String,
+        width: CGFloat,
+        minimumScale: CGFloat = 0.5,
+        measure: (String) -> CGFloat
+    ) -> CGFloat {
+        guard fontSize > 0, width > 0 else { return fontSize }
+        // Splits only on ordinary spaces and line breaks; the no-break spaces
+        // from `operationLineText` keep numbers and "9,876,543 =" whole.
+        let widest = text
+            .split(whereSeparator: { $0 == " " || $0.isNewline })
+            .map { measure(String($0)) }
+            .max() ?? 0
+        guard widest > width else { return fontSize }
+        return fontSize * max(width / widest, minimumScale)
+    }
+
+    /// Whether text `textWidth` wide at its full size fits one line of
+    /// `width` once shrunk to `minimumScale`, with the same margin as
+    /// `operationFitWidth`. Where it doesn't, the caller lets it wrap rather
+    /// than limit it to one line and cut it off.
+    public static func fitsOnOneLine(textWidth: CGFloat, in width: CGFloat, minimumScale: CGFloat) -> Bool {
+        textWidth * minimumScale <= operationFitWidth(width)
+    }
+
     /// How much the base sizes can grow for the room the display has, before
     /// any text-size preference. At least 1.
     public static func scale(
