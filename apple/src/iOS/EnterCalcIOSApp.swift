@@ -983,6 +983,9 @@ struct EnterCalcIOSView: View {
                     // leave the calculator alone.
                     .disabled(isCalculatorCovered(metrics: metrics))
                     .accessibilityHidden(isCalculatorCovered(metrics: metrics))
+                    // Audit only, see `auditHidesCalculatorUnderSettingsSheet`.
+                    // The sheet binding is false for the in-layout card.
+                    .opacity(Self.auditHidesCalculatorUnderSettingsSheet && settingsSheetBinding.wrappedValue ? 0 : 1)
                     // Folding or unfolding the Duo need not turn the device,
                     // so no orientation event follows it (#132).
                     .onChange(of: metrics.foldPosture) { _, _ in
@@ -3341,6 +3344,19 @@ private extension EnterCalcIOSView {
     }
 
     static let layoutCoordinateSpace = "EnterCalcLayout"
+
+    /// For the accessibility audit's Settings test only (#145). The iPad's
+    /// centred Settings sheet can cut a dimmed key label in half at its
+    /// edge, and the audit's text detection reports the visible half as text
+    /// with no accessibility element. With this flag nothing is drawn behind
+    /// the sheet, so the audit judges the sheet alone. Debug builds only.
+    static let auditHidesCalculatorUnderSettingsSheet: Bool = {
+#if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-AuditHidesCalculatorUnderSettingsSheet")
+#else
+        false
+#endif
+    }()
 
     func calculatorSurface(
         metrics: IOSLayoutMetrics,

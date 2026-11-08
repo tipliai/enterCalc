@@ -3,7 +3,8 @@ import XCTest
 /// A light accessibility check (#145): every control on the main screens has
 /// a name VoiceOver can read, and nothing is hidden from it. Contrast and
 /// Dynamic Type are left to the VoiceOver test script: the keys behind an open
-/// pane are dimmed on purpose, and the keypad keeps its size by design.
+/// pane are dimmed on purpose, and the keypad keeps its size by design. The
+/// Settings test draws no calculator behind the sheet; see testSettings.
 /// Run with the EnterCalc-iOSAccessibility scheme.
 final class AccessibilityAuditTests: XCTestCase {
     private let checks: XCUIAccessibilityAuditType = [.sufficientElementDescription, .elementDetection]
@@ -23,6 +24,16 @@ final class AccessibilityAuditTests: XCTestCase {
     }
 
     func testSettings() throws {
+        // On iPad the centred Settings sheet can cut a dimmed key label in
+        // half at its edge (the 11-inch and mini in portrait), and text
+        // detection reports the visible half as unreachable text. The issue
+        // carries no position, so it can't be told apart from a real one
+        // inside the sheet; instead the app draws nothing behind the sheet
+        // here, and every issue the sheet raises still fails the test.
+        app.terminate()
+        app.launchArguments.append("-AuditHidesCalculatorUnderSettingsSheet")
+        app.launch()
+        XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10), "The calculator did not appear")
         app.buttons["Settings"].tap()
         sleep(1)
         try app.performAccessibilityAudit(for: checks)
